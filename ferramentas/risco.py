@@ -80,12 +80,18 @@ FAMILIAS: tuple[tuple[str, str, str], ...] = (
     ),
 )
 
-_INERTE = re.compile(r"^\s*(echo|printf|:|#)\b", re.I)
+_INERTE = re.compile(r"^\s*(echo|printf|#)\b", re.I)
 _MSG_GIT = re.compile(r"(-m|--message)\s+('[^']*'|\"[^\"]*\")")
 _SUBST_COMANDO = re.compile(r"\$\(|`|\$\{")
 _REDIRECT = re.compile(r">>?\s*([^\s;|&]+)")
 _EXEC_INDIRETA = re.compile(
     r"\b(bash|sh|zsh)\s+-c\s|\bpowershell(\.exe)?\s+(-Command|-c)\s|\beval\s", re.I
+)
+_CANO_INTERPRETE = re.compile(
+    r"\|\s*(sudo\s+)?"
+    r"(bash|sh|zsh|ksh|python[0-9.]*|perl|ruby|node"
+    r"|powershell(\.exe)?|iex|invoke-expression)\b",
+    re.I,
 )
 _PY_INLINE = re.compile(r"\bpython[0-9.]*\s+-c\s", re.I)
 _PY_PERIGO = re.compile(
@@ -224,6 +230,14 @@ _LIMITE_PROFUNDIDADE_INDIRETA = 3
 def _classificar_comando(comando: str, config: dict, profundidade: int = 0) -> Classificacao:
     if not comando.strip():
         return Classificacao(LIVRE, "", "comando vazio")
+    if _CANO_INTERPRETE.search(comando):
+        # Checagem sobre o comando INTEIRO, antes de dividir em segmentos: dividir
+        # primeiro quebra `curl ... | bash` em "curl ..." de um lado e "bash" do
+        # outro, e nenhum dos dois pedaços isolados casa nenhuma família — o "baixar
+        # e executar" só aparece quando os dois lados são vistos juntos.
+        return Classificacao(
+            TRAVADO, "R8", "cano para interpretador (baixar e executar)"
+        )
     resultado = Classificacao(LIVRE, "", "nenhuma regra travada casou")
     for segmento in _dividir_segmentos(comando):
         resultado = _pior(resultado, _classificar_segmento(segmento, config, profundidade))
@@ -240,6 +254,14 @@ def _classificar_segmento(segmento: str, config: dict, profundidade: int = 0) ->
             return Classificacao(TRAVADO, "R5", f"redirecionamento para segredo: {alvo}")
 
     if _INERTE.match(segmento):
+        if _SUBST_COMANDO.search(segmento):
+            # A válvula do emissor inerte só pode valer para texto LITERAL. `echo`/
+            # `printf` seguido de `$(...)`, crase ou `${...}` não imprime texto: o
+            # shell expande e executa o comando escondido antes do "echo" rodar —
+            # mesmo tratamento que já existe para o `-m` do git.
+            return Classificacao(
+                TRAVADO, "R8", "substituição de comando dentro do argumento"
+            )
         return Classificacao(LIVRE, "", "emissor inerte")
 
     eh_git = re.match(r"\s*git\b", segmento)
