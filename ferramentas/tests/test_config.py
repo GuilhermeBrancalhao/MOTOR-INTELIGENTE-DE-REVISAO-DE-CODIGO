@@ -35,3 +35,11 @@ def test_config_quebrada_cai_no_default_e_avisa(tmp_path):
     assert cfg["porta_plano"] is True
     assert len(cfg["_avisos"]) == 1
     assert "config.json" in cfg["_avisos"][0]
+
+
+def test_carregar_nao_compartilha_listas_com_o_padrao(tmp_path):
+    """Cópia rasa deixaria mutação vazar para PADRAO e contaminar chamadas seguintes."""
+    cfg = config.carregar(tmp_path)
+    cfg["padroes_segredo"].append("*.invasor")
+    assert "*.invasor" not in config.PADRAO["padroes_segredo"]
+    assert "*.invasor" not in config.carregar(tmp_path)["padroes_segredo"]

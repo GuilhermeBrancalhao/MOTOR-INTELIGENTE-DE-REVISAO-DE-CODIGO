@@ -8,6 +8,7 @@ e registra um aviso em `_avisos`, que o hook de contexto mostra uma vez.
 """
 from __future__ import annotations
 
+import copy
 import json
 from pathlib import Path
 
@@ -36,7 +37,7 @@ def raiz_plugin() -> Path:
 
 def carregar(raiz_projeto: Path) -> dict:
     """Devolve a configuração efetiva para um projeto hospedeiro."""
-    cfg = dict(PADRAO)
+    cfg = copy.deepcopy(PADRAO)
     cfg["_avisos"] = []
     candidatos = (
         raiz_plugin() / "engine.config.json",
