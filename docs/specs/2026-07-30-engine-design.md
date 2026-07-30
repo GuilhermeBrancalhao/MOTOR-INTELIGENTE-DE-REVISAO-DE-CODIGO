@@ -150,9 +150,25 @@ qualquer outra linha de código.
 
 | Nível | Critério | Comportamento do hook |
 |---|---|---|
-| **livre** | leitura; escrita em caminho inexistente em disco; escrita sob `tests/`; comando de leitura (`ls`, `cat`, `git status`, `git diff`, `pytest`) | permite; registra na trilha |
-| **rastreado** | edição de arquivo que **já existe** em disco e não casa com nenhuma regra travada | permite; acrescenta o caminho a `diffs_pendentes`; o diff acumulado é apresentado no fim da fase |
-| **travado** | ver lista abaixo | **bloqueia** e devolve o motivo; o motor pergunta ao usuário com opções clicáveis |
+| **travado** | casa uma das famílias da lista fechada abaixo (R1–R8) | **bloqueia** e devolve o motivo; o motor pergunta ao usuário com opções clicáveis |
+| **livre** | **prova positiva de inocuidade**: leitura de arquivo que não é segredo; escrita em caminho inexistente em disco; escrita sob `tests/`; e, para comando, o segmento inteiro casar a **lista de permissões** (`COMANDOS_LIVRES` + `SUBCOMANDOS_GIT_LIVRES`, sem substituição de comando, sem redirecionamento, sem argumento de segredo) | permite; registra na trilha |
+| **rastreado** | **DEFAULT** — tudo que não é comprovadamente travado nem comprovadamente livre: edição de arquivo que já existe, ferramenta desconhecida, comando ausente, e qualquer comando fora da lista de permissões | permite; acrescenta o caminho a `diffs_pendentes`; o motivo entra no relatório de fim de fase |
+
+**O default é `rastreado`, e isso é uma inversão deliberada da arquitetura.** A versão
+original classificava por lista de proibições: o que não casasse uma família proibida saía
+`livre`. Quatro rodadas de revisão sobre essa versão acharam **doze bypasses**, e a quarta
+rodada — já com onze correções aplicadas — ainda achou cinco novos, todos confirmados por
+execução: quebra de linha não separava segmentos (`echo ok⏎rm -rf /dados`), substituição de
+comando só era checada dentro de `echo` e do `-m` do git (`ls $(rm -rf /dados)`), os
+interpretadores do Windows não eram reconhecidos (`cmd /c`, `pwsh -c`,
+`powershell -EncodedCommand`) num projeto que roda em Windows, opção global despistava o
+padrão do git (`git -C /repo push --force`), e ler segredo pelo shell escapava
+(`cat .env`). A conclusão não é que faltou um padrão: é que **lista de proibições não
+converge** — o conjunto de vetores é aberto, e cada correção só prova que o próximo ainda
+não foi imaginado. Com a inversão, um vetor que ninguém previu deixa de ser livre **por não
+estar na lista de permitidos**, sem precisar ter sido previsto. O preço é aceitar `rastreado`
+como resposta normal para comando legítimo porém não enumerado: ele executa, e aparece no
+relatório.
 
 **Precedência.** Uma ação é avaliada contra os três níveis e recebe **o mais restritivo que
 casar**. Criar um arquivo novo chamado `.env` é travado, não livre; rodar `pytest` num
