@@ -33,7 +33,9 @@ FAMILIAS: tuple[tuple[str, str, str], ...] = (
         "R1",
         "escrita de rede",
         r"\bcurl\b[^\n]*\s-X\s*(POST|PUT|PATCH|DELETE)\b"
+        r"|\bcurl\b[^\n]*\s--request\s+(POST|PUT|PATCH|DELETE)\b"
         r"|\bcurl\b[^\n]*\s(-d|--data|--data-raw|--data-binary)\b"
+        r"|\bcurl\b[^\n]*\s(--upload-file|-T)\b"
         r"|\bwget\b[^\n]*--post",
     ),
     (
@@ -47,7 +49,7 @@ FAMILIAS: tuple[tuple[str, str, str], ...] = (
     (
         "R3",
         "deleção",
-        r"(^|[\s;|&])(rm|rmdir|del|erase)\s|\bRemove-Item\b",
+        r"(^|[\s;|&'\"])(rm|rmdir|del|erase)\s|\bRemove-Item\b",
     ),
     (
         "R4",
@@ -80,14 +82,17 @@ FAMILIAS: tuple[tuple[str, str, str], ...] = (
 
 _INERTE = re.compile(r"^\s*(echo|printf|:|#)\b", re.I)
 _MSG_GIT = re.compile(r"(-m|--message)\s+('[^']*'|\"[^\"]*\")")
+_SUBST_COMANDO = re.compile(r"\$\(|`|\$\{")
 _REDIRECT = re.compile(r">>?\s*([^\s;|&]+)")
 _EXEC_INDIRETA = re.compile(
     r"\b(bash|sh|zsh)\s+-c\s|\bpowershell(\.exe)?\s+(-Command|-c)\s|\beval\s", re.I
 )
 _PY_INLINE = re.compile(r"\bpython[0-9.]*\s+-c\s", re.I)
 _PY_PERIGO = re.compile(
-    r"shutil\.rmtree|os\.remove|os\.unlink|os\.rmdir|subprocess"
-    r"|requests\.(post|put|delete|patch)|urlopen",
+    r"shutil\.rmtree|shutil\.move|os\.remove|os\.unlink|os\.rmdir|subprocess"
+    r"|requests\.(post|put|delete|patch)|urlopen"
+    r"|os\.system|os\.popen|os\.exec\w*|os\.spawn\w*"
+    r"|\beval\(|\bexec\(|Path\(.*\)\.unlink",
     re.I,
 )
 
@@ -100,9 +105,9 @@ def classificar(ferramenta: str, entrada: dict, *, raiz: Path, config: dict) -> 
     """Classifica uma ação. Qualquer exceção vira TRAVADO (falha segura)."""
     try:
         if ferramenta in _LEITURA:
-            return _classificar_leitura(entrada, config)
+            return _classificar_leitura(entrada, raiz, config)
         if ferramenta in _ESCRITA:
-            return _classificar_escrita(entrada, config)
+            return _classificar_escrita(entrada, raiz, config)
         if ferramenta in _COMANDO:
             return _classificar_comando(str(entrada.get("command", "")), config)
         return Classificacao(RASTREADO, "", f"ferramenta não classificada: {ferramenta}")
@@ -130,22 +135,39 @@ def _e_segredo(alvo: str, config: dict) -> bool:
     return False
 
 
-def _classificar_leitura(entrada: dict, config: dict) -> Classificacao:
+def _resolver_alvo(alvo: str, raiz: Path) -> Path:
+    """Resolve um alvo relativo contra a raiz do projeto hospedeiro.
+
+    Caminho absoluto passa direto — o comportamento para esse caso fica idêntico
+    ao de antes. Caminho relativo (`.env`, `src/x.py`) hoje é checado contra o
+    diretório de trabalho do processo, que pode não ser o projeto hospedeiro; sem
+    isso, a checagem de segredo/existência mira no lugar errado.
+    """
+    caminho = Path(alvo)
+    if caminho.is_absolute():
+        return caminho
+    return raiz / caminho
+
+
+def _classificar_leitura(entrada: dict, raiz: Path, config: dict) -> Classificacao:
     alvo = str(
         entrada.get("file_path") or entrada.get("path") or entrada.get("pattern") or ""
     )
-    if _e_segredo(alvo, config):
-        return Classificacao(TRAVADO, "R5", f"arquivo de segredo: {Path(alvo).name}")
+    if not alvo:
+        return Classificacao(LIVRE, "", "leitura")
+    caminho = _resolver_alvo(alvo, raiz)
+    if _e_segredo(caminho.as_posix(), config):
+        return Classificacao(TRAVADO, "R5", f"arquivo de segredo: {caminho.name}")
     return Classificacao(LIVRE, "", "leitura")
 
 
-def _classificar_escrita(entrada: dict, config: dict) -> Classificacao:
+def _classificar_escrita(entrada: dict, raiz: Path, config: dict) -> Classificacao:
     alvo = str(entrada.get("file_path") or entrada.get("notebook_path") or "")
     if not alvo:
         return Classificacao(RASTREADO, "", "escrita sem alvo identificável")
-    if _e_segredo(alvo, config):
-        return Classificacao(TRAVADO, "R5", f"arquivo de segredo: {Path(alvo).name}")
-    caminho = Path(alvo)
+    caminho = _resolver_alvo(alvo, raiz)
+    if _e_segredo(caminho.as_posix(), config):
+        return Classificacao(TRAVADO, "R5", f"arquivo de segredo: {caminho.name}")
     if "tests" in caminho.parts or caminho.name.startswith("test_"):
         return Classificacao(LIVRE, "", "arquivo de teste")
     if caminho.exists():
@@ -206,14 +228,30 @@ def _classificar_comando(comando: str, config: dict) -> Classificacao:
 
 
 def _classificar_segmento(segmento: str, config: dict) -> Classificacao:
-    for alvo in _REDIRECT.findall(segmento):
+    for alvo_cru in _REDIRECT.findall(segmento):
+        # O alvo pode vir entre aspas (`> ".env"`): tira as aspas antes de comparar
+        # com os padrões de segredo, senão o fnmatch nunca casa e o redirecionamento
+        # sai LIVRE por engano.
+        alvo = alvo_cru.strip("'\"")
         if _e_segredo(alvo, config):
             return Classificacao(TRAVADO, "R5", f"redirecionamento para segredo: {alvo}")
 
     if _INERTE.match(segmento):
         return Classificacao(LIVRE, "", "emissor inerte")
 
-    limpo = _MSG_GIT.sub(" ", segmento) if re.match(r"\s*git\b", segmento) else segmento
+    eh_git = re.match(r"\s*git\b", segmento)
+    if eh_git:
+        msg = _MSG_GIT.search(segmento)
+        if msg and _SUBST_COMANDO.search(msg.group(2)):
+            # A válvula de falso positivo do `-m` só vale para texto literal. Se o
+            # argumento contém `$(`, crase ou `${`, é substituição de comando —
+            # `git commit -m "$(rm -rf /dados)"` executaria o comando escondido.
+            return Classificacao(
+                TRAVADO, "R8", "substituição de comando dentro do argumento"
+            )
+        limpo = _MSG_GIT.sub(" ", segmento)
+    else:
+        limpo = segmento
 
     for regra, motivo, padrao in _familias(config):
         if re.search(padrao, limpo, re.I):

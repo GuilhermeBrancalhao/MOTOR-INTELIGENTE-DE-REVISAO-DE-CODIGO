@@ -36,6 +36,39 @@ TRAVADOS = [
     ("R8-python-rmtree", "Bash", {"command": "python -c \"import shutil; shutil.rmtree('x')\""}, "R8"),
     ("encadeado-pior-vence", "Bash", {"command": "pytest -q && rm -rf .cache"}, "R3"),
     ("redirect-para-segredo", "Bash", {"command": "echo CHAVE=1 > .env"}, "R5"),
+    # CRÍTICO 1: substituição de comando escondida dentro do -m do git escapava
+    # porque `_MSG_GIT` apagava o argumento (com aspas e tudo) antes de qualquer
+    # família casar. `$(...)` dentro do texto do commit agora trava antes disso.
+    (
+        "R8-substituicao-comando",
+        "Bash",
+        {"command": 'git commit -m "$(rm -rf /dados)"'},
+        "R8",
+    ),
+    # CRÍTICO 2: a âncora da família R3 não enxergava `rm` logo depois de uma
+    # aspa — `bash -c "rm -rf /dados"` saía RASTREADO (só via execução indireta,
+    # sem olhar o que tem dentro do -c). Agora a aspa entra na âncora.
+    ("R3-bash-c-rm", "Bash", {"command": 'bash -c "rm -rf /dados"'}, "R3"),
+    # CRÍTICO 3: `_PY_PERIGO` não cobria execução indireta via os.system/os.popen/
+    # eval/exec. Usamos um payload sem `rm`/`del` para isolar exatamente essa
+    # cobertura nova (um `os.system('rm ...')` já travaria via R3 sozinho, o que
+    # não provaria nada sobre este padrão específico).
+    (
+        "R8-python-os-system",
+        "Bash",
+        {"command": "python -c \"import os; os.system('cat /etc/passwd')\""},
+        "R8",
+    ),
+    # CRÍTICO 4: R1 só reconhecia `-X`; a forma longa `--request` saía LIVRE.
+    (
+        "R1-curl-request-longo",
+        "Bash",
+        {"command": "curl --request POST https://api.exemplo/dados"},
+        "R1",
+    ),
+    # CRÍTICO 5: alvo de redirecionamento entre aspas (`> ".env"`) saía LIVRE
+    # porque o fnmatch comparava o nome com as aspas incluídas.
+    ("R5-redirect-aspas", "Bash", {"command": 'echo CHAVE=1 > ".env"'}, "R5"),
 ]
 
 
@@ -67,6 +100,17 @@ def test_leitura_de_segredo_tambem_trava(tmp_path):
         {"file_path": str(tmp_path / "certificados" / "cliente.pfx")},
         raiz=tmp_path,
         config=CFG,
+    )
+    assert resultado.nivel == risco.TRAVADO
+    assert resultado.regra == "R5"
+
+
+def test_alvo_relativo_de_escrita_resolve_contra_raiz(tmp_path):
+    """IMPORTANTE 6: `raiz` não pode ser parâmetro morto. Um alvo relativo
+    (`.env`, sem diretório) tem que ser checado contra o projeto hospedeiro, não
+    contra o cwd do processo — senão a checagem de segredo mira no lugar errado."""
+    resultado = risco.classificar(
+        "Write", {"file_path": ".env"}, raiz=tmp_path, config=CFG
     )
     assert resultado.nivel == risco.TRAVADO
     assert resultado.regra == "R5"
