@@ -49,7 +49,7 @@ FAMILIAS: tuple[tuple[str, str, str], ...] = (
     (
         "R3",
         "deleção",
-        r"(^|[\s;|&'\"])(rm|rmdir|del|erase)\s|\bRemove-Item\b",
+        r"(^|[\s;|&])(rm|rmdir|del|erase)\s|\bRemove-Item\b",
     ),
     (
         "R4",
@@ -218,16 +218,19 @@ def _dividir_segmentos(comando: str) -> list[str]:
     return segmentos
 
 
-def _classificar_comando(comando: str, config: dict) -> Classificacao:
+_LIMITE_PROFUNDIDADE_INDIRETA = 3
+
+
+def _classificar_comando(comando: str, config: dict, profundidade: int = 0) -> Classificacao:
     if not comando.strip():
         return Classificacao(LIVRE, "", "comando vazio")
     resultado = Classificacao(LIVRE, "", "nenhuma regra travada casou")
     for segmento in _dividir_segmentos(comando):
-        resultado = _pior(resultado, _classificar_segmento(segmento, config))
+        resultado = _pior(resultado, _classificar_segmento(segmento, config, profundidade))
     return resultado
 
 
-def _classificar_segmento(segmento: str, config: dict) -> Classificacao:
+def _classificar_segmento(segmento: str, config: dict, profundidade: int = 0) -> Classificacao:
     for alvo_cru in _REDIRECT.findall(segmento):
         # O alvo pode vir entre aspas (`> ".env"`): tira as aspas antes de comparar
         # com os padrões de segredo, senão o fnmatch nunca casa e o redirecionamento
@@ -265,9 +268,46 @@ def _classificar_segmento(segmento: str, config: dict) -> Classificacao:
         )
 
     if _EXEC_INDIRETA.search(segmento):
-        return Classificacao(RASTREADO, "R8", "execução indireta")
+        return _classificar_execucao_indireta(segmento, config, profundidade)
 
     return Classificacao(LIVRE, "", "comando sem regra travada")
+
+
+def _classificar_execucao_indireta(
+    segmento: str, config: dict, profundidade: int
+) -> Classificacao:
+    """Extrai o payload entre aspas de uma execução indireta e reclassifica-o.
+
+    `bash -c "rm -rf x"` não pode sair RASTREADO só por reconhecer a superfície
+    do padrão: o comando real mora dentro das aspas. Sem extrair e reclassificar
+    esse literal recursivamente, um `rm` disfarçado de `bash -c` escaparia — foi
+    exatamente esse escape que motivou (erradamente) alargar a âncora de R3 no
+    lugar de tratar a execução indireta de verdade.
+    """
+    if profundidade >= _LIMITE_PROFUNDIDADE_INDIRETA:
+        return Classificacao(
+            TRAVADO, "R8", "aninhamento de subcomando além do limite"
+        )
+
+    casamento = _EXEC_INDIRETA.search(segmento)
+    payload = _extrair_payload_indireto(segmento[casamento.end() :])
+    if payload is None:
+        return Classificacao(
+            TRAVADO, "R8", "execução indireta sem payload legível"
+        )
+
+    resultado_payload = _classificar_comando(payload, config, profundidade + 1)
+    resultado_segmento = Classificacao(RASTREADO, "R8", "execução indireta")
+    return _pior(resultado_segmento, resultado_payload)
+
+
+def _extrair_payload_indireto(resto: str) -> str | None:
+    """Devolve o literal entre aspas (simples ou duplas) logo após o disparador
+    de execução indireta, ou `None` se não houver aspas para extrair."""
+    casamento = re.search(r"(['\"])(.*)\1", resto, re.S)
+    if not casamento:
+        return None
+    return casamento.group(2)
 
 
 def _familias(config: dict) -> tuple[tuple[str, str, str], ...]:

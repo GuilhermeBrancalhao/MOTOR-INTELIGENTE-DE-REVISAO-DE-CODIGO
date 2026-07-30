@@ -83,6 +83,24 @@ def test_familias_travadas(ident, ferramenta, entrada, regra, tmp_path):
     assert resultado.regra == regra
 
 
+LIVRES = [
+    # Uma correção anterior alargou a âncora de R3 para `(^|[\s;|&'"])` só para
+    # pegar `bash -c "rm -rf x"`. Isso travava buscas de texto corriqueiras que
+    # apenas mencionam `rm`/`erase` dentro de aspas. A correção certa reverteu a
+    # âncora e tratou execução indireta extraindo e reclassificando o payload —
+    # estes casos provam que o falso positivo morreu sem reabrir o buraco original.
+    ("grep-rm-em-string", "Bash", {"command": 'grep "rm this" arquivo.txt'}),
+    ("git-log-grep-rm", "Bash", {"command": 'git log --grep="rm bug fix"'}),
+    ("findstr-erase-em-string", "Bash", {"command": 'findstr "erase old logic" notas.txt'}),
+]
+
+
+@pytest.mark.parametrize("ident,ferramenta,entrada", LIVRES, ids=[c[0] for c in LIVRES])
+def test_familias_livres(ident, ferramenta, entrada, tmp_path):
+    resultado = risco.classificar(ferramenta, entrada, raiz=tmp_path, config=CFG)
+    assert resultado.nivel == risco.LIVRE, f"{ident} deveria ficar livre, veio {resultado}"
+
+
 def test_segredo_trava_mesmo_em_arquivo_novo(tmp_path):
     """Precedência: TRAVADO vence LIVRE. Arquivo novo chamado .env não é livre."""
     alvo = tmp_path / ".env"
@@ -105,15 +123,13 @@ def test_leitura_de_segredo_tambem_trava(tmp_path):
     assert resultado.regra == "R5"
 
 
-def test_alvo_relativo_de_escrita_resolve_contra_raiz(tmp_path):
-    """IMPORTANTE 6: `raiz` não pode ser parâmetro morto. Um alvo relativo
-    (`.env`, sem diretório) tem que ser checado contra o projeto hospedeiro, não
-    contra o cwd do processo — senão a checagem de segredo mira no lugar errado."""
+def test_alvo_relativo_resolve_contra_a_raiz(tmp_path):
+    """Sem resolver contra `raiz`, Path('servico.py').exists() olharia o CWD e devolveria LIVRE."""
+    (tmp_path / "servico.py").write_text("x = 1", encoding="utf-8")
     resultado = risco.classificar(
-        "Write", {"file_path": ".env"}, raiz=tmp_path, config=CFG
+        "Edit", {"file_path": "servico.py"}, raiz=tmp_path, config=CFG
     )
-    assert resultado.nivel == risco.TRAVADO
-    assert resultado.regra == "R5"
+    assert resultado.nivel == risco.RASTREADO
 
 
 def test_excecao_interna_resulta_em_travado(tmp_path, monkeypatch):
