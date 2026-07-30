@@ -163,6 +163,11 @@ LIVRES = [
     ("permitido-ls", "Bash", {"command": "ls -la"}),
     ("permitido-grep", "Bash", {"command": 'grep "rm this" a.txt'}),
     ("permitido-cat", "Bash", {"command": "cat README.md"}),
+    # BLOQUEIO 1/2 (git -c / flags de saída disfarçadas de leitura): provam que a
+    # correção não pegou o uso normal de `sort`, `uniq`, `find` e `git status`.
+    ("permitido-sort", "Bash", {"command": "sort arquivo.txt"}),
+    ("permitido-uniq", "Bash", {"command": "uniq arquivo.txt"}),
+    ("permitido-find", "Bash", {"command": 'find . -name "*.py"'}),
 ]
 
 
@@ -182,6 +187,25 @@ RASTREADOS = [
     # Sem comando legível não há prova positiva de coisa nenhuma. Antes virava a
     # string "None" e saía livre por omissão.
     ("nova-comando-nulo", "Bash", {"command": None}),
+    # BLOQUEIO 1: `git -c`/`--exec-path` alteram COMO o git executa (config
+    # arbitrária, executável trocado) e saíam livres porque `_subcomando_git`
+    # pulava a opção global e o valor dela sem inspecionar, achava `status` (que
+    # está em SUBCOMANDOS_GIT_LIVRES) e liberava o segmento inteiro.
+    (
+        "git-c-fsmonitor",
+        "Bash",
+        {"command": "git -c core.fsmonitor=./evil.sh status"},
+    ),
+    (
+        "git-exec-path",
+        "Bash",
+        {"command": "git --exec-path=/tmp/evil status"},
+    ),
+    # BLOQUEIO 2: comandos "de leitura" que escrevem por flag, sem `>` — o filtro
+    # de redirecionamento não pega escrita por opção de linha de comando.
+    ("sort-com-saida", "Bash", {"command": "sort -o importante.py lixo.txt"}),
+    ("uniq-dois-posicionais", "Bash", {"command": "uniq entrada.txt importante.py"}),
+    ("find-fprint", "Bash", {"command": "find . -name x -fprint /etc/importante"}),
 ]
 
 

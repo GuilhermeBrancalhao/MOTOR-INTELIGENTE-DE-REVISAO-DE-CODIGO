@@ -169,8 +169,16 @@ SUBCOMANDOS_GIT_LIVRES: frozenset[str] = frozenset(
 #: Opções globais do git que consomem o argumento seguinte.
 _GIT_GLOBAIS_COM_VALOR = frozenset({"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"})
 
-#: `find` que executa ou apaga não é leitura.
-_FIND_PERIGOSO = ("-exec", "-execdir", "-delete", "-ok")
+#: Opções globais do git que ALTERAM COMO o git executa (config arbitrária,
+#: caminho do executável, diretórios) — não são "-C" (só muda o diretório de
+#: trabalho, inócuo). Um segmento com qualquer uma delas nunca é livre, mesmo que
+#: o subcomando encontrado depois seja `status`/`log`/etc: `git -c
+#: core.fsmonitor=./evil.sh status` roda o fsmonitor em todo `git status`, e
+#: `git --exec-path=/tmp/evil status` troca o executável usado internamente.
+_GIT_GLOBAIS_PERIGOSAS = ("-c", "--config-env", "--exec-path", "--git-dir", "--work-tree", "--namespace")
+
+#: `find` que executa, apaga ou escreve em arquivo não é leitura.
+_FIND_PERIGOSO = ("-exec", "-execdir", "-delete", "-ok", "-fprint", "-fprint0", "-fls", "-fprintf")
 
 _INERTE = re.compile(r"^\s*(echo|printf|#)\b", re.I)
 _MSG_GIT = re.compile(r"(-m|--message)\s+('[^']*'|\"[^\"]*\")")
@@ -453,6 +461,22 @@ def _subcomando_git(tokens: list[str]) -> str:
     return ""
 
 
+def _git_opcao_perigosa(tokens: list[str]) -> str | None:
+    """Devolve a opção global perigosa (`-c`, `--exec-path`, ...) presente nos
+    tokens de um comando git, ou `None` se nenhuma aparecer.
+
+    Casa tanto a forma separada (`-c valor`, `--exec-path valor`) quanto a forma
+    colada com `=` (`--exec-path=valor`) — `_subcomando_git` só reconhecia a
+    primeira, então `git --exec-path=/tmp/evil status` despistava a checagem e
+    ainda encontrava `status` como subcommand livre.
+    """
+    for token in tokens[1:]:
+        for opcao in _GIT_GLOBAIS_PERIGOSAS:
+            if token == opcao or token.startswith(opcao + "="):
+                return opcao
+    return None
+
+
 def _motivo_fora_da_lista(segmento: str, config: dict) -> str | None:
     """Devolve `None` se o segmento é comprovadamente inócuo; senão, o motivo textual
     de ele não ter sido liberado.
@@ -478,6 +502,9 @@ def _motivo_fora_da_lista(segmento: str, config: dict) -> str | None:
         return f"comando fora da lista de permitidos: `{primeiro}`"
 
     if primeiro == "git":
+        opcao_perigosa = _git_opcao_perigosa(tokens)
+        if opcao_perigosa is not None:
+            return f"git com opção global que altera execução: {opcao_perigosa}"
         sub = _subcomando_git(tokens)
         if sub not in SUBCOMANDOS_GIT_LIVRES:
             return f"subcomando git fora da lista de permitidos: `{sub or '(nenhum)'}`"
@@ -485,7 +512,17 @@ def _motivo_fora_da_lista(segmento: str, config: dict) -> str | None:
     if primeiro == "find":
         for perigoso in _FIND_PERIGOSO:
             if perigoso in tokens:
-                return f"`find` com `{perigoso}` executa ou apaga, não é leitura"
+                return f"`find` com `{perigoso}` executa, apaga ou escreve, não é leitura"
+
+    if primeiro == "sort":
+        for flag in ("-o", "--output"):
+            if flag in tokens or any(t.startswith(flag + "=") for t in tokens):
+                return f"`sort` com `{flag}` escreve arquivo de saída, não é leitura"
+
+    if primeiro == "uniq":
+        posicionais = [t for t in tokens[1:] if not t.startswith("-")]
+        if len(posicionais) > 1:
+            return "`uniq` com dois argumentos posicionais: o segundo é arquivo de saída"
 
     for token in tokens[1:]:
         if _e_segredo(token, config):
