@@ -11,6 +11,8 @@ RAIZ_PLUGIN = Path(__file__).resolve().parents[2]
 HOOK_RISCO = RAIZ_PLUGIN / "hooks" / "engine_risco.py"
 HOOK_CONTEXTO = RAIZ_PLUGIN / "hooks" / "engine_contexto.py"
 HOOK_TRILHA = RAIZ_PLUGIN / "hooks" / "engine_trilha.py"
+HOOK_SALVAR = RAIZ_PLUGIN / "hooks" / "engine_salvar.py"
+HOOK_GATE = RAIZ_PLUGIN / "hooks" / "engine_gate.py"
 
 sys.path.insert(0, str(RAIZ_PLUGIN))
 from ferramentas import estado, trilha  # noqa: E402
@@ -446,3 +448,150 @@ def test_avisos_com_teto_apertado_e_muitas_decisoes_fica_dentro_do_teto():
     cartao = contexto.montar_cartao(dados, cfg)
     cartao = contexto._com_avisos(cartao, cfg)
     assert len(cartao.splitlines()) <= cfg["teto_cartao_linhas"]
+
+
+# --- Hook PreCompact: engine_salvar.py -------------------------------------------
+
+
+def _definir_fase(raiz: Path, fase: str) -> None:
+    """Ajusta a fase do estado direto no disco, sem passar pelo grafo de
+    transições — os testes de gate/salvar querem uma fase específica, não a
+    jornada inteira até ela."""
+    dados = estado.carregar(raiz)
+    dados["fase"] = fase
+    estado.gravar(raiz, dados)
+
+
+_ISO_APROX = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$"
+
+
+def test_salvar_motor_ligado_grava_ultima_consolidacao_e_resumo_trilha(tmp_path):
+    import re
+
+    _ligar(tmp_path)
+    trilha.registrar(
+        tmp_path,
+        {"quando": "x", "fase": "BUILD", "ferramenta": "Bash", "alvo": "a", "risco": "rastreado", "regra": "-"},
+    )
+    trilha.registrar(
+        tmp_path,
+        {"quando": "x", "fase": "BUILD", "ferramenta": "Edit", "alvo": "b", "risco": "rastreado", "regra": "-"},
+    )
+    trilha.registrar(
+        tmp_path,
+        {"quando": "x", "fase": "BUILD", "ferramenta": "Bash", "alvo": "c", "risco": "travado", "regra": "R2"},
+    )
+
+    saida = _rodar(
+        HOOK_SALVAR,
+        {"cwd": str(tmp_path), "hook_event_name": "PreCompact", "compaction_trigger": "manual"},
+        tmp_path,
+    )
+    assert saida.returncode == 0
+
+    dados = estado.carregar(tmp_path)
+    assert re.match(_ISO_APROX, dados["ultima_consolidacao"])
+    assert dados["resumo_trilha"] == {"rastreado": 2, "travado": 1}
+
+
+def test_salvar_motor_desligado_nao_cria_nada(tmp_path):
+    saida = _rodar(
+        HOOK_SALVAR,
+        {"cwd": str(tmp_path), "hook_event_name": "PreCompact", "compaction_trigger": "auto"},
+        tmp_path,
+    )
+    assert saida.returncode == 0
+    assert not estado.caminho(tmp_path).is_file()
+
+
+def test_salvar_estado_desligado_apos_ciclo_nao_grava_resumo(tmp_path):
+    _ligar(tmp_path)
+    estado.desligar(tmp_path)
+    saida = _rodar(
+        HOOK_SALVAR,
+        {"cwd": str(tmp_path), "hook_event_name": "PreCompact", "compaction_trigger": "manual"},
+        tmp_path,
+    )
+    assert saida.returncode == 0
+    dados = estado.carregar(tmp_path)
+    assert "ultima_consolidacao" not in dados
+
+
+def test_salvar_stdin_malformado_sai_0(tmp_path):
+    _ligar(tmp_path)
+    saida = _rodar_stdin_cru(HOOK_SALVAR, "isso nao e json", tmp_path)
+    assert saida.returncode == 0
+    dados = estado.carregar(tmp_path)
+    assert "ultima_consolidacao" not in dados
+
+
+# --- Hook Stop: engine_gate.py -----------------------------------------------
+
+
+def test_gate_cobra_na_primeira_chamada_em_build_sem_acoes(tmp_path):
+    _ligar(tmp_path)
+    _definir_fase(tmp_path, "BUILD")
+    saida = _rodar(HOOK_GATE, {"cwd": str(tmp_path), "stop_hook_active": False}, tmp_path)
+    assert saida.returncode == 2
+    assert "BUILD" in saida.stderr
+    dados = estado.carregar(tmp_path)
+    assert dados["cobrancas_por_fase"]["BUILD"] == 1
+
+
+def test_gate_nao_cobra_na_segunda_chamada_contador_persistido_entre_subprocessos(tmp_path):
+    _ligar(tmp_path)
+    _definir_fase(tmp_path, "BUILD")
+    payload = {"cwd": str(tmp_path), "stop_hook_active": False}
+
+    primeira = _rodar(HOOK_GATE, payload, tmp_path)
+    assert primeira.returncode == 2
+
+    segunda = _rodar(HOOK_GATE, payload, tmp_path)
+    assert segunda.returncode == 0
+    dados = estado.carregar(tmp_path)
+    assert dados["cobrancas_por_fase"]["BUILD"] == 1
+
+
+def test_gate_nao_cobra_em_descoberta(tmp_path):
+    _ligar(tmp_path)  # fase default é DESCOBERTA
+    saida = _rodar(HOOK_GATE, {"cwd": str(tmp_path), "stop_hook_active": False}, tmp_path)
+    assert saida.returncode == 0
+    dados = estado.carregar(tmp_path)
+    assert dados.get("cobrancas_por_fase", {}) == {}
+
+
+@pytest.mark.parametrize("fase", ["BUILD", "TESTE", "REVISAO"])
+def test_gate_nao_cobra_quando_trilha_ja_tem_acao_da_fase(tmp_path, fase):
+    _ligar(tmp_path)
+    _definir_fase(tmp_path, fase)
+    trilha.registrar(
+        tmp_path,
+        {"quando": "x", "fase": fase, "ferramenta": "Bash", "alvo": "y", "risco": "rastreado", "regra": "-"},
+    )
+    saida = _rodar(HOOK_GATE, {"cwd": str(tmp_path), "stop_hook_active": False}, tmp_path)
+    assert saida.returncode == 0
+    dados = estado.carregar(tmp_path)
+    assert dados.get("cobrancas_por_fase", {}).get(fase, 0) == 0
+
+
+def test_gate_motor_desligado_nao_cobra(tmp_path):
+    saida = _rodar(HOOK_GATE, {"cwd": str(tmp_path), "stop_hook_active": False}, tmp_path)
+    assert saida.returncode == 0
+
+
+def test_gate_stop_hook_active_nao_cobra_mesmo_quando_cobraria(tmp_path):
+    _ligar(tmp_path)
+    _definir_fase(tmp_path, "TESTE")
+    saida = _rodar(HOOK_GATE, {"cwd": str(tmp_path), "stop_hook_active": True}, tmp_path)
+    assert saida.returncode == 0
+    dados = estado.carregar(tmp_path)
+    assert dados.get("cobrancas_por_fase", {}).get("TESTE", 0) == 0
+
+
+def test_gate_stdin_malformado_sai_0(tmp_path):
+    _ligar(tmp_path)
+    _definir_fase(tmp_path, "BUILD")
+    saida = _rodar_stdin_cru(HOOK_GATE, "isso nao e json", tmp_path)
+    assert saida.returncode == 0
+    dados = estado.carregar(tmp_path)
+    assert dados.get("cobrancas_por_fase", {}) == {}

@@ -32,6 +32,28 @@
           }
         ]
       }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/engine_salvar.py"]
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/engine_gate.py"]
+          }
+        ]
+      }
     ]
   }
 }
