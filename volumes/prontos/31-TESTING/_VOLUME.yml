@@ -1,0 +1,15 @@
+# Metadados do volume 31. Lido por ferramentas/validar.py e ferramentas/status.py.
+# depende_de esta vazio de proposito: o vizinho mais proximo e o 32-QUALITY (o
+# indicador agregado que consome a pratica descrita aqui), mas 32 ainda nao tem
+# secao escrita -- existe so como pasta com _VOLUME.yml. Apontar depende_de para
+# volume sem conteudo passaria em `depende-de-inexistente` e produziria um
+# pre-requisito de leitura que nao pode ser lido. A relacao com 32, 18, 17 e 07
+# esta descrita em prosa em 18-Referencias-Cruzadas.md, fora do grafo de
+# pre-requisitos.
+volume: "31"
+nome: TESTING
+tipo: PROCESSO
+status: PRONTO
+perecivel: false
+depende_de: []
+escopo: A pratica de escrever, organizar e manter teste automatizado -- taxonomia, isolamento, dubles de teste, deteccao e eliminacao de instabilidade.
