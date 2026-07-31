@@ -232,3 +232,10 @@ def test_evento_malformado_nao_injeta_nada_e_nao_bloqueia(tmp_path):
     saida = _rodar_stdin_cru(HOOK_CONTEXTO, "isso nao e json", tmp_path)
     assert saida.returncode == 0
     assert saida.stdout.strip() == ""
+
+
+def test_avisos_de_config_tambem_respeitam_o_teto():
+    contexto = _importar_contexto()
+    cfg = {"teto_cartao_linhas": 5, "_avisos": [f"aviso {i}" for i in range(50)]}
+    cartao = contexto._com_avisos("linha 1\nlinha 2\nlinha 3", cfg)
+    assert len(cartao.splitlines()) <= cfg["teto_cartao_linhas"]
