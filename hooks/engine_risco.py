@@ -21,25 +21,15 @@ import json
 import sys
 from pathlib import Path
 
-# Força UTF-8 nos três descritores padrão. No console do Windows (cp1252 por
-# padrão), acentos na mensagem de bloqueio saem como mojibake ("a��o") —
-# e essa mensagem é o que o Claude lê para decidir o que fazer, então ilegível é o
-# mesmo que nenhuma mensagem. `reconfigure` pode não existir (stream substituído
-# por algo sem esse método, comum em teste) ou recusar o encoding; nos dois casos
-# seguimos com o stream original em vez de travar o hook por causa disso.
-for _fluxo in (sys.stdin, sys.stdout, sys.stderr):
-    try:
-        _fluxo.reconfigure(encoding="utf-8", errors="replace")
-    except (AttributeError, ValueError):
-        pass
+from _comum import forcar_utf8, raiz_do_ciclo  # noqa: E402
+
+# Força UTF-8 nos três descritores padrão — ver `_comum.forcar_utf8` para o motivo
+# (mojibake de acentuação no console do Windows) e o comportamento de falha segura.
+forcar_utf8()
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ferramentas import config, estado, risco  # noqa: E402
-
-#: Limite de níveis que `_raiz_do_ciclo` sobe procurando `.engine/estado.json`.
-#: Evita um loop sem fim num caminho patológico (link simbólico circular etc.).
-_LIMITE_NIVEIS_RAIZ = 30
 
 #: Ferramentas de escrita. Em modo seco, TODA chamada a uma delas é bloqueada,
 #: mesmo quando `risco.classificar` devolve LIVRE (arquivo novo, ou sob `tests/`) —
@@ -48,29 +38,6 @@ _LIMITE_NIVEIS_RAIZ = 30
 #: passava direto em modo seco: LIVRE é o mesmo nível que uma leitura, e o gate
 #: antigo (`veredito.nivel != risco.LIVRE`) não distinguia as duas coisas.
 _FERRAMENTAS_ESCRITA = {"Write", "Edit", "NotebookEdit"}
-
-
-def _raiz_do_ciclo(inicio: Path) -> Path:
-    """Sobe a árvore de diretórios a partir de `inicio` até achar `.engine/estado.json`.
-
-    O Claude Code roda o hook com `cwd` igual ao diretório de trabalho corrente da
-    sessão, que pode ser um subdiretório do projeto (ex.: dentro de um pacote).
-    `estado.carregar` só olha `<raiz>/.engine/estado.json` — sem subir a árvore, o
-    hook não acha o estado, `dados` vira `None` e o motor aparenta desligado. Isso é
-    indistinguível de "motor realmente desligado": a proteção cai sem ninguém notar.
-
-    Sobe no máximo `_LIMITE_NIVEIS_RAIZ` níveis. Se não achar nada, devolve `inicio`
-    — mesmo comportamento de antes desta correção.
-    """
-    atual = inicio
-    for _ in range(_LIMITE_NIVEIS_RAIZ):
-        if (atual / ".engine" / "estado.json").is_file():
-            return atual
-        pai = atual.parent
-        if pai == atual:
-            break
-        atual = pai
-    return inicio
 
 
 def principal() -> int:
@@ -121,7 +88,7 @@ def principal() -> int:
             # sem argumentos) — normaliza para vazio, não bloqueia.
             tool_input = {}
 
-        raiz = _raiz_do_ciclo(Path(evento.get("cwd") or "."))
+        raiz = raiz_do_ciclo(Path(evento.get("cwd") or "."))
 
         dados = estado.carregar(raiz)
         if not dados or not dados.get("ativo"):
