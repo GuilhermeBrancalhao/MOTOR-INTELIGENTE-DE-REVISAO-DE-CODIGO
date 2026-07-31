@@ -1,5 +1,124 @@
 # CHANGELOG
 
+## 2026-07-31 — Fase 2, revisão adversarial
+
+Seis correções apontadas por revisão adversarial da branch `feat/fase-2`, todas
+verificadas por execução antes de serem reportadas. Suíte: **247 → 261 testes
+verdes**; `aceite/fase-2.md` reexecutado e atualizado.
+
+- **O gate nunca cobrava em operação real (CRÍTICO).** O único jeito de entrar em
+  BUILD/TESTE/REVISAO é rodar `ferramentas/cli.py fase <DESTINO>` por um comando de
+  shell — e esse comando dispara o `PostToolUse`, que gravava na trilha uma linha já
+  carimbada com a fase NOVA. O gate lia isso como evidência de trabalho e saía 0
+  sempre. Os 9 testes que passavam mudavam a fase pela API (`estado.transicionar`),
+  nunca pela CLI, e por isso não viam o buraco. `engine_trilha.py` passa a marcar
+  `do_motor: true` nas ações que são chamadas da própria CLI, e `engine_gate.py` as
+  ignora ao procurar evidência da fase. Teste novo reproduz o caminho real
+  (transição pela CLI em subprocesso → `engine_trilha` sobre o mesmo comando → Stop).
+- **Segredo em texto puro na trilha (CRÍTICO).** `psql
+  "postgresql://admin:senha@db.prod/app"` e `curl -H "Authorization: Bearer sk-…"`
+  são `rastreado` (executam) e iam literais para `.engine/trilha.jsonl`, de onde
+  `relatorio.de_fase` e o verbo `retomar` os traziam de volta ao contexto. Nova
+  `trilha.redigir` substitui por `«redigido»` senha embutida em URL, valor de
+  cabeçalho `Authorization:` e os padrões de credencial de `ferramentas/risco.py`
+  (reutilizados por referência — `risco.py` segue selado). Aplicada em `registrar`
+  (o dado não chega ao disco em claro) e também na impressão do relatório e do
+  `retomar` (defesa em profundidade, para trilhas gravadas antes desta correção).
+- **A trilha não separava ciclos (CRÍTICO).** `novo_ciclo` zera o estado mas não a
+  trilha (append-only por contrato), e o relatório do ciclo 2 contava as ações do
+  ciclo 1 — número errado, não só verboso. Cada linha passa a carregar o `ciclo` que
+  a gerou; `de_ciclo`/`de_fase` filtram pelo ciclo corrente e dizem quantas linhas
+  sem id ignoraram. Junto: `_arquivos_tocados` deixou de ser O(n²) e nenhum
+  relatório passa de 300 linhas (corta a listagem e diz quantas omitiu). Medido numa
+  trilha de 50 mil linhas: 23,5 s / 3,1 MB impressos → 0,33 s / 12,9 KB.
+- **Falso positivo grosseiro na detecção de stack.** Um projeto com `main.py` +
+  `dados.db` + `schema.sql` disparava `fastapi`, `postgresql` **e** `sqlite`.
+  `detectar:` passa a aceitar só âncora forte (regra documentada em
+  `cartoes/_catalogo.md`): saíram `main.py`/`dependencies.py` (fastapi), `*.sql`
+  (postgresql), `*.db` (sqlite), `*.cls` (excel-vba, colide com LaTeX e Apex) e
+  `*.ts` solto (typescript). Onde não há âncora forte possível por nome de arquivo,
+  a escolha é NÃO detectar — carregar cartão errado propaga o erro para todo o ciclo.
+- **`agents/sentinela.md` e `agents/designer.md` prometiam o que as `tools` proíbem.**
+  O sentinela dizia invocar `ecc:security-reviewer`/`ecc:performance-optimizer` sem
+  ter ferramenta de despacho; o designer dizia consumir o MCP `open-design` sem ter
+  tool de MCP. O TEXTO dos dois foi ajustado ao que eles realmente fazem. O sentinela
+  **continua sem Bash e sem escrita** de propósito — é a garantia estrutural de que
+  ele não conserta em silêncio; despacho a partir dele fica registrado como item de
+  Fase 3, não como promessa.
+- **`aceite/simular_turnos.py`: verificação tautológica e gate não exercitado.** A
+  verificação (a) comparava o cartão do turno 20 com a fase lida do mesmo disco —
+  apagando as duas transições do meio, continuava verde. Agora afirma o valor
+  literal (`PLANO`), e apagar as transições faz falhar (confirmado por execução).
+  O roteiro ganhou o quinto hook: `engine_gate.py` é disparado pelo caminho real de
+  entrada na fase e verifica que cobra uma vez (f) e não cobra na segunda (g).
+
+## 2026-07-31 — Fase 2 (elenco)
+
+Completa o elenco do motor: 247 testes verdes (eram 152 ao fim da Fase 1) e
+verificação de aceite em `aceite/fase-2.md`, incluindo um roteiro NOVO
+(`aceite/simular_turnos.py`) que fecha o critério "sobrevive a 20 turnos e a uma
+compactação", deixado explicitamente não verificado pela Fase 1.
+
+- **`ferramentas/detectar.py` — detecção de stack.** Lê o front-matter restrito
+  (`tecnologia`/`detectar`/`papeis`/`versao`) de cada cartão em `cartoes/` e varre o
+  projeto hospedeiro (profundidade máx. 6, ignora `.git`/`node_modules`/
+  `__pycache__`/`.venv`/`.engine`) para decidir quais tecnologias estão presentes.
+  `estado.cartoes` é preenchido por essa detecção quando um ciclo liga.
+- **`ferramentas/trilha.py` + hook `engine_trilha.py` (PostToolUse).** Trilha
+  append-only em `.engine/trilha.jsonl`, uma linha JSON por ação (`quando`, `fase`,
+  `ferramenta`, `alvo`, `risco`, `regra`). É a fonte de verdade para os relatórios —
+  nunca o índice de uma API externa. Registrar é acessório: erro de escrita nunca
+  propaga; leitura pula linha corrompida e reporta em `_avisos`, nunca interrompe.
+- **`ferramentas/relatorio.py` — relatório de ciclo e de fase.** `de_ciclo` (Markdown:
+  objetivo, fases percorridas, decisões, contagem de ações por nível, arquivos
+  tocados, pendências) e `de_fase` (ações rastreadas daquela fase, diffs pendentes,
+  pendências). Sem trilha, o relatório diz isso — nunca inventa.
+- **`hooks/engine_salvar.py` (PreCompact).** Consolida no estado, antes da
+  compactação, `ultima_consolidacao` (ISO) e `resumo_trilha` (contagem por nível de
+  risco). Nunca bloqueia a compactação: qualquer erro sai 0 sem gravar nada.
+- **`hooks/engine_gate.py` (Stop).** Cobra evidência UMA vez por fase quando a fase
+  atual é BUILD, TESTE ou REVISAO e a trilha da fase não tem nenhuma ação
+  registrada. O contador `cobrancas_por_fase`, gravado no estado ANTES de cobrar, é
+  o que impede o laço infinito — não `stop_hook_active`, que só descreve o turno
+  corrente. Nunca bloqueia por erro interno: falha segura aqui é NÃO travar a saída.
+- **CLI: `retomar`, `--dry`, `relatorio`.** `ligar --dry` cria o ciclo com
+  `modo="dry"` (o hook de risco já bloqueia toda escrita nesse modo, mesmo a que
+  sairia LIVRE). `retomar` relê estado + trilha e imprime um resumo de reentrada
+  (fase, objetivo, decisões, últimas 5 ações, pendências) para sessão nova; estado
+  corrompido sai 1 com mensagem legível, sem tocar no arquivo. `relatorio
+  [ciclo|fase X]` chama `ferramentas/relatorio.py`.
+- **Os 5 papéis restantes:** `descobridor` (DESCOBERTA, sem escrita), `cartografo`
+  (ANALISE, sem escrita), `designer` (PLANO, escreve só a direção visual, consome o
+  cartão `ui-ux`), `testador` (TESTE, escreve e roda teste, nunca ajusta teste para
+  o código passar), `sentinela` (REVISAO, segurança + performance, sem Bash nem
+  escrita). Elenco completo: 9 agentes.
+- **Os 9 cartões restantes:** `fastapi`, `excel-vba`, `office-scripts`,
+  `power-query`, `react`, `typescript`, `postgresql`, `sqlite`, `mermaid`. Elenco
+  completo: 12 cartões, todos lidos sem erro por `detectar.ler_cartao`.
+- **Verificação em `aceite/fase-2.md`:** suíte completa (247 testes), 9 famílias
+  travadas pelo hook de verdade (`aceite/verificar_familias.py`, R9 incorporada na
+  correção final da Fase 1), e o roteiro NOVO de 20 turnos com compactação simulada
+  (`aceite/simular_turnos.py`) — todos com saída literal colada.
+
+### Não verificado nesta fase
+
+- A instalação real do plugin numa sessão do Claude Code (reconhecimento de
+  `hooks/hooks.json`, resolução de `${CLAUDE_PLUGIN_ROOT}`, disparo dos cinco hooks
+  nos eventos certos).
+- A prova de que o Claude Code de fato injeta o stdout do `UserPromptSubmit` no
+  contexto de uma conversa real.
+- O comportamento do `Stop` (`engine_gate.py`) bloqueando de verdade numa sessão
+  real, com a mensagem de cobrança chegando legível ao modelo.
+- Os quatro cenários de aceite com projetos-cobaia (Fase 3).
+- **`hooks/hooks.json` usa o lançador `py`, que só existe no Windows** (e não em
+  toda instalação Windows). Os testes e os três scripts de aceite usam
+  `sys.executable` de propósito, mas o arquivo que o Claude Code de fato lê para
+  invocar cada hook continua com `py` — uma instalação fora do Windows quebraria os
+  cinco hooks por esse motivo. Risco de portabilidade conhecido, não corrigido
+  nesta fase.
+
+Detalhe completo, com saída literal de cada verificação, em `aceite/fase-2.md`.
+
 ## 2026-07-30 — Correções da revisão final da Fase 1
 
 Sete achados fechados; 183 testes verdes (eram 152) e `aceite/verificar_familias.py`

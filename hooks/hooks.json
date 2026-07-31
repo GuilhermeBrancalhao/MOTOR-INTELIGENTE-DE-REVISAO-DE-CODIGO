@@ -11,6 +11,17 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/engine_trilha.py"]
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [
@@ -18,6 +29,28 @@
             "type": "command",
             "command": "py",
             "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/engine_contexto.py"]
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/engine_salvar.py"]
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "py",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/engine_gate.py"]
           }
         ]
       }

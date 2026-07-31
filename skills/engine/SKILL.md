@@ -16,6 +16,9 @@ quando o ciclo termina. Instrução direta do usuário sempre vence o motor.
 | `/engine <pedido>` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" ligar "<objetivo em uma frase>"` e entre em DESCOBERTA |
 | `/engine off` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" desligar` e apresente o resumo do ciclo |
 | `/engine status` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" status` e apresente a saída |
+| `/engine <pedido> --dry` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" ligar "<objetivo em uma frase>" --dry` — use para um ciclo que só planeja e relata, sem escrever |
+| `/engine retomar` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" retomar` e apresente o resumo de reentrada — use quando a sessão é nova mas o ciclo já existe |
+| `/engine relatorio` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" relatorio ciclo` (ou `relatorio fase <FASE>`) e apresente a saída |
 
 Essa é a forma que funciona **de qualquer diretório**, e é a única que se deve usar. O
 diretório corrente é o do projeto do usuário, não o do plugin: ali `python -m
@@ -43,9 +46,18 @@ justificativa de cada decisão, e **espere** o usuário. É a única parada por 
 
 ## Papéis
 
-Despache o subagente do papel correspondente à fase (`agents/`): `arquiteto` no PLANO,
-`implementador` no BUILD, `revisor` na REVISAO, `documentador` no DOC. Antes de despachar,
-leia os cartões de `cartoes/` relevantes à stack e passe o conteúdo ao subagente.
+Despache o subagente do papel correspondente à fase (`agents/`). Antes de despachar, leia
+os cartões de `cartoes/` relevantes à stack e passe o conteúdo ao subagente.
+
+| Fase | Papel |
+|---|---|
+| DESCOBERTA | `descobridor` |
+| ANALISE / EVOLUCAO | `cartografo` |
+| PLANO | `arquiteto` (e `designer`, quando houver direção visual a decidir) |
+| BUILD | `implementador` |
+| TESTE | `testador` |
+| REVISAO | `revisor` e `sentinela` |
+| DOC | `documentador` |
 
 ## Quando o hook travar uma ação
 

@@ -1,8 +1,8 @@
 ---
 tecnologia: pytest
 detectar: ["pytest.ini", "pyproject.toml", "tests/**/test_*.py"]
-papeis: [arquiteto, implementador, revisor]
-versao: 2026-07-30
+papeis: [arquiteto, implementador, testador, revisor]
+versao: 2026-07-31
 ---
 
 ## Convenções
