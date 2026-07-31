@@ -200,12 +200,16 @@ Sugere: "revisar-codigo (100%)"
 
 ### Volumes Dinâmicos
 
-Crie novo volume sem editar código:
+Crie novo volume sem editar código, com `_VOLUME.yml` marcando `status: PRONTO`:
 
 ```
 volumes/prontos/99-MEU-NOVO-VOLUME/
-  └─ README.md
+  ├─ _VOLUME.yml       ← status: PRONTO (obrigatório — só volumes PRONTO aparecem)
+  └─ 01-Introducao.md  ← capítulos numerados, ou README.md
 ```
+
+O resumo mostrado no cartão vem do campo `escopo:` de `_VOLUME.yml`; sem ele, cai na
+primeira linha não vazia do `README.md`.
 
 Próxima execução ENGINE:
 ```
@@ -250,16 +254,17 @@ Essas 5 invariantes definem comportamento esperado:
 
 ## Configuração
 
-### .claude/config.json (opcional)
+### `.engine/config.json` no projeto hospedeiro (opcional)
+
+Chaves fora desta lista são ignoradas e geram aviso no cartão — só o que está em
+`ferramentas/config.py::PADRAO` pode ser sobreposto:
 
 ```json
 {
-  "engine": {
-    "teto_cartao_linhas": 50,
-    "cache_ttl_segundos": 300,
-    "auto_detect_motors": true,
-    "verbose": false
-  }
+  "porta_plano": true,
+  "teto_cartao_linhas": 50,
+  "padroes_segredo": [".env", "*.pem", "*.key"],
+  "travado_extra": []
 }
 ```
 
@@ -275,7 +280,7 @@ Verify fase com `/engine` command. Motores aparecem apenas em fases designadas.
 
 Verifique que:
 1. Está em `volumes/prontos/NOME/`
-2. Tem `README.md` ou arquivos `.md`
+2. Tem `_VOLUME.yml` com `status: PRONTO` (sem esse arquivo, cai no fallback: `README.md` ou qualquer `.md`)
 3. Estrutura é válida (não vazio)
 
 ### "Sugestão de motor incorreta"

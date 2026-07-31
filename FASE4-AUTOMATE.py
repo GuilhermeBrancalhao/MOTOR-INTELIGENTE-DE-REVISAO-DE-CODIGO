@@ -7,14 +7,15 @@ Valida que novos volumes aparecem sem hardcoding.
 import json
 import subprocess
 import sys
-import os
 from pathlib import Path
 from datetime import datetime
 
 if sys.platform == "win32":
-    os.environ["PYTHONIOENCODING"] = "utf-8"
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    for _fluxo in (sys.stdout, sys.stderr):
+        try:
+            _fluxo.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
 
 
 class TesteFase4:

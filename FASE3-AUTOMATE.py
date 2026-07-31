@@ -7,16 +7,16 @@ Gera relatório FASE3-RESULTADO.md.
 """
 import json
 import sys
-import os
 from pathlib import Path
 from datetime import datetime
 
 # UTF-8 para Windows
 if sys.platform == "win32":
-    os.environ["PYTHONIOENCODING"] = "utf-8"
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
+    for _fluxo in (sys.stdout, sys.stderr):
+        try:
+            _fluxo.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
 
 sys.path.insert(0, str(Path(__file__).parent / "hooks"))
 from engine_analisa_diff import AnalisadorDiff

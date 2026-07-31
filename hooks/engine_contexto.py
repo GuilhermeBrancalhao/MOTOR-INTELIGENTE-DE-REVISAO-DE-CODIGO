@@ -207,6 +207,19 @@ def montar_cartao_estendido(dados: dict, cfg: dict, raiz: Path, cwd: str) -> str
     return "\n".join(linhas[:teto])
 
 
+def _com_avisos(cartao: str, cfg: dict) -> str:
+    """Acrescenta os avisos de configuração (`cfg['_avisos']`) ao cartão, sem nunca
+    furar o teto de linhas — os avisos entram no mesmo orçamento, não por fora dele."""
+    avisos = cfg.get("_avisos") or []
+    if not avisos:
+        return cartao
+    teto = int(cfg.get("teto_cartao_linhas", 40))
+    linhas = cartao.splitlines()
+    for aviso in avisos:
+        linhas.append(f"ENGINE aviso: {aviso}")
+    return "\n".join(linhas[:teto])
+
+
 def principal() -> int:
     try:
         try:
@@ -226,6 +239,7 @@ def principal() -> int:
 
         cfg = config.carregar(raiz)
         cartao = montar_cartao_estendido(dados, cfg, raiz, cwd)
+        cartao = _com_avisos(cartao, cfg)
 
         if cartao.strip():
             print(cartao)

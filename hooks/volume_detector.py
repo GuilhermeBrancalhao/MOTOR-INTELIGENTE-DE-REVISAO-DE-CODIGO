@@ -29,8 +29,42 @@ class DetectorVolumesAoVivo:
         tempo_decorrido = datetime.now() - self.ultima_atualizacao[chave]
         return tempo_decorrido < self.cache_ttl
 
+    def _ler_metadados_volume(self, volume_path: Path) -> dict:
+        """Lê `_VOLUME.yml` (formato plano `chave: valor`, sem listas aninhadas).
+
+        Sem dependência de PyYAML — o plugin não declara essa dependência e o
+        formato real (`volumes/prontos/*/_VOLUME.yml`) é só pares chave:valor de
+        uma linha, então um parser dedicado evita puxar um pacote externo por
+        um formato que não precisa dele.
+        """
+        metadados: dict = {}
+        caminho = volume_path / "_VOLUME.yml"
+        if not caminho.exists():
+            return metadados
+        try:
+            for linha in caminho.read_text(encoding="utf-8").split("\n"):
+                linha = linha.strip()
+                if not linha or linha.startswith("#") or ":" not in linha:
+                    continue
+                chave, _, valor = linha.partition(":")
+                chave = chave.strip()
+                valor = valor.strip().strip('"').strip("'")
+                if valor:
+                    metadados[chave] = valor
+        except Exception:
+            pass
+        return metadados
+
     def _ler_resumo_volume(self, volume_path: Path) -> Optional[str]:
-        """Lê resumo do volume de seu README.md."""
+        """Lê resumo do volume: `escopo` de `_VOLUME.yml` primeiro (fonte oficial),
+        senão a primeira linha não-vazia do README.md (fallback para volumes sem
+        `_VOLUME.yml`)."""
+        metadados = self._ler_metadados_volume(volume_path)
+        escopo = metadados.get("escopo")
+        if escopo:
+            texto = " ".join(escopo.split())
+            return texto if len(texto) <= 100 else texto[:97] + "…"
+
         try:
             readme = volume_path / "README.md"
             if readme.exists():
@@ -84,12 +118,23 @@ class DetectorVolumesAoVivo:
         return volumes_encontrados
 
     def _validar_volume(self, volume_path: Path) -> bool:
-        """Valida que diretório é um volume legítimo."""
-        # Um volume é legítimo se:
-        # 1. Tem README.md ou
-        # 2. Tem arquivos .md ou
-        # 3. Tem subdiretorios com padrão XX-*.md (volumes)
+        """Valida que diretório é um volume PRONTO e consultável.
+
+        Se existe `_VOLUME.yml` (convenção real dos volumes deste repositório,
+        lida também por `ferramentas/validar.py` e `ferramentas/status.py`), o
+        campo `status` manda: só `PRONTO` é consultável — um volume em rascunho
+        ou descontinuado não deve aparecer no cartão como se estivesse pronto,
+        mesmo que já tenha capítulos `.md` escritos.
+
+        Sem `_VOLUME.yml` (fallback para volumes que não seguem essa convenção),
+        cai na heurística por presença de markdown: README.md, qualquer `.md`,
+        ou capítulos `NN-*.md`.
+        """
         try:
+            metadados = self._ler_metadados_volume(volume_path)
+            if metadados:
+                return metadados.get("status") == "PRONTO"
+
             if (volume_path / "README.md").exists():
                 return True
 

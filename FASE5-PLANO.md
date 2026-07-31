@@ -53,7 +53,11 @@ volumes/prontos/
 
 ## Manifesto do Plugin
 
-**plugin.json** define:
+**plugin.json** define (revisado: um bloco `capabilities` chegou a ser adicionado
+aqui, mas o schema real de plugin do Claude Code não reconhece esse campo — hooks
+só são lidos de `hooks/hooks.json`, e skills só são auto-descobertas de uma pasta
+`skills/`. O bloco era ignorado silenciosamente e descrevia fiação que nem batia
+com `hooks/hooks.json`; foi removido):
 
 ```json
 {
@@ -61,34 +65,17 @@ volumes/prontos/
   "displayName": "AI Engineering Motor (ENGINE)",
   "version": "4.0.0",
   "description": "Intelligent motor...",
-  "capabilities": {
-    "hooks": [
-      {
-        "id": "engine_contexto_v4",
-        "name": "ENGINE Context Hook",
-        "event": "UserPromptSubmit",
-        "script": "hooks/engine_contexto_v4.py"
-      }
-    ],
-    "skills": [
-      {
-        "id": "revisar-codigo",
-        "name": "Revisar Código",
-        "path": "motores/revisar-codigo"
-      },
-      // ... 4 mais motores
-    ],
-    "volumes": [
-      {
-        "id": "07-prompt-engine",
-        "name": "ENGINE Prompts",
-        "path": "volumes/prontos/07-PROMPT-ENGINE"
-      },
-      // ... 2 mais volumes
-    ]
-  }
+  "author": { "name": "...", "url": "..." },
+  "license": "MIT",
+  "homepage": "...",
+  "repository": { "type": "git", "url": "..." },
+  "keywords": ["code-review", "optimization", "..."]
 }
 ```
+
+O wiring real dos hooks está em `hooks/hooks.json` (lido pelo Claude Code), e os 5
+motores continuam em `motores/` como material de referência — não em `skills/` —
+de propósito, para não virar comando invocável e explodir o menu.
 
 ---
 

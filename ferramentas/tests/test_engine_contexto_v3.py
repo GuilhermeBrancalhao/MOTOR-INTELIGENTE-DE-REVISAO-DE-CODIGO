@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Testes de integração para engine_contexto_v3.py."""
 import sys
-import os
 import json
 import tempfile
 from pathlib import Path
 
 if sys.platform == "win32":
-    os.environ["PYTHONIOENCODING"] = "utf-8"
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "hooks"))
 

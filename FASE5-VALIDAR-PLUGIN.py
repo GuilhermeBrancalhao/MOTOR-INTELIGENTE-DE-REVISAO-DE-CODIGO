@@ -7,15 +7,18 @@ Valida:
 3. Versionamento semântico
 4. Documentação completa
 """
+from __future__ import annotations
+
 import json
 import sys
-import os
 from pathlib import Path
 
 if sys.platform == "win32":
-    os.environ["PYTHONIOENCODING"] = "utf-8"
-    import io
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    for _fluxo in (sys.stdout, sys.stderr):
+        try:
+            _fluxo.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
 
 
 class ValidadorPlugin:
@@ -52,6 +55,9 @@ class ValidadorPlugin:
 
         # 6. Volumes
         self._validar_volumes()
+
+        # 7. Wiring real dos hooks (o que o Claude Code de fato lê)
+        self._validar_hooks_json()
 
         # Reportar
         return self._relatar()
@@ -180,7 +186,13 @@ class ValidadorPlugin:
                 print(f"❌ Falta: {motor}/SKILL.md")
 
     def _validar_volumes(self):
-        """Valida volumes."""
+        """Valida volumes.
+
+        A convenção real é `_VOLUME.yml` com `status: PRONTO` (lida também por
+        `ferramentas/validar.py`/`status.py`) — os volumes deste repositório usam
+        capítulos numerados (`01-*.md` etc.), não `README.md`. Checar README.md
+        aqui reprovava os 3 volumes reais mesmo com o plugin correto.
+        """
         print("\n--- Volumes Consultáveis ---")
 
         volumes_base = [
@@ -192,14 +204,78 @@ class ValidadorPlugin:
         found = 0
         for vol in volumes_base:
             path = self.repo_dir / "volumes" / "prontos" / vol
-            if path.exists() and (path / "README.md").exists():
-                print(f"✓ {vol}/")
+            status = self._ler_status_volume(path)
+            if path.exists() and status == "PRONTO":
+                print(f"✓ {vol}/ (status: PRONTO)")
                 found += 1
+            elif path.exists() and status is not None:
+                self.avisos.append(f"Volume {vol} existe mas status é '{status}', não PRONTO")
+                print(f"⚠️  {vol}/ status é '{status}', não PRONTO")
             else:
-                self.avisos.append(f"Volume faltando ou incompleto: {vol}")
-                print(f"⚠️  Falta: {vol}/README.md")
+                self.avisos.append(f"Volume faltando ou sem _VOLUME.yml: {vol}")
+                print(f"⚠️  Falta: {vol}/_VOLUME.yml")
 
         print(f"\n  Total: {found}/3 volumes base encontrados")
+
+    def _ler_status_volume(self, volume_path: Path) -> str | None:
+        """Lê o campo `status` de `_VOLUME.yml` (parser mínimo, sem depender de PyYAML)."""
+        caminho = volume_path / "_VOLUME.yml"
+        if not caminho.exists():
+            return None
+        try:
+            for linha in caminho.read_text(encoding="utf-8").split("\n"):
+                linha = linha.strip()
+                if linha.startswith("status:"):
+                    return linha.split(":", 1)[1].strip().strip('"').strip("'")
+        except Exception:
+            pass
+        return None
+
+    def _validar_hooks_json(self):
+        """Valida `hooks/hooks.json` — a única fonte que o Claude Code lê para
+        decidir quais scripts rodam em cada evento (`plugin.json` não declara hooks;
+        um bloco assim é ignorado pelo Claude Code, então validá-lo aqui não prova
+        nada sobre o que roda de verdade)."""
+        print("\n--- hooks/hooks.json (wiring real) ---")
+
+        caminho = self.repo_dir / "hooks" / "hooks.json"
+        if not caminho.exists():
+            self.erros.append("hooks/hooks.json não encontrado")
+            print("❌ hooks/hooks.json não existe")
+            return
+
+        try:
+            with open(caminho, encoding="utf-8") as f:
+                config_hooks = json.load(f)
+        except json.JSONDecodeError as e:
+            self.erros.append(f"hooks.json inválido: {e}")
+            print(f"❌ Erro de JSON: {e}")
+            return
+
+        eventos = config_hooks.get("hooks", {})
+        if not eventos:
+            self.avisos.append("hooks.json não declara nenhum evento")
+            print("⚠️  Nenhum evento declarado")
+            return
+
+        for evento, entradas in eventos.items():
+            for entrada in entradas:
+                for hook in entrada.get("hooks", []):
+                    args = hook.get("args", [])
+                    for arg in args:
+                        if not arg.endswith(".py"):
+                            continue
+                        # ${CLAUDE_PLUGIN_ROOT} é expandido pelo Claude Code em tempo
+                        # de execução — aqui o plugin é a própria raiz do repo.
+                        relativo = arg.replace("${CLAUDE_PLUGIN_ROOT}/", "")
+                        script = self.repo_dir / relativo
+                        if script.exists():
+                            print(f"✓ {evento} → {relativo}")
+                        else:
+                            self.erros.append(
+                                f"hooks.json declara {evento} → {relativo}, mas o arquivo não existe"
+                            )
+                            print(f"❌ {evento} → {relativo} (arquivo não existe)")
 
     def _relatar(self) -> bool:
         """Relata resultados."""
