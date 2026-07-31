@@ -9,6 +9,7 @@ import pytest
 
 RAIZ_PLUGIN = Path(__file__).resolve().parents[2]
 HOOK_RISCO = RAIZ_PLUGIN / "hooks" / "engine_risco.py"
+HOOK_CONTEXTO = RAIZ_PLUGIN / "hooks" / "engine_contexto.py"
 
 sys.path.insert(0, str(RAIZ_PLUGIN))
 from ferramentas import estado  # noqa: E402
@@ -172,3 +173,62 @@ def test_evento_malformado_nunca_sai_1_sempre_2(tmp_path, payload_json):
     saida = _rodar_stdin_cru(HOOK_RISCO, payload_json, tmp_path)
     assert saida.returncode == 2
     assert saida.returncode != 1
+
+
+# --- Hook UserPromptSubmit: o cartão de estado ------------------------------------
+
+
+def _importar_contexto():
+    sys.path.insert(0, str(RAIZ_PLUGIN / "hooks"))
+    import engine_contexto
+
+    return engine_contexto
+
+
+def test_motor_desligado_nao_injeta_nada(tmp_path):
+    saida = _rodar(HOOK_CONTEXTO, {"cwd": str(tmp_path)}, tmp_path)
+    assert saida.returncode == 0
+    assert saida.stdout.strip() == ""
+
+
+def test_cartao_traz_fase_objetivo_e_invariantes(tmp_path):
+    _ligar(tmp_path)
+    saida = _rodar(HOOK_CONTEXTO, {"cwd": str(tmp_path)}, tmp_path)
+    assert saida.returncode == 0
+    assert "DESCOBERTA" in saida.stdout
+    assert "teste" in saida.stdout
+    assert "Nunca afirmar sucesso sem ter olhado" in saida.stdout
+
+
+def test_cartao_respeita_o_teto_de_linhas():
+    from ferramentas import config
+
+    contexto = _importar_contexto()
+    cfg = dict(config.PADRAO)
+    dados = {
+        "ativo": True,
+        "fase": "BUILD",
+        "ciclo": {"objetivo": "o" * 400, "modo": "normal"},
+        "cartoes": [f"cartao-{i}" for i in range(50)],
+        "decisoes": [{"o_que": f"decisao {i}", "porque": "motivo"} for i in range(50)],
+        "diffs_pendentes": [f"arquivo_{i}.py" for i in range(50)],
+        "pendencias": [],
+    }
+    cartao = contexto.montar_cartao(dados, cfg)
+    assert len(cartao.splitlines()) <= cfg["teto_cartao_linhas"]
+
+
+def test_cwd_em_subdiretorio_ainda_encontra_o_cartao(tmp_path):
+    _ligar(tmp_path)
+    subdiretorio = tmp_path / "pacote" / "subpacote"
+    subdiretorio.mkdir(parents=True)
+    saida = _rodar(HOOK_CONTEXTO, {"cwd": str(subdiretorio)}, tmp_path)
+    assert saida.returncode == 0
+    assert "DESCOBERTA" in saida.stdout
+
+
+def test_evento_malformado_nao_injeta_nada_e_nao_bloqueia(tmp_path):
+    _ligar(tmp_path)
+    saida = _rodar_stdin_cru(HOOK_CONTEXTO, "isso nao e json", tmp_path)
+    assert saida.returncode == 0
+    assert saida.stdout.strip() == ""
