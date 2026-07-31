@@ -126,6 +126,12 @@ TRAVADOS = [
     ("nova-git-C", "Bash", {"command": "git -C /repo push --force"}, "R2"),
     # Só a ferramenta `Read` travava segredo; ler pelo shell escapava por completo.
     ("nova-cat-segredo", "Bash", {"command": "cat .env"}, "R5"),
+    # QUINTA RODADA: `padroes_segredo` não cobria a família `id_*` do SSH, então a
+    # chave privada era só mais um argumento de `cat` — um comando da lista de
+    # permitidos. O vetor original usava `$HOME`, que também escapava da inspeção
+    # (a checagem só olhava `${`); aqui o caminho é literal, para provar que o que
+    # trava é o PADRÃO DE SEGREDO novo, e não a regra de forma de argumento.
+    ("cat-chave-ssh", "Bash", {"command": "cat /home/u/.ssh/id_rsa"}, "R5"),
 ]
 
 
@@ -146,14 +152,16 @@ LIVRES = [
     # apenas mencionam `rm`/`erase` dentro de aspas. A correção certa reverteu a
     # âncora e tratou execução indireta extraindo e reclassificando o payload —
     # estes casos provam que o falso positivo morreu sem reabrir o buraco original.
+    # (`git-log-grep-rm` e `git-log-grep-rm-bugfix` migraram para RASTREADOS: a regra
+    # nova recusa `=` em argumento de git, que é o que mata `--output=` e
+    # `-c chave=valor` sem enumerar a família. `git log --grep=` executa igual, só
+    # passa a aparecer no relatório.)
     ("grep-rm-em-string", "Bash", {"command": 'grep "rm this" arquivo.txt'}),
-    ("git-log-grep-rm", "Bash", {"command": 'git log --grep="rm bug fix"'}),
     ("findstr-erase-em-string", "Bash", {"command": 'findstr "erase old logic" notas.txt'}),
     # Provam que as correções dos CRÍTICOS A e B não reabriram falso positivo:
     # texto literal em `echo` continua livre, e cano para um comando qualquer
     # (não um interpretador) continua livre.
     ("echo-texto-literal", "Bash", {"command": 'echo "texto literal sem risco"'}),
-    ("git-log-grep-rm-bugfix", "Bash", {"command": 'git log --grep="rm bug fix"'}),
     # Sob a lista de permissões, LIVRE deixa de ser omissão e passa a ser prova: os
     # casos abaixo provam que o dia a dia (ler repositório, listar, buscar, rodar a
     # suíte) continua sem atrito depois da inversão.
@@ -165,9 +173,20 @@ LIVRES = [
     ("permitido-cat", "Bash", {"command": "cat README.md"}),
     # BLOQUEIO 1/2 (git -c / flags de saída disfarçadas de leitura): provam que a
     # correção não pegou o uso normal de `sort`, `uniq`, `find` e `git status`.
-    ("permitido-sort", "Bash", {"command": "sort arquivo.txt"}),
-    ("permitido-uniq", "Bash", {"command": "uniq arquivo.txt"}),
-    ("permitido-find", "Bash", {"command": 'find . -name "*.py"'}),
+    # (`permitido-sort`, `permitido-uniq` e `permitido-find` migraram para
+    # RASTREADOS: os três saíram da lista mínima, porque cada um escreve por flag
+    # ou é apelido de cmdlet rico. `git status` continua livre logo acima.)
+    # QUINTA RODADA — o essencial do dia a dia sobreviveu ao encolhimento da lista.
+    # Sem estes oito, a inversão teria trocado risco por atrito, e atrito diário é
+    # o que faz um humano desligar a trava.
+    ("cotidiano-git-status", "Bash", {"command": "git status --short"}),
+    ("cotidiano-git-log", "Bash", {"command": "git log --oneline"}),
+    ("cotidiano-git-diff", "Bash", {"command": "git diff"}),
+    ("cotidiano-pytest", "Bash", {"command": "pytest -q"}),
+    ("cotidiano-ls", "Bash", {"command": "ls -la"}),
+    ("cotidiano-cat", "Bash", {"command": "cat README.md"}),
+    ("cotidiano-grep", "Bash", {"command": "grep padrao arquivo.py"}),
+    ("cotidiano-pwd", "Bash", {"command": "pwd"}),
 ]
 
 
@@ -206,6 +225,35 @@ RASTREADOS = [
     ("sort-com-saida", "Bash", {"command": "sort -o importante.py lixo.txt"}),
     ("uniq-dois-posicionais", "Bash", {"command": "uniq entrada.txt importante.py"}),
     ("find-fprint", "Bash", {"command": "find . -name x -fprint /etc/importante"}),
+    # --- MIGRADOS DE `LIVRES` (linhas preservadas, nível mudou) ---
+    # Encolher a lista mínima é a correção; o custo é exatamente este, e é barato:
+    # os três executam igual, só passam a aparecer no relatório de fim de fase.
+    ("permitido-sort", "Bash", {"command": "sort arquivo.txt"}),
+    ("permitido-uniq", "Bash", {"command": "uniq arquivo.txt"}),
+    ("permitido-find", "Bash", {"command": 'find . -name "*.py"'}),
+    ("git-log-grep-rm", "Bash", {"command": 'git log --grep="rm bug fix"'}),
+    ("git-log-grep-rm-bugfix", "Bash", {"command": 'git log --grep="rm bug fix"'}),
+    # --- QUINTA RODADA: cinco caminhos para LIVRE com ação destrutiva ---
+    # O padrão dos cinco é o mesmo: o NOME do comando estava permitido, e o estrago
+    # morava no ARGUMENTO. Nenhum foi fechado enumerando a flag culpada — o que os
+    # fecha é exigir forma simples de argumento e encolher a lista de comandos.
+    #
+    # `--output` não é opção global do git, então `_git_opcao_perigosa` não via nada
+    # e `diff` estava (e está) entre os subcomandos livres: sobrescrevia arquivo
+    # arbitrário com o nome de um comando de leitura.
+    ("git-diff-output", "Bash", {"command": "git diff --output=/tmp/x"}),
+    # No PowerShell, `where` é apelido de `Where-Object` e o bloco `{...}` roda .NET
+    # arbitrário: uma deleção escrita inteiramente com nomes de leitura.
+    (
+        "ps-where-scriptblock",
+        "PowerShell",
+        {"command": 'ls | where {[IO.File]::Delete("a.txt")}'},
+    ),
+    # `_FIND_PERIGOSO` casava token EXATO: tinha `-ok`, e `-okdir` passava ao lado.
+    ("find-okdir", "Bash", {"command": "find . -okdir mv {} /tmp \\;"}),
+    # `remote` e `branch` liam o repositório na maioria das formas e MUTAVAM em duas.
+    ("git-remote-set-url", "Bash", {"command": "git remote set-url origin https://evil"}),
+    ("git-branch-delete", "Bash", {"command": "git branch -D main"}),
 ]
 
 

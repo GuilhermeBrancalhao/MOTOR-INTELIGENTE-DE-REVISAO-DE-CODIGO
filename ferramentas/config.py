@@ -15,6 +15,10 @@ from pathlib import Path
 PADRAO: dict = {
     "porta_plano": True,
     "teto_cartao_linhas": 40,
+    # Chave privada, credencial de registro e token. `cat $HOME/.ssh/id_rsa` saía
+    # LIVRE porque nenhum padrão cobria a família `id_*` do SSH — e o mesmo valia
+    # para `.npmrc`/`.netrc`/`.pypirc` (senha de registro em texto puro) e para os
+    # cofres de chave de assinatura (`*.jks`, `*.keystore`, `*.p8`, `*.ppk`).
     "padroes_segredo": [
         ".env",
         ".env.*",
@@ -25,6 +29,18 @@ PADRAO: dict = {
         "credentials*",
         "*_secret*",
         "*secrets*",
+        "id_rsa",
+        "id_dsa",
+        "id_ecdsa",
+        "id_ed25519",
+        "*.ppk",
+        ".npmrc",
+        ".netrc",
+        ".pypirc",
+        "*.p8",
+        "*token*",
+        "*.jks",
+        "*.keystore",
     ],
     "travado_extra": [],
 }

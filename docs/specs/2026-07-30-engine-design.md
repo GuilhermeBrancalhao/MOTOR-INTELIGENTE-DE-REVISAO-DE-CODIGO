@@ -170,6 +170,24 @@ estar na lista de permitidos**, sem precisar ter sido previsto. O preço é acei
 como resposta normal para comando legítimo porém não enumerado: ele executa, e aparece no
 relatório.
 
+**A lista de permissões é MÍNIMA, e permite comando + forma de argumento.** Permitir por
+nome de comando não fecha: cada comando permitido é ele próprio uma linguagem, e a quinta
+revisão achou cinco caminhos para `livre` com ação destrutiva usando só nomes de leitura
+(`git diff --output=<arquivo>`, `ls | where {…::Delete…}` no PowerShell,
+`find . -okdir mv {} /tmp \;`, `git remote set-url`, `cat $HOME/.ssh/id_rsa`). A resposta é
+inverter mais um nível, em vez de enumerar as flags perigosas de cada programa. `COMANDOS_LIVRES`
+encolheu para o mínimo (saíram `find`, `sort`, `uniq`, `where`, `diff`, `node`, `npm`;
+`SUBCOMANDOS_GIT_LIVRES` perdeu `remote` e `branch`), o PowerShell passou a ter lista própria e
+curta — sem nenhum apelido ambíguo, porque lá `where`/`diff`/`sort` são cmdlets que rodam bloco
+de script com .NET arbitrário —, e nenhum segmento é livre se algum argumento tiver `$`, crase,
+`{}`, `[]`, `::`, `|`, `>`, `<`, `&`, `;` ou flag de saída (`-o…`, `--out…`, `-f…`, `--file…`);
+em `git`, qualquer argumento com `=` também desqualifica, o que mata `--output=` e
+`-c chave=valor` sem precisar enumerá-los. Os padrões de segredo cobrem agora chave privada
+(`id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, `*.ppk`, `*.p8`), credencial de registro
+(`.npmrc`, `.netrc`, `.pypirc`), token (`*token*`) e cofre (`*.jks`, `*.keystore`). O custo de
+encolher é quase nulo — **`rastreado` é seguro**: custa uma linha no relatório de fim de fase,
+não um estrago —, enquanto o custo de manter a lista generosa é ilimitado.
+
 **Precedência.** Uma ação é avaliada contra os três níveis e recebe **o mais restritivo que
 casar**. Criar um arquivo novo chamado `.env` é travado, não livre; rodar `pytest` num
 comando encadeado com `rm` é travado, não livre. Nenhum critério de nível mais baixo

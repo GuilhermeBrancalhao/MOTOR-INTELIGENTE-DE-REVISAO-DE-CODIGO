@@ -14,6 +14,17 @@ separador, substituição de comando genérica, `cmd /c`, `git -C ... push`,
 `cat .env`). Lista de proibição não converge — sempre falta um vetor que ninguém
 enumerou. Lista de permissão fecha o buraco sem precisar prevê-lo.
 
+**Permitir por NOME DE COMANDO não fecha: cada comando permitido é ele próprio uma
+linguagem.** Uma quinta revisão achou cinco caminhos para `livre` com ação destrutiva
+usando só comandos "de leitura" (`git diff --output=~/.bashrc`, `ls | where {…::Delete…}`,
+`find . -okdir mv {} /tmp \\;`, `git remote set-url`, `cat $HOME/.ssh/id_rsa`). A resposta
+é inverter mais um nível: permitir **comando + FORMA DE ARGUMENTO**. A lista de comandos
+encolheu para o mínimo, e um segmento só é livre se, além do primeiro token estar na
+lista, seus argumentos não contiverem nenhuma das construções que transformam um leitor
+em executor ou escritor (`$`, crase, `{}`, `[]`, `::`, `|`, `>`, `<`, `&`, `;`, flags de
+saída). `rastreado` é seguro — custa uma linha no relatório, não um estrago —, então
+encolher a lista quase não tem custo e mantê-la generosa tem custo ilimitado.
+
 As famílias são casadas sobre o comando CRU, de propósito: SQL perigoso quase sempre
 chega dentro de aspas (`psql -c "DROP TABLE x"`), então limpar literais antes de casar
 cegaria justamente a família mais cara. A proteção contra falso positivo é estreita e
@@ -105,59 +116,75 @@ FAMILIAS: tuple[tuple[str, str, str], ...] = (
 # ---------------------------------------------------------------------------
 
 #: Primeiro token que, sozinho, pode tornar um segmento LIVRE — desde que todas as
-#: outras condições de `_motivo_fora_da_lista` também valham. Conjunto deliberadamente
-#: curto: só leitura/inspeção da biblioteca padrão de qualquer máquina.
+#: outras condições de `_motivo_fora_da_lista` também valham. Conjunto MÍNIMO e
+#: conservador: só leitura/inspeção da biblioteca padrão de qualquer máquina.
+#:
+#: Saíram daqui, de propósito, comandos que pareciam leitura e não são:
+#: `find` (`-exec`/`-okdir`/`-fprint` executam ou escrevem), `sort` e `uniq`
+#: (escrevem por flag ou por segundo posicional), `where`, `diff` e `select`
+#: (no PowerShell são apelidos de `Where-Object`/`Compare-Object`, que rodam bloco
+#: de script arbitrário), `node` e `npm` (executam script arbitrário). Todos passam
+#: a `rastreado`, que é o lugar certo: executam e aparecem no relatório.
 COMANDOS_LIVRES: frozenset[str] = frozenset(
     {
-        "ls",
-        "dir",
         "pwd",
         "cd",
+        "whoami",
+        "date",
+        "hostname",
+        "ls",
+        "dir",
+        "tree",
         "cat",
         "type",
         "head",
         "tail",
         "wc",
-        "sort",
-        "uniq",
+        "stat",
+        "file",
         "grep",
         "findstr",
         "rg",
-        "find",
-        "tree",
+        "which",
         "echo",
         "printf",
-        "which",
-        "where",
-        "git",
         "pytest",
-        "stat",
-        "file",
-        "diff",
-        "date",
-        "whoami",
+        "git",
     }
 )
 
 #: Comandos livres cujo primeiro token, isolado, NÃO é inócuo: `python` só é livre
-#: como `python -m pytest`, `npm` só como `npm run`/`npm test`, `node` só para pedir
-#: a versão. Comparados por prefixo de tokens.
-COMANDOS_LIVRES_COMPOSTOS: tuple[str, ...] = (
-    "python -m pytest",
-    "node --version",
-    "npm run",
-    "npm test",
+#: como `python -m pytest`. Comparados por prefixo de tokens.
+COMANDOS_LIVRES_COMPOSTOS: tuple[str, ...] = ("python -m pytest",)
+
+#: PowerShell é MAIS restrito que o Bash: quase todo nome curto ali é apelido de um
+#: cmdlet rico, e o cmdlet aceita bloco de script com .NET arbitrário dentro
+#: (`ls | where {[IO.File]::Delete("x")}` é uma deleção escrita com dois comandos de
+#: leitura). Por isso a lista do PowerShell é própria, curta e sem nenhum apelido
+#: ambíguo (`where`, `diff`, `sort`, `select`, `foreach` NUNCA são livres aqui).
+COMANDOS_LIVRES_POWERSHELL: frozenset[str] = frozenset(
+    {
+        "get-location",
+        "get-childitem",
+        "get-content",
+        "select-string",
+        "get-date",
+        "pwd",
+        "ls",
+        "cat",
+        "git",
+    }
 )
 
-#: Subcomandos de git que apenas leem o repositório.
+#: Subcomandos de git que apenas leem o repositório. `remote` e `branch` saíram:
+#: `git remote set-url origin https://evil` e `git branch -D main` mutam o
+#: repositório e passavam como leitura.
 SUBCOMANDOS_GIT_LIVRES: frozenset[str] = frozenset(
     {
         "status",
-        "diff",
         "log",
+        "diff",
         "show",
-        "branch",
-        "remote",
         "rev-parse",
         "ls-files",
         "blame",
@@ -177,8 +204,43 @@ _GIT_GLOBAIS_COM_VALOR = frozenset({"-C", "-c", "--git-dir", "--work-tree", "--n
 #: `git --exec-path=/tmp/evil status` troca o executável usado internamente.
 _GIT_GLOBAIS_PERIGOSAS = ("-c", "--config-env", "--exec-path", "--git-dir", "--work-tree", "--namespace")
 
-#: `find` que executa, apaga ou escreve em arquivo não é leitura.
-_FIND_PERIGOSO = ("-exec", "-execdir", "-delete", "-ok", "-fprint", "-fprint0", "-fls", "-fprintf")
+#: `find` que executa, apaga ou escreve em arquivo não é leitura. Comparados por
+#: PREFIXO, não por token exato: a lista tinha `-ok` e `-exec` e mesmo assim
+#: `find . -okdir mv {} /tmp \;` passava, porque `-okdir` não é igual a `-ok`.
+#: Prefixo pega a família inteira (`-ok`→`-okdir`, `-exec`→`-execdir`) sem enumerar.
+_FIND_PERIGOSO = ("-exec", "-delete", "-ok", "-fprint", "-fls")
+
+#: Construções que desqualificam um segmento da lista de permissões, por mais inócuo
+#: que seja o primeiro token. Cada uma transforma um leitor em executor, em escritor
+#: ou em algo não inspecionável — e a inspeção do argumento é justamente o que a
+#: permissão por nome de comando não fazia.
+_CONSTRUCOES_PROIBIDAS: tuple[tuple[str, str], ...] = (
+    ("$(", "substituição de comando `$(...)`"),
+    ("${", "expansão de variável `${...}`"),
+    ("`", "crase (substituição de comando)"),
+    ("$", "expansão de variável (`$...`)"),
+    ("{", "chave `{` (bloco de script ou expansão)"),
+    ("}", "chave `}` (bloco de script ou expansão)"),
+    ("[", "colchete `[` (índice, tipo .NET ou classe de glob)"),
+    ("]", "colchete `]` (índice, tipo .NET ou classe de glob)"),
+    ("::", "acesso a tipo/namespace (`::`)"),
+    ("|", "cano (`|`)"),
+    (">", "redirecionamento de saída (`>`)"),
+    ("<", "redirecionamento de entrada (`<`)"),
+    ("&", "encadeamento ou segundo plano (`&`)"),
+    (";", "separador de comando (`;`)"),
+)
+
+#: Flags de saída em forma LONGA. `--output=x` também morre pela regra do `=` no git,
+#: mas a forma separada (`--output x`) e os demais programas precisam desta.
+#: `--out` já cobre `--output`; `--oneline` NÃO é atingido, porque só casa `--out*`.
+_FLAGS_SAIDA_LONGAS = ("--out", "--output", "--file")
+
+#: Flags de saída em forma CURTA (um traço só). Comparadas por prefixo: `-o`,
+#: `-ofoo`, `-fprint`. Só valem para token que começa com um único `-` — flag longa
+#: (`--oneline`, `--follow`) é julgada por `_FLAGS_SAIDA_LONGAS`, senão `git log
+#: --oneline`, que é leitura pura e diária, cairia em rastreado sem motivo.
+_FLAGS_SAIDA_CURTAS = ("-o", "-f")
 
 _INERTE = re.compile(r"^\s*(echo|printf|#)\b", re.I)
 _MSG_GIT = re.compile(r"(-m|--message)\s+('[^']*'|\"[^\"]*\")")
@@ -187,8 +249,9 @@ _MSG_GIT = re.compile(r"(-m|--message)\s+('[^']*'|\"[^\"]*\")")
 #: ``ls `rm -rf /dados` `` escapavam justamente porque a checagem era local.
 _EXECUCAO_ESCONDIDA = re.compile(r"\$\(|`|<\(|>\(")
 #: Expansão de variável não executa nada, mas torna o segmento não inspecionável:
-#: desqualifica da lista de permissões (vira RASTREADO), sem travar.
-_EXPANSAO_VARIAVEL = re.compile(r"\$\{")
+#: desqualifica da lista de permissões (vira RASTREADO), sem travar. Está em
+#: `_CONSTRUCOES_PROIBIDAS` como `$` cru — checar só `${` deixava `$HOME` passar, e
+#: era assim que `cat $HOME/.ssh/id_rsa` escapava da inspeção do argumento.
 _REDIRECT = re.compile(r">>?\s*([^\s;|&]+)")
 #: Disparadores de execução indireta. Inclui os interpretadores do Windows — o projeto
 #: roda em Windows e `cmd /c "del /s /q C:\dados"` saía livre.
@@ -235,7 +298,7 @@ def classificar(ferramenta: str, entrada: dict, *, raiz: Path, config: dict) -> 
                 return Classificacao(
                     RASTREADO, "", "comando ausente ou nulo: nada a liberar por prova"
                 )
-            return _classificar_comando(str(bruto), config)
+            return _classificar_comando(str(bruto), config, ferramenta=ferramenta)
         return Classificacao(RASTREADO, "", f"ferramenta não classificada: {ferramenta}")
     except Exception as erro:  # noqa: BLE001 — falha segura é o requisito
         return Classificacao(
@@ -356,7 +419,9 @@ def _dividir_segmentos(comando: str) -> list[str]:
 _LIMITE_PROFUNDIDADE_INDIRETA = 3
 
 
-def _classificar_comando(comando: str, config: dict, profundidade: int = 0) -> Classificacao:
+def _classificar_comando(
+    comando: str, config: dict, profundidade: int = 0, *, ferramenta: str = "Bash"
+) -> Classificacao:
     if not comando.strip():
         return Classificacao(RASTREADO, "", "comando vazio: nada a liberar por prova")
     if _CANO_INTERPRETE.search(comando):
@@ -371,14 +436,16 @@ def _classificar_comando(comando: str, config: dict, profundidade: int = 0) -> C
     for segmento in _dividir_segmentos(comando):
         if not segmento.strip():
             continue
-        parcial = _classificar_segmento(segmento, config, profundidade)
+        parcial = _classificar_segmento(segmento, config, profundidade, ferramenta=ferramenta)
         resultado = parcial if resultado is None else _pior(resultado, parcial)
     if resultado is None:
         return Classificacao(RASTREADO, "", "comando vazio: nada a liberar por prova")
     return resultado
 
 
-def _classificar_segmento(segmento: str, config: dict, profundidade: int = 0) -> Classificacao:
+def _classificar_segmento(
+    segmento: str, config: dict, profundidade: int = 0, *, ferramenta: str = "Bash"
+) -> Classificacao:
     for alvo_cru in _REDIRECT.findall(segmento):
         # O alvo pode vir entre aspas (`> ".env"`): tira as aspas antes de comparar
         # com os padrões de segredo, senão o fnmatch nunca casa e o redirecionamento
@@ -428,9 +495,11 @@ def _classificar_segmento(segmento: str, config: dict, profundidade: int = 0) ->
         )
 
     if _EXEC_INDIRETA.search(segmento):
-        return _classificar_execucao_indireta(segmento, config, profundidade)
+        return _classificar_execucao_indireta(
+            segmento, config, profundidade, ferramenta=ferramenta
+        )
 
-    motivo = _motivo_fora_da_lista(segmento, config)
+    motivo = _motivo_fora_da_lista(segmento, config, ferramenta=ferramenta)
     if motivo is None:
         return Classificacao(LIVRE, "", "operação na lista de permissões")
     return Classificacao(RASTREADO, "", motivo)
@@ -477,42 +546,84 @@ def _git_opcao_perigosa(tokens: list[str]) -> str | None:
     return None
 
 
-def _motivo_fora_da_lista(segmento: str, config: dict) -> str | None:
+def _motivo_forma_do_argumento(segmento: str, tokens: list[str]) -> str | None:
+    """Devolve o motivo de a FORMA dos argumentos desqualificar o segmento, ou `None`.
+
+    Permitir por nome de comando não fecha, porque cada comando permitido é ele
+    próprio uma linguagem: `git diff --output=<arquivo>` sobrescreve arquivo
+    arbitrário, `ls | where {[IO.File]::Delete("x")}` apaga arquivo com dois nomes
+    de leitura. Em vez de enumerar as flags perigosas de cada programa — outra lista
+    de proibições, que não converge —, esta função exige que o argumento tenha
+    forma SIMPLES: nada de execução, nada de redirecionamento, nada de flag de saída.
+    """
+    for construcao, descricao in _CONSTRUCOES_PROIBIDAS:
+        if construcao in segmento:
+            return f"argumento com construção não permitida: {descricao}"
+
+    for token in tokens[1:]:
+        if token.startswith("--"):
+            for flag in _FLAGS_SAIDA_LONGAS:
+                if token.startswith(flag):
+                    return f"flag de saída em argumento: `{token}` (começa com `{flag}`)"
+        elif token.startswith("-"):
+            for flag in _FLAGS_SAIDA_CURTAS:
+                if token.startswith(flag):
+                    return f"flag de saída em argumento: `{token}` (começa com `{flag}`)"
+    return None
+
+
+def _motivo_fora_da_lista(segmento: str, config: dict, *, ferramenta: str = "Bash") -> str | None:
     """Devolve `None` se o segmento é comprovadamente inócuo; senão, o motivo textual
     de ele não ter sido liberado.
 
     Esta função é a inversão da política: nada é livre por não casar uma proibição;
-    é livre por casar uma PERMISSÃO.
+    é livre por casar uma PERMISSÃO — de comando **e** de forma de argumento.
     """
     tokens = _tokens(segmento)
     if not tokens:
         return "segmento sem comando identificável"
 
-    if _EXPANSAO_VARIAVEL.search(segmento):
-        return "expansão de variável (`${...}`) torna o segmento não inspecionável"
-    if ">" in segmento:
-        return "redirecionamento de saída: escrever não é operação livre"
+    motivo_forma = _motivo_forma_do_argumento(segmento, tokens)
+    if motivo_forma is not None:
+        return motivo_forma
 
     primeiro = tokens[0]
-    composto = " ".join(tokens[:3])
-    livre_composto = any(
-        composto.startswith(prefixo) for prefixo in COMANDOS_LIVRES_COMPOSTOS
-    )
-    if not livre_composto and primeiro not in COMANDOS_LIVRES:
-        return f"comando fora da lista de permitidos: `{primeiro}`"
+    if ferramenta == "PowerShell":
+        # No PowerShell a resolução de nome é insensível a maiúsculas, então a
+        # comparação também precisa ser — senão `LS` despistaria a lista. Nenhum
+        # apelido ambíguo está nela, então normalizar não abre porta nenhuma.
+        if primeiro.lower() not in COMANDOS_LIVRES_POWERSHELL:
+            return f"comando fora da lista de permitidos do PowerShell: `{primeiro}`"
+    else:
+        composto = " ".join(tokens[:3])
+        livre_composto = any(
+            composto.startswith(prefixo) for prefixo in COMANDOS_LIVRES_COMPOSTOS
+        )
+        if not livre_composto and primeiro not in COMANDOS_LIVRES:
+            return f"comando fora da lista de permitidos: `{primeiro}`"
 
-    if primeiro == "git":
+    if primeiro.lower() == "git":
         opcao_perigosa = _git_opcao_perigosa(tokens)
         if opcao_perigosa is not None:
             return f"git com opção global que altera execução: {opcao_perigosa}"
+        for token in tokens[1:]:
+            # `=` mata a família inteira de uma vez (`--output=`, `-c chave=valor`,
+            # `--upload-pack=`) sem precisar enumerá-la. Nenhum subcomando de
+            # leitura precisa de `=` para o uso diário.
+            if "=" in token:
+                return f"argumento de git com `=`: `{token}`"
         sub = _subcomando_git(tokens)
         if sub not in SUBCOMANDOS_GIT_LIVRES:
             return f"subcomando git fora da lista de permitidos: `{sub or '(nenhum)'}`"
 
+    # As três checagens abaixo miram comandos que JÁ SAÍRAM de `COMANDOS_LIVRES`.
+    # Ficam como defesa em profundidade: se algum dia um deles voltar à lista, ele
+    # volta já com a trava, em vez de voltar nu.
     if primeiro == "find":
-        for perigoso in _FIND_PERIGOSO:
-            if perigoso in tokens:
-                return f"`find` com `{perigoso}` executa, apaga ou escreve, não é leitura"
+        for token in tokens[1:]:
+            for perigoso in _FIND_PERIGOSO:
+                if token.startswith(perigoso):
+                    return f"`find` com `{token}` executa, apaga ou escreve, não é leitura"
 
     if primeiro == "sort":
         for flag in ("-o", "--output"):
@@ -532,7 +643,7 @@ def _motivo_fora_da_lista(segmento: str, config: dict) -> str | None:
 
 
 def _classificar_execucao_indireta(
-    segmento: str, config: dict, profundidade: int
+    segmento: str, config: dict, profundidade: int, *, ferramenta: str = "Bash"
 ) -> Classificacao:
     """Extrai o payload entre aspas de uma execução indireta e reclassifica-o.
 
@@ -559,7 +670,9 @@ def _classificar_execucao_indireta(
             TRAVADO, "R8", "execução indireta sem payload legível"
         )
 
-    resultado_payload = _classificar_comando(payload, config, profundidade + 1)
+    resultado_payload = _classificar_comando(
+        payload, config, profundidade + 1, ferramenta=ferramenta
+    )
     resultado_segmento = Classificacao(RASTREADO, "R8", "execução indireta")
     return _pior(resultado_segmento, resultado_payload)
 
