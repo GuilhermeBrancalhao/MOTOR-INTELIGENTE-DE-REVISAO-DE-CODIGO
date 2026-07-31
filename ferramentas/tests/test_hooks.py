@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 RAIZ_PLUGIN = Path(__file__).resolve().parents[2]
 HOOK_RISCO = RAIZ_PLUGIN / "hooks" / "engine_risco.py"
 
@@ -23,8 +25,23 @@ def _rodar(hook: Path, payload: dict, cwd: Path) -> subprocess.CompletedProcess:
     )
 
 
+def _rodar_stdin_cru(hook: Path, stdin_cru: str, cwd: Path) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(hook)],
+        input=stdin_cru,
+        capture_output=True,
+        text=True,
+        cwd=str(cwd),
+        env={**os.environ},
+    )
+
+
 def _ligar(raiz: Path) -> None:
     estado.novo_ciclo(raiz, "teste", "2026-07-30T00:00:00")
+
+
+def _ligar_modo_seco(raiz: Path) -> None:
+    estado.novo_ciclo(raiz, "teste", "2026-07-30T00:00:00", modo="dry")
 
 
 def test_motor_desligado_nao_bloqueia_nada(tmp_path):
@@ -85,3 +102,73 @@ def test_stdin_invalido_bloqueia(tmp_path):
         cwd=str(tmp_path),
     )
     assert saida.returncode == 2
+
+
+# --- IMPORTANTE 3: o modo seco tem que bloquear escrita e liberar leitura --------
+
+
+def test_modo_seco_bloqueia_escrita_em_arquivo_novo(tmp_path):
+    _ligar_modo_seco(tmp_path)
+    alvo = tmp_path / "novo_arquivo.py"
+    saida = _rodar(
+        HOOK_RISCO,
+        {"tool_name": "Write", "tool_input": {"file_path": str(alvo)}, "cwd": str(tmp_path)},
+        tmp_path,
+    )
+    assert saida.returncode == 2
+    assert "seco" in saida.stderr
+
+
+def test_modo_seco_libera_leitura(tmp_path):
+    _ligar_modo_seco(tmp_path)
+    alvo = tmp_path / "comum.py"
+    alvo.write_text("x = 1", encoding="utf-8")
+    saida = _rodar(
+        HOOK_RISCO,
+        {"tool_name": "Read", "tool_input": {"file_path": str(alvo)}, "cwd": str(tmp_path)},
+        tmp_path,
+    )
+    assert saida.returncode == 0
+
+
+# --- IMPORTANTE 4: cwd num subdiretório do projeto ainda acha o estado -----------
+
+
+def test_cwd_em_subdiretorio_ainda_encontra_estado_e_bloqueia(tmp_path):
+    _ligar(tmp_path)
+    subdiretorio = tmp_path / "pacote" / "subpacote"
+    subdiretorio.mkdir(parents=True)
+    saida = _rodar(
+        HOOK_RISCO,
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git push origin main"},
+            "cwd": str(subdiretorio),
+        },
+        tmp_path,
+    )
+    assert saida.returncode == 2
+    assert "R2" in saida.stderr
+
+
+# --- CRÍTICO 1: nenhuma entrada malformada pode sair com código != 0 e != 2 ------
+
+
+@pytest.mark.parametrize(
+    "payload_json",
+    [
+        "null",
+        "[]",
+        '"texto"',
+        "{}",
+        '{"cwd": 5}',
+        '{"tool_name": "X", "tool_input": "texto em vez de objeto"}',
+        "",
+        '{"tool_name":',  # JSON truncado
+    ],
+)
+def test_evento_malformado_nunca_sai_1_sempre_2(tmp_path, payload_json):
+    _ligar(tmp_path)  # motor LIGADO: é o caminho que mais exercita o código
+    saida = _rodar_stdin_cru(HOOK_RISCO, payload_json, tmp_path)
+    assert saida.returncode == 2
+    assert saida.returncode != 1
