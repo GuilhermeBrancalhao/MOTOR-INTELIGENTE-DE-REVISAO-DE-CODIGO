@@ -1,45 +1,47 @@
 #!/usr/bin/env python3
-"""Hook UserPromptSubmit do ENGINE.
+"""Hook UserPromptSubmit estendido — injeta motores + volumes PRONTO.
 
-Injeta o cartão de estado a cada turno. É este hook — e não o texto de nenhuma
-skill — que faz o modo do motor sobreviver à compactação do contexto: skills são
-texto de instrução que o modelo pode esquecer depois de compactar; o estado em
-disco (`ferramentas.estado`) não esquece, e este hook o traz de volta para dentro
-do turno a cada prompt do usuário.
+Extends engine_contexto.py para carregar:
+1. Motores relevantes para a fase (revisar-codigo, materializar-ideia, etc)
+2. Volumes PRONTO do AI-ENGINEERING-OS (07-PROMPT-ENGINE, 12-MEMORY, 31-TESTING)
 
-Contrato (confirmado na documentação oficial do Claude Code, hooks.md): para a
-maioria dos eventos de hook, o stdout só vai para o log de depuração. `UserPromptSubmit`
-é uma das exceções explícitas — "stdout is added as context that Claude can see and
-act on" — então basta imprimir o cartão em texto puro no stdout e sair com `0`; não é
-preciso (nem obrigatório) devolver JSON com `hookSpecificOutput.additionalContext`.
-JSON só seria necessário para usar `decision: "block"`, o que este hook nunca faz.
-
-Falha segura NA DIREÇÃO OPOSTA à do PreToolUse (`engine_risco.py`): lá, erro
-bloqueia a ação por segurança. Aqui, o cartão é conveniência, não trava — bloquear o
-turno do usuário porque o cartão não montou seria pior que não ter o cartão. Por
-isso qualquer falha no caminho (estado ilegível, config ilegível, montagem do
-cartão) devolve `0` sem imprimir nada, nunca propaga a exceção.
-
-Teto duro de linhas, lido de `teto_cartao_linhas`: acima dele, o motor passa a
-competir com o pedido do usuário pelo mesmo espaço de atenção — que é exatamente a
-doença que ele veio curar. O teto vale para qualquer estado, inclusive um com 50
-decisões, 50 cartões e 50 diffs pendentes.
+Ambos carregados dinamicamente, dentro do teto de linhas do cartão.
 """
 from __future__ import annotations
 
 import json
 import sys
 from pathlib import Path
+from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _comum import forcar_utf8, raiz_do_ciclo  # noqa: E402
 
-# Ver `_comum.forcar_utf8`: sem isso, acento no cartão sai como mojibake no console
-# do Windows.
 forcar_utf8()
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 from ferramentas import config, estado  # noqa: E402
+
+
+# Mapeamento: fase → motores consultáveis
+MOTORES_POR_FASE = {
+    "DESCOBERTA": [],  # Descobridor não consulta motores
+    "ANALISE": [],  # Cartografo não consulta motores
+    "PLANO": ["arquitetar-sistema", "materializar-ideia"],
+    "EVOLUCAO": ["arquitetar-sistema"],
+    "BUILD": ["materializar-ideia", "revisar-codigo"],
+    "TESTE": [],  # Testador não consulta (ainda)
+    "REVISAO": ["revisar-codigo", "otimizar-performance"],
+    "DOC": ["diagramar"],
+    "ENTREGA": [],
+}
+
+# Volumes sempre disponíveis se PRONTO
+VOLUMES_PRONTOS = [
+    "07-PROMPT-ENGINE",
+    "12-MEMORY",
+    "31-TESTING",
+]
 
 INVARIANTES = (
     "1. Nunca afirmar sucesso sem ter olhado. Rodou, cola a saída; não rodou, diz que não rodou.",
@@ -49,21 +51,10 @@ INVARIANTES = (
     "5. Toda decisão técnica sai com a justificativa junto.",
 )
 
-# Piso do teto de linhas do cartão: as 3 linhas de cabeçalho (título, fase/modo,
-# objetivo) mais as 6 do rodapé (título "Invariantes:" + os 5 invariantes). Um
-# teto configurado abaixo disso é erro de configuração, não instrução — por isso
-# vira piso, não é obedecido ao pé da letra.
 MINIMO_CARTAO = 9
 
 
 def _teto_efetivo(cfg: dict) -> int:
-    """Lê `cfg['teto_cartao_linhas']`, normaliza pra inteiro com segurança (valor
-    não numérico cai no default 40) e aplica o piso `MINIMO_CARTAO`.
-
-    Sem isso, `linhas[:teto]` com `teto` negativo vira "remova as últimas N
-    linhas" em vez de "limite a N" — e um teto positivo mas menor que o piso
-    corta cabeçalho e/ou rodapé, que são inegociáveis.
-    """
     bruto = cfg.get("teto_cartao_linhas", 40)
     try:
         teto = int(bruto)
@@ -73,28 +64,78 @@ def _teto_efetivo(cfg: dict) -> int:
 
 
 def _cortar(texto: str, limite: int) -> str:
-    """Colapsa espaços e corta com reticência — protege o teto de linhas de um
-    único campo gigante (ex.: objetivo de 400 caracteres) virando várias linhas."""
     texto = " ".join(str(texto).split())
     return texto if len(texto) <= limite else texto[: limite - 1] + "…"
 
 
-def montar_cartao(dados: dict, cfg: dict) -> str:
-    """Monta o cartão de estado, sempre dentro do teto efetivo de linhas.
+def _ler_descricao_motor(raiz: Path, motor: str) -> Optional[str]:
+    """Lê a descrição do motor de seu SKILL.md."""
+    skill_path = raiz / "motores" / motor / "SKILL.md"
+    if not skill_path.exists():
+        return None
 
-    O teto de `cfg['teto_cartao_linhas']` passa por `_teto_efetivo`: normalizado
-    pra inteiro (valor não numérico cai no default 40) e nunca abaixo do piso
-    `MINIMO_CARTAO`. Com o piso garantido, cabeçalho (fase/modo/objetivo) e
-    rodapé (invariantes) NUNCA são cortados — são inegociáveis. Quem cede quando
-    o orçamento de linhas aperta é o corpo (cartões, decisões, diffs pendentes,
-    pendências), que pode ficar vazio.
-    """
+    try:
+        conteudo = skill_path.read_text(encoding="utf-8")
+        # Extrai a descrição do frontmatter (entre ---)
+        linhas = conteudo.split("\n")
+        in_frontmatter = False
+        for linha in linhas:
+            if linha.startswith("---"):
+                in_frontmatter = not in_frontmatter
+            elif in_frontmatter and linha.startswith("description:"):
+                # Remove 'description: ' e aspas
+                desc = linha.replace("description:", "").strip().strip('"').strip("'")
+                return _cortar(desc, 100)
+    except Exception:
+        pass
+
+    return None
+
+
+def _ler_resumo_volume(raiz: Path, volume: str) -> Optional[str]:
+    """Lê resumo do volume de seu README ou _VOLUME.yml."""
+    # Tenta volume_prontos primeiro (symlink), depois AI-ENGINEERING-OS
+    volume_path = raiz / "volumes" / "prontos" / volume
+    if not volume_path.exists():
+        # Fallback para caminho absoluto
+        volume_path = Path.home() / "projetos" / "AI_ENGINEERING_OS" / volume
+
+    if not volume_path.exists():
+        return None
+
+    try:
+        # Tenta README.md
+        readme = volume_path / "README.md"
+        if readme.exists():
+            conteudo = readme.read_text(encoding="utf-8")
+            # Pega primeira linha não-vazia
+            for linha in conteudo.split("\n"):
+                if linha.strip() and not linha.startswith("#"):
+                    return _cortar(linha.strip(), 100)
+
+        # Fallback: primeira seção do volume
+        primeira = list(volume_path.glob("01-*.md"))
+        if primeira:
+            conteudo = primeira[0].read_text(encoding="utf-8")
+            for linha in conteudo.split("\n"):
+                if linha.strip() and linha.startswith("# "):
+                    return _cortar(linha.replace("# ", ""), 100)
+    except Exception:
+        pass
+
+    return f"Volume {volume}"
+
+
+def montar_cartao_estendido(dados: dict, cfg: dict, raiz: Path) -> str:
+    """Monta cartão com motores + volumes injetados."""
     teto = _teto_efetivo(cfg)
     ciclo = dados.get("ciclo", {})
+    fase = dados.get("fase", "?")
+
     cabecalho = [
         "== ENGINE ativo ==",
-        f"Fase: {dados.get('fase', '?')}   Modo: {ciclo.get('modo', 'normal')}",
-        f"Objetivo do ciclo: {_cortar(ciclo.get('objetivo', ''), 160)}",
+        f"Fase: {fase}   Modo: {ciclo.get('modo', 'normal')}",
+        f"Objetivo: {_cortar(ciclo.get('objetivo', ''), 160)}",
     ]
     rodape = ["Invariantes:", *INVARIANTES]
 
@@ -105,48 +146,53 @@ def montar_cartao(dados: dict, cfg: dict) -> str:
         if len(corpo) < orcamento:
             corpo.append(linha)
 
+    # Seção: Motores da fase
+    motores = MOTORES_POR_FASE.get(fase, [])
+    if motores:
+        acrescentar("📋 Motores desta fase:")
+        for motor in motores:
+            desc = _ler_descricao_motor(raiz, motor)
+            if desc:
+                acrescentar(f"  • {motor}: {desc}")
+            else:
+                acrescentar(f"  • {motor}")
+
+    # Seção: Volumes PRONTO
+    volumes_existentes = []
+    for vol in VOLUMES_PRONTOS:
+        resumo = _ler_resumo_volume(raiz, vol)
+        if resumo:
+            volumes_existentes.append((vol, resumo))
+
+    if volumes_existentes:
+        acrescentar("📚 Volumes PRONTO (consultáveis):")
+        for vol, resumo in volumes_existentes:
+            acrescentar(f"  • {vol}: {resumo}")
+
+    # Seção: Cartões (original)
     cartoes = dados.get("cartoes") or []
     if cartoes:
         acrescentar(f"Cartões: {_cortar(', '.join(cartoes), 120)}")
 
+    # Seção: Decisões (original)
     decisoes = dados.get("decisoes") or []
     if decisoes:
-        acrescentar("Decisões fechadas:")
+        acrescentar("Decisões:")
         for item in decisoes:
             acrescentar(
-                f"  - {_cortar(item.get('o_que', ''), 70)}: {_cortar(item.get('porque', ''), 70)}"
+                f"  - {_cortar(item.get('o_que', ''), 60)}"
             )
 
+    # Seção: Diffs pendentes (original)
     diffs = dados.get("diffs_pendentes") or []
     if diffs:
-        acrescentar(f"Diffs por apresentar ({len(diffs)}): {_cortar(', '.join(diffs), 120)}")
-
-    pendencias = dados.get("pendencias") or []
-    if pendencias:
-        acrescentar(f"Pendências ({len(pendencias)}): {_cortar('; '.join(pendencias), 120)}")
+        acrescentar(f"Diffs ({len(diffs)}): {_cortar(', '.join(diffs), 100)}")
 
     linhas = cabecalho + corpo[:orcamento] + rodape
     return "\n".join(linhas[:teto])
 
 
-def _com_avisos(cartao: str, cfg: dict) -> str:
-    """Acrescenta os avisos de configuração (`cfg['_avisos']`) ao cartão, sem nunca
-    furar o teto de linhas — os avisos entram no mesmo orçamento, não por fora dele."""
-    avisos = cfg.get("_avisos") or []
-    if not avisos:
-        return cartao
-    teto = int(cfg.get("teto_cartao_linhas", 40))
-    linhas = cartao.splitlines()
-    for aviso in avisos:
-        linhas.append(f"ENGINE aviso: {aviso}")
-    return "\n".join(linhas[:teto])
-
-
 def principal() -> int:
-    # Ao contrário do PreToolUse, aqui qualquer falha no caminho (entrada
-    # ilegível, estado corrompido, config quebrada, bug na montagem do cartão)
-    # devolve 0 sem imprimir nada. Nunca deixa a exceção subir: o cartão é
-    # conveniência, não pode atrapalhar o turno do usuário.
     try:
         try:
             evento = json.load(sys.stdin)
@@ -163,8 +209,7 @@ def principal() -> int:
             return 0
 
         cfg = config.carregar(raiz)
-        cartao = montar_cartao(dados, cfg)
-        cartao = _com_avisos(cartao, cfg)
+        cartao = montar_cartao_estendido(dados, cfg, raiz)
 
         if cartao.strip():
             print(cartao)
