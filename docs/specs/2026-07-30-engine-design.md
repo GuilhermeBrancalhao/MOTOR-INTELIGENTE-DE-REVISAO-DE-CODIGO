@@ -362,7 +362,7 @@ Três camadas, porque o modo de falha típico deste tipo de projeto é **parecer
 
 | Fase | Conteúdo | Critério de pronto |
 |---|---|---|
-| **1 — núcleo** | `estado.py`, `risco.py`, `config.py`; hooks `contexto` e `risco`; skill `/engine` com `on/off/status`; 4 papéis (arquiteto, implementador, revisor, documentador); 3 cartões (`python`, `pytest`, `ui-ux`); testes de risco e de estado | o modo sobrevive a 20 turnos e a uma compactação; as 7 famílias travadas travam de fato |
+| **1 — núcleo** | `estado.py`, `risco.py`, `config.py`; hooks `contexto` e `risco`; skill `/engine` com `on/off/status`; 4 papéis (arquiteto, implementador, revisor, documentador); 3 cartões (`python`, `pytest`, `ui-ux`); testes de risco e de estado | o modo sobrevive a 20 turnos e a uma compactação; as 8 famílias travadas travam de fato |
 | **2 — elenco** | os outros 5 papéis (descobridor, cartografo, designer, testador, sentinela); os 9 cartões restantes; `trilha.py`, `relatorio.py`; hooks `trilha`, `salvar`, `gate`; `/engine retomar` | relatório de ciclo sai completo; `retomar` reconstrói o estado em sessão nova |
 | **3 — prova** | `--dry`; os 4 cenários de aceite; cartões de Office completos; `README` e documentação de instalação do plugin | os 4 cenários passam com resultado igual ao previsto |
 

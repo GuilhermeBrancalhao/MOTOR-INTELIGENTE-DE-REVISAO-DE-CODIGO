@@ -67,6 +67,9 @@ def main() -> int:
     casos_travados.append(
         ("R5", "segredo (.env)", "Write", {"file_path": str(raiz / ".env")})
     )
+    casos_travados.append(
+        ("R9", "escrita no painel de controle do motor (.engine/)", "Write", {"file_path": str(raiz / ".engine" / "estado.json")})
+    )
 
     falhas: list[str] = []
 
