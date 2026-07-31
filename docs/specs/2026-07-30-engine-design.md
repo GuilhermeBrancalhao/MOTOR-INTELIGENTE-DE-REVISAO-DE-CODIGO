@@ -150,9 +150,34 @@ qualquer outra linha de código.
 
 | Nível | Critério | Comportamento do hook |
 |---|---|---|
-| **livre** | leitura; escrita em caminho inexistente em disco; escrita sob `tests/`; comando de leitura (`ls`, `cat`, `git status`, `git diff`, `pytest`) | permite; registra na trilha |
-| **rastreado** | edição de arquivo que **já existe** em disco e não casa com nenhuma regra travada | permite; acrescenta o caminho a `diffs_pendentes`; o diff acumulado é apresentado no fim da fase |
-| **travado** | ver lista abaixo | **bloqueia** e devolve o motivo; o motor pergunta ao usuário com opções clicáveis |
+| **travado** | casa uma das famílias da lista fechada abaixo (R1–R9), inclusive a checagem de segredo (por caminho **e** por conteúdo), o cano para interpretador, a substituição de comando dentro do argumento e a escrita no painel de controle do motor — para **comando** e para **arquivo** | **bloqueia** e devolve o motivo; o motor pergunta ao usuário com opções clicáveis |
+| **livre** | só **ferramenta de arquivo**: leitura de arquivo que não é segredo (inclusive sob `.engine/`); escrita em caminho inexistente em disco, inclusive teste NOVO sob `tests/` ou com nome `test_*` — sobrescrever teste que **já existe** é rastreado, senão a violação do invariante "nunca ajustar o teste para o código passar" seria a única escrita invisível no relatório. **Nenhum comando de shell é livre, nunca** | permite; registra na trilha |
+| **rastreado** | **DEFAULT** — edição de arquivo que já existe, ferramenta desconhecida, comando ausente, e **todo comando de shell que não travou** | permite; acrescenta o caminho a `diffs_pendentes`; o motivo entra no relatório de fim de fase |
+
+**Comando de shell tem duas saídas, e só duas: `travado` ou `rastreado`.** Não existe
+caminho que leve um comando a `livre` — nem `pwd`, nem `echo`, nem `git status`.
+
+O motivo é estrutural, não uma flag esquecida. As versões anteriores tentaram liberar
+comando de três jeitos: lista de proibições, depois lista de nomes permitidos, depois lista
+de nomes **mais** forma de argumento. **Sete rodadas de revisão adversarial atacaram essas
+listas e, a cada rodada, acharam um caminho novo para `livre` com ação destrutiva** — a
+última foi `git diff --output=/home/user/.bashrc`, que sobrescreve arquivo arbitrário com o
+nome de um comando de leitura, e o apelido `where` do PowerShell, que é `Where-Object` e
+roda .NET arbitrário dentro de um bloco de script. A causa é que **cada comando permitido é
+ele próprio uma linguagem**, com flags, apelidos e formas de argumento que nenhuma lista
+enumera até o fim. Enquanto a categoria existir, existe a próxima rodada. Eliminar a
+categoria fecha a família inteira de uma vez — incluindo o emissor inerte (`echo`/`printf`),
+que era a última válvula capaz de liberar um segmento só por reconhecer o prefixo.
+
+**O custo aceito é o relatório de fim de fase ficar mais longo**: todo comando executado
+aparece nele, do `pytest -q` ao `ls -la`, e o humano lê uma lista maior ao fechar a fase. É
+uma troca deliberada — `rastreado` custa uma linha de relatório; `livre` errado custa um
+estrago irreversível. Nada deixa de executar: `rastreado` permite.
+
+`ferramentas/tests/test_risco.py::test_nenhum_comando_de_shell_e_livre` é a trava desta
+decisão: percorre dez comandos cotidianos inofensivos e falha se algum voltar a ser `livre`.
+Reintroduzir uma lista de permitidos é uma mudança de política, e tem de custar esse teste
+vermelho.
 
 **Precedência.** Uma ação é avaliada contra os três níveis e recebe **o mais restritivo que
 casar**. Criar um arquivo novo chamado `.env` é travado, não livre; rodar `pytest` num
@@ -165,9 +190,10 @@ rebaixa um casamento de nível mais alto.
 2. Git que sai da máquina ou reescreve história: `push`, `push --force`, `reset --hard`, `rebase`, `clean -fd`, `checkout --` sobre arquivo modificado.
 3. Deleção: `rm`, `rmdir`, `Remove-Item`, `del`, e a ferramenta de deleção de arquivo.
 4. Banco: `DROP`, `TRUNCATE`, `ALTER TABLE`, `DELETE FROM` sem `WHERE`, execução de migração.
-5. Segredo: leitura **ou** escrita em `.env`, `*.pfx`, `*.pem`, `*.key`, `credentials*`, `*_secret*`; e qualquer conteúdo que case com padrões de chave conhecidos (`sk-`, `ghp_`, `AKIA`, JWT).
+5. Segredo: leitura **ou** escrita em `.env`, `*.pfx`, `*.pem`, `*.key`, `credentials*`, `*_secret*`, chave privada (`id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, `*.ppk`, `*.p8`), credencial de registro (`.npmrc`, `.netrc`, `.pypirc`), token (`*token*`) e cofre (`*.jks`, `*.keystore`); e qualquer conteúdo que case com padrões de chave conhecidos (`sk-`, `ghp_`, `AKIA`, JWT).
 6. Deploy e infraestrutura: `docker push`, `kubectl apply`, `terraform apply`, `gh workflow run`, `npm publish`, `twine upload`.
 7. Instalação global: `npm i -g`, `pip install` fora de venv, `winget install`, `choco install`.
+8. **Painel de controle do motor (R9):** qualquer ESCRITA cujo alvo esteja sob um diretório `.engine/` — `Write`, `Edit`, `NotebookEdit` e redirecionamento de shell que aponte para lá. É o próprio interruptor do motor: `.engine/estado.json` guarda `"ativo"` (gravar `false` desliga os dois hooks) e `.engine/config.json` guarda `padroes_segredo` (gravar `[]` desarma a família 5 inteira). **Leitura de `.engine/` continua livre**: ler o painel não muda nada.
 
 **Falha segura.** Se `risco.py` levantar exceção, o hook classifica como **travado**. Um
 classificador quebrado nunca libera; ele para. O modo de falha contrário — liberar quando
@@ -289,6 +315,7 @@ exige `pip install` para funcionar falha exatamente no ambiente em que mais se p
 | `trilha.py` | append-only em `trilha.jsonl` e leitura para relatório |
 | `relatorio.py` | relatório de ciclo e de sessão, em Markdown |
 | `config.py` | ler `engine.config.json` com defaults |
+| `cli.py` | ponto de entrada da skill: `ligar`, `desligar`, `status`, `fase` |
 
 ## 13. Estrutura do repositório
 
@@ -335,7 +362,7 @@ Três camadas, porque o modo de falha típico deste tipo de projeto é **parecer
 
 | Fase | Conteúdo | Critério de pronto |
 |---|---|---|
-| **1 — núcleo** | `estado.py`, `risco.py`, `config.py`; hooks `contexto` e `risco`; skill `/engine` com `on/off/status`; 4 papéis (arquiteto, implementador, revisor, documentador); 3 cartões (`python`, `pytest`, `ui-ux`); testes de risco e de estado | o modo sobrevive a 20 turnos e a uma compactação; as 7 famílias travadas travam de fato |
+| **1 — núcleo** | `estado.py`, `risco.py`, `config.py`; hooks `contexto` e `risco`; skill `/engine` com `on/off/status`; 4 papéis (arquiteto, implementador, revisor, documentador); 3 cartões (`python`, `pytest`, `ui-ux`); testes de risco e de estado | o modo sobrevive a 20 turnos e a uma compactação; as 8 famílias travadas travam de fato |
 | **2 — elenco** | os outros 5 papéis (descobridor, cartografo, designer, testador, sentinela); os 9 cartões restantes; `trilha.py`, `relatorio.py`; hooks `trilha`, `salvar`, `gate`; `/engine retomar` | relatório de ciclo sai completo; `retomar` reconstrói o estado em sessão nova |
 | **3 — prova** | `--dry`; os 4 cenários de aceite; cartões de Office completos; `README` e documentação de instalação do plugin | os 4 cenários passam com resultado igual ao previsto |
 
