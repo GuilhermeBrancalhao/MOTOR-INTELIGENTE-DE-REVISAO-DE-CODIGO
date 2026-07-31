@@ -1,0 +1,7 @@
+# Scripts shell precisam de terminador de linha LF sempre, mesmo em máquinas
+# Windows com `core.autocrlf=true` — CRLF quebra o shebang (`#!/usr/bin/env
+# bash\r`) e injeta `\r` literal em comparações de string dentro do script.
+# `hooks/engine.sh` é executado por um shell de verdade (Git Bash no Windows,
+# via a forma shell do `hooks.json`), então isso importa em produção, não só
+# em CI.
+*.sh text eol=lf

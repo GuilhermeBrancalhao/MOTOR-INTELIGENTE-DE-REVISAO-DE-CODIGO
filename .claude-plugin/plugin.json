@@ -4,5 +4,8 @@
   "description": "Motor de engenharia persistente: ciclo em fases, papéis por etapa e portas de segurança graduadas por risco.",
   "author": {
     "name": "AlphaContabilidade"
-  }
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/AlphaContabilidade/planejamento-do-motor-de-revisao-de-codigo",
+  "repository": "https://github.com/AlphaContabilidade/planejamento-do-motor-de-revisao-de-codigo"
 }
