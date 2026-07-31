@@ -1,5 +1,72 @@
 # CHANGELOG
 
+## 2026-07-31 — Fase 2 (elenco)
+
+Completa o elenco do motor: 247 testes verdes (eram 152 ao fim da Fase 1) e
+verificação de aceite em `aceite/fase-2.md`, incluindo um roteiro NOVO
+(`aceite/simular_turnos.py`) que fecha o critério "sobrevive a 20 turnos e a uma
+compactação", deixado explicitamente não verificado pela Fase 1.
+
+- **`ferramentas/detectar.py` — detecção de stack.** Lê o front-matter restrito
+  (`tecnologia`/`detectar`/`papeis`/`versao`) de cada cartão em `cartoes/` e varre o
+  projeto hospedeiro (profundidade máx. 6, ignora `.git`/`node_modules`/
+  `__pycache__`/`.venv`/`.engine`) para decidir quais tecnologias estão presentes.
+  `estado.cartoes` é preenchido por essa detecção quando um ciclo liga.
+- **`ferramentas/trilha.py` + hook `engine_trilha.py` (PostToolUse).** Trilha
+  append-only em `.engine/trilha.jsonl`, uma linha JSON por ação (`quando`, `fase`,
+  `ferramenta`, `alvo`, `risco`, `regra`). É a fonte de verdade para os relatórios —
+  nunca o índice de uma API externa. Registrar é acessório: erro de escrita nunca
+  propaga; leitura pula linha corrompida e reporta em `_avisos`, nunca interrompe.
+- **`ferramentas/relatorio.py` — relatório de ciclo e de fase.** `de_ciclo` (Markdown:
+  objetivo, fases percorridas, decisões, contagem de ações por nível, arquivos
+  tocados, pendências) e `de_fase` (ações rastreadas daquela fase, diffs pendentes,
+  pendências). Sem trilha, o relatório diz isso — nunca inventa.
+- **`hooks/engine_salvar.py` (PreCompact).** Consolida no estado, antes da
+  compactação, `ultima_consolidacao` (ISO) e `resumo_trilha` (contagem por nível de
+  risco). Nunca bloqueia a compactação: qualquer erro sai 0 sem gravar nada.
+- **`hooks/engine_gate.py` (Stop).** Cobra evidência UMA vez por fase quando a fase
+  atual é BUILD, TESTE ou REVISAO e a trilha da fase não tem nenhuma ação
+  registrada. O contador `cobrancas_por_fase`, gravado no estado ANTES de cobrar, é
+  o que impede o laço infinito — não `stop_hook_active`, que só descreve o turno
+  corrente. Nunca bloqueia por erro interno: falha segura aqui é NÃO travar a saída.
+- **CLI: `retomar`, `--dry`, `relatorio`.** `ligar --dry` cria o ciclo com
+  `modo="dry"` (o hook de risco já bloqueia toda escrita nesse modo, mesmo a que
+  sairia LIVRE). `retomar` relê estado + trilha e imprime um resumo de reentrada
+  (fase, objetivo, decisões, últimas 5 ações, pendências) para sessão nova; estado
+  corrompido sai 1 com mensagem legível, sem tocar no arquivo. `relatorio
+  [ciclo|fase X]` chama `ferramentas/relatorio.py`.
+- **Os 5 papéis restantes:** `descobridor` (DESCOBERTA, sem escrita), `cartografo`
+  (ANALISE, sem escrita), `designer` (PLANO, escreve só a direção visual, consome o
+  cartão `ui-ux`), `testador` (TESTE, escreve e roda teste, nunca ajusta teste para
+  o código passar), `sentinela` (REVISAO, segurança + performance, sem Bash nem
+  escrita). Elenco completo: 9 agentes.
+- **Os 9 cartões restantes:** `fastapi`, `excel-vba`, `office-scripts`,
+  `power-query`, `react`, `typescript`, `postgresql`, `sqlite`, `mermaid`. Elenco
+  completo: 12 cartões, todos lidos sem erro por `detectar.ler_cartao`.
+- **Verificação em `aceite/fase-2.md`:** suíte completa (247 testes), 9 famílias
+  travadas pelo hook de verdade (`aceite/verificar_familias.py`, R9 incorporada na
+  correção final da Fase 1), e o roteiro NOVO de 20 turnos com compactação simulada
+  (`aceite/simular_turnos.py`) — todos com saída literal colada.
+
+### Não verificado nesta fase
+
+- A instalação real do plugin numa sessão do Claude Code (reconhecimento de
+  `hooks/hooks.json`, resolução de `${CLAUDE_PLUGIN_ROOT}`, disparo dos cinco hooks
+  nos eventos certos).
+- A prova de que o Claude Code de fato injeta o stdout do `UserPromptSubmit` no
+  contexto de uma conversa real.
+- O comportamento do `Stop` (`engine_gate.py`) bloqueando de verdade numa sessão
+  real, com a mensagem de cobrança chegando legível ao modelo.
+- Os quatro cenários de aceite com projetos-cobaia (Fase 3).
+- **`hooks/hooks.json` usa o lançador `py`, que só existe no Windows** (e não em
+  toda instalação Windows). Os testes e os três scripts de aceite usam
+  `sys.executable` de propósito, mas o arquivo que o Claude Code de fato lê para
+  invocar cada hook continua com `py` — uma instalação fora do Windows quebraria os
+  cinco hooks por esse motivo. Risco de portabilidade conhecido, não corrigido
+  nesta fase.
+
+Detalhe completo, com saída literal de cada verificação, em `aceite/fase-2.md`.
+
 ## 2026-07-30 — Correções da revisão final da Fase 1
 
 Sete achados fechados; 183 testes verdes (eram 152) e `aceite/verificar_familias.py`
