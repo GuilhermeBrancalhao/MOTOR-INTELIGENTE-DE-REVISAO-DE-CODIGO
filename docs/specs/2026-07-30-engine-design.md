@@ -314,6 +314,7 @@ exige `pip install` para funcionar falha exatamente no ambiente em que mais se p
 | `trilha.py` | append-only em `trilha.jsonl` e leitura para relatório |
 | `relatorio.py` | relatório de ciclo e de sessão, em Markdown |
 | `config.py` | ler `engine.config.json` com defaults |
+| `cli.py` | ponto de entrada da skill: `ligar`, `desligar`, `status`, `fase` |
 
 ## 13. Estrutura do repositório
 
