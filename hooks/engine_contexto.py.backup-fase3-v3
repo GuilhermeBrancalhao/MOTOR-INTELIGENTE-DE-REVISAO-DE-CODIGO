@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Hook UserPromptSubmit V4 — volumes dinâmicos ao vivo.
+"""Hook UserPromptSubmit V3 — injeta motores + volumes + sugestão automática.
 
-Estende V3 com detecção automática de volumes PRONTO.
-Sem hardcoding de nomes - descobre dinamicamente via git.
+Estende V2 adicionando:
+1. Análise de diffs locais (git diff)
+2. Sugestão automática de motor baseada em padrão de código
+3. Injeção de sugestão no cartão (após motores)
 """
 from __future__ import annotations
 
@@ -20,16 +22,11 @@ forcar_utf8()
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from ferramentas import config, estado  # noqa: E402
 
-# Importar módulos
+# Importar analisador de diff
 try:
     from engine_analisa_diff import AnalisadorDiff
 except ImportError:
     AnalisadorDiff = None
-
-try:
-    from volume_detector import DetectorVolumesAoVivo
-except ImportError:
-    DetectorVolumesAoVivo = None
 
 
 # Mapeamento: fase → motores consultáveis
@@ -44,6 +41,12 @@ MOTORES_POR_FASE = {
     "DOC": ["diagramar"],
     "ENTREGA": [],
 }
+
+VOLUMES_PRONTOS = [
+    "07-PROMPT-ENGINE",
+    "12-MEMORY",
+    "31-TESTING",
+]
 
 INVARIANTES = (
     "1. Nunca afirmar sucesso sem ter olhado. Rodou, cola a saída; não rodou, diz que não rodou.",
@@ -92,16 +95,33 @@ def _ler_descricao_motor(raiz: Path, motor: str) -> Optional[str]:
     return None
 
 
-def _detectar_volumes_dinamicos(raiz: Path) -> list[tuple[str, str]]:
-    """Detecta volumes PRONTO dinamicamente (V4 novo)."""
-    if not DetectorVolumesAoVivo:
-        return []
+def _ler_resumo_volume(raiz: Path, volume: str) -> Optional[str]:
+    """Lê resumo do volume de seu README ou _VOLUME.yml."""
+    volume_path = raiz / "volumes" / "prontos" / volume
+    if not volume_path.exists():
+        volume_path = Path.home() / "projetos" / "AI_ENGINEERING_OS" / volume
+
+    if not volume_path.exists():
+        return None
 
     try:
-        detector = DetectorVolumesAoVivo(cache_ttl_segundos=300)
-        return detector.detectar_volumes(raiz)
+        readme = volume_path / "README.md"
+        if readme.exists():
+            conteudo = readme.read_text(encoding="utf-8")
+            for linha in conteudo.split("\n"):
+                if linha.strip() and not linha.startswith("#"):
+                    return _cortar(linha.strip(), 100)
+
+        primeira = list(volume_path.glob("01-*.md"))
+        if primeira:
+            conteudo = primeira[0].read_text(encoding="utf-8")
+            for linha in conteudo.split("\n"):
+                if linha.strip() and linha.startswith("# "):
+                    return _cortar(linha.replace("# ", ""), 100)
     except Exception:
-        return []
+        pass
+
+    return f"Volume {volume}"
 
 
 def _extrair_diff_local(cwd: str) -> str:
@@ -124,6 +144,7 @@ def _analisar_e_sugerir_motor(cwd: str, fase: str) -> Optional[str]:
     if not AnalisadorDiff:
         return None
 
+    # Não sugerir em fases iniciais
     if fase in ["DESCOBERTA", "ANALISE"]:
         return None
 
@@ -143,7 +164,7 @@ def _analisar_e_sugerir_motor(cwd: str, fase: str) -> Optional[str]:
 
 
 def montar_cartao_estendido(dados: dict, cfg: dict, raiz: Path, cwd: str) -> str:
-    """Monta cartão com motores + volumes dinâmicos + sugestão automática."""
+    """Monta cartão com motores + volumes + sugestão automática."""
     teto = _teto_efetivo(cfg)
     ciclo = dados.get("ciclo", {})
     fase = dados.get("fase", "?")
@@ -173,18 +194,22 @@ def montar_cartao_estendido(dados: dict, cfg: dict, raiz: Path, cwd: str) -> str
             else:
                 acrescentar(f"  • {motor}")
 
-    # Seção: Sugestão automática de motor
+    # Seção: Sugestão automática de motor (V3 novo)
     sugestao = _analisar_e_sugerir_motor(str(cwd), fase)
     if sugestao:
         acrescentar(sugestao)
 
-    # Seção: Volumes PRONTO (V4 novo - detecta dinamicamente)
-    volumes_dinamicos = _detectar_volumes_dinamicos(raiz)
+    # Seção: Volumes PRONTO
+    volumes_existentes = []
+    for vol in VOLUMES_PRONTOS:
+        resumo = _ler_resumo_volume(raiz, vol)
+        if resumo:
+            volumes_existentes.append((vol, resumo))
 
-    if volumes_dinamicos:
+    if volumes_existentes:
         acrescentar("📚 Volumes PRONTO (consultáveis):")
-        for vol_nome, vol_resumo in volumes_dinamicos:
-            acrescentar(f"  • {vol_nome}: {vol_resumo}")
+        for vol, resumo in volumes_existentes:
+            acrescentar(f"  • {vol}: {resumo}")
 
     # Seção: Cartões (original)
     cartoes = dados.get("cartoes") or []
