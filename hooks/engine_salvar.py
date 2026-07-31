@@ -18,9 +18,13 @@ continua funcionando a partir do que já estava salvo.
 Consolidação: com o motor ligado, grava em `estado.json`:
   - `ultima_consolidacao`: data/hora ISO deste PreCompact.
   - `resumo_trilha`: contagem de ações por nível de risco (`livre`,
-    `rastreado`, `travado`, ou o que aparecer), somada da trilha inteira —
-    não fica presa à sessão atual, porque a trilha é o registro de disco, não
-    de contexto.
+    `rastreado`, `travado`, ou o que aparecer), somada da trilha — não fica
+    presa à sessão atual, porque a trilha é o registro de disco, não de
+    contexto, mas **só do ciclo corrente** (ver `_linhas_do_ciclo_corrente`
+    abaixo): mesmo defeito que `ferramentas/relatorio.py` já corrigiu para o
+    relatório de ciclo — sem o filtro, `estado.novo_ciclo` zera o estado mas
+    não a trilha (append-only por contrato), e a consolidação do PreCompact no
+    ciclo 2 reportava números do ciclo 1.
 
 Motor desligado, estado ausente/corrompido, ou qualquer erro no caminho: sai 0
 sem gravar nada. Nunca atrapalha a compactação.
@@ -40,11 +44,24 @@ forcar_utf8()
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ferramentas import estado, trilha  # noqa: E402
+from ferramentas import estado, relatorio, trilha  # noqa: E402
 
 
 def _agora() -> str:
     return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+
+
+def _linhas_do_ciclo_corrente(dados: dict, trilha_dados: dict) -> list[dict]:
+    """Filtra a trilha pelo ciclo corrente, reaproveitando a MESMA regra de
+    `ferramentas/relatorio.py` (`_id_do_ciclo` + `_do_ciclo_corrente`) — não
+    duplicada aqui, importada por referência, para não divergir se a regra de
+    compatibilidade com trilha antiga (sem carimbo de `ciclo`) mudar num dos
+    dois lugares e não no outro.
+    """
+    linhas, _ignoradas = relatorio._do_ciclo_corrente(
+        trilha_dados.get("linhas") or [], relatorio._id_do_ciclo(dados)
+    )
+    return linhas
 
 
 def _resumo_por_nivel(linhas: list[dict]) -> dict:
@@ -82,8 +99,9 @@ def principal() -> int:
             return 0
 
         trilha_dados = trilha.ler(raiz)
+        linhas_do_ciclo = _linhas_do_ciclo_corrente(dados, trilha_dados)
         dados["ultima_consolidacao"] = _agora()
-        dados["resumo_trilha"] = _resumo_por_nivel(trilha_dados.get("linhas", []))
+        dados["resumo_trilha"] = _resumo_por_nivel(linhas_do_ciclo)
 
         try:
             estado.gravar(raiz, dados)

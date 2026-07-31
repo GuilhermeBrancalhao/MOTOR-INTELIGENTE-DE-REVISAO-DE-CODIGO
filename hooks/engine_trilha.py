@@ -25,6 +25,7 @@ desligado (aí ele deliberadamente não tem nada a registrar).
 from __future__ import annotations
 
 import json
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -44,10 +45,29 @@ def _agora() -> str:
     return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
 
-#: Marcas de que a ação registrada é uma invocação da PRÓPRIA CLI do ENGINE.
-#: Comparadas contra o texto normalizado (barras para frente, minúsculas), porque no
-#: Windows o comando chega com barra invertida (`ferramentas\cli.py`).
-_MARCAS_DO_MOTOR = ("ferramentas/cli.py", "ferramentas.cli")
+#: Casa qualquer forma de invocar a CLI do próprio ENGINE, contra o texto já
+#: normalizado (barras para frente, minúsculas — ver `_e_do_motor`):
+#:   - caminho completo, relativo ou absoluto: `ferramentas/cli.py`,
+#:     `.../ENGINE/ferramentas/cli.py` (inclui a forma com barra invertida do
+#:     Windows, já normalizada antes do match);
+#:   - nome "pelado" `cli.py`, precedido de separador de caminho, aspa, início
+#:     de string ou espaço — cobre `cd ferramentas && py cli.py fase BUILD`,
+#:     onde não sobra o prefixo `ferramentas/` (revisor achou este furo: a
+#:     comparação por substring exata `"ferramentas/cli.py" in normalizado`
+#:     não casava essa forma, e a linha contava como evidência de fase quando
+#:     devia contar como do_motor);
+#:   - a forma de módulo `python -m ferramentas.cli` (e variantes com
+#:     argumentos depois).
+#: A fronteira antes de `cli.py` existe só para não confundir com um arquivo
+#: tipo `algum_cli.py` (o `_` antes não é separador); não existe para
+#: distinguir "é a CLI do ENGINE" de "é um cli.py de outro projeto qualquer" —
+#: essa distinção não dá para fazer com segurança só olhando o texto do
+#: comando. Por isso, de propósito, o regex casa mesmo sem confirmar que é
+#: ESTE cli.py: falso positivo aqui só faz o Stop cobrar evidência de mais
+#: (chato, mas seguro); falso negativo desliga o gate de vez, que é o próprio
+#: bug que esta correção fecha. Lado seguro escolhido: marcar como do_motor
+#: sempre que não der pra distinguir.
+_RE_DO_MOTOR = re.compile(r'(?:^|[\s/"\'])cli\.py(?:$|[\s"\'])|ferramentas\.cli(?!\w)')
 
 
 def _e_do_motor(tool_input: dict, alvo: str) -> bool:
@@ -65,7 +85,7 @@ def _e_do_motor(tool_input: dict, alvo: str) -> bool:
         if not isinstance(texto, str):
             continue
         normalizado = texto.replace("\\", "/").lower()
-        if any(marca in normalizado for marca in _MARCAS_DO_MOTOR):
+        if _RE_DO_MOTOR.search(normalizado):
             return True
     return False
 

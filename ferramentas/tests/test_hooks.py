@@ -462,6 +462,58 @@ def test_avisos_com_teto_apertado_e_muitas_decisoes_fica_dentro_do_teto():
     assert len(cartao.splitlines()) <= cfg["teto_cartao_linhas"]
 
 
+# --- Correção: do_motor casa qualquer forma de invocar a CLI, não só a --------
+# --- substring exata "ferramentas/cli.py" --------------------------------------
+#
+# Revisor achou o furo: `cd ferramentas && py cli.py fase BUILD` (forma normal de
+# shell depois de `cd` para dentro da pasta) não continha a substring
+# "ferramentas/cli.py" nem "ferramentas.cli" — só o "cli.py" pelado sobrava — e
+# por isso a linha NÃO era marcada `do_motor`, contava como evidência de fase, e
+# o Stop saía 0 quando devia cobrar. A correção trocou a comparação por um regex
+# de fronteira (`_RE_DO_MOTOR`); os três casos abaixo são as formas mínimas que o
+# pedido de correção exige que casem.
+
+
+@pytest.mark.parametrize(
+    "comando",
+    [
+        "cd ferramentas && py cli.py fase BUILD",
+        "python -m ferramentas.cli fase BUILD",
+        'py "C:\\caminho\\ENGINE\\ferramentas\\cli.py" status',
+    ],
+)
+def test_trilha_marca_do_motor_em_qualquer_forma_do_comando(tmp_path, comando):
+    _ligar(tmp_path)
+    saida = _rodar(
+        HOOK_TRILHA,
+        {"tool_name": "Bash", "tool_input": {"command": comando}, "cwd": str(tmp_path)},
+        tmp_path,
+    )
+    assert saida.returncode == 0
+    dados = trilha.ler(tmp_path)
+    assert len(dados["linhas"]) == 1
+    assert dados["linhas"][0].get("do_motor") is True
+
+
+def test_trilha_nao_marca_do_motor_um_cli_py_de_outro_arquivo_colado_no_nome(tmp_path):
+    """Fronteira do regex: `algum_cli.py` não é o `cli.py` pelado do ENGINE — o
+    `_` antes não é separador de caminho, espaço, aspa nem início de string."""
+    _ligar(tmp_path)
+    saida = _rodar(
+        HOOK_TRILHA,
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "python algum_cli.py --ajuda"},
+            "cwd": str(tmp_path),
+        },
+        tmp_path,
+    )
+    assert saida.returncode == 0
+    dados = trilha.ler(tmp_path)
+    assert len(dados["linhas"]) == 1
+    assert "do_motor" not in dados["linhas"][0]
+
+
 # --- Hook PreCompact: engine_salvar.py -------------------------------------------
 
 
@@ -535,6 +587,53 @@ def test_salvar_stdin_malformado_sai_0(tmp_path):
     assert saida.returncode == 0
     dados = estado.carregar(tmp_path)
     assert "ultima_consolidacao" not in dados
+
+
+# --- Correção: resumo_trilha do PreCompact soma só o ciclo corrente -------------
+#
+# Mesmo defeito já corrigido em `ferramentas/relatorio.py`: `estado.novo_ciclo`
+# zera o estado mas não a trilha (append-only por contrato), então sem filtro por
+# `ciclo` a consolidação do PreCompact no ciclo 2 reportava as ações do ciclo 1
+# junto. Espelha `test_relatorio_do_segundo_ciclo_nao_conta_acoes_do_primeiro`
+# (test_relatorio.py), mas rodando o hook de verdade e conferindo `resumo_trilha`.
+
+
+def test_salvar_resumo_trilha_conta_so_o_ciclo_corrente(tmp_path):
+    primeiro = estado.novo_ciclo(tmp_path, "ciclo um", "2026-07-30T09:00:00")
+    id_um = primeiro["ciclo"]["id"]
+    for indice in range(4):
+        trilha.registrar(
+            tmp_path,
+            {
+                "quando": str(indice), "fase": "DESCOBERTA", "ferramenta": "Write",
+                "alvo": f"do_ciclo_um_{indice}.py", "risco": "rastreado", "regra": "",
+                "ciclo": id_um,
+            },
+        )
+
+    segundo = estado.novo_ciclo(tmp_path, "ciclo dois", "2026-07-30T10:00:00", forcar=True)
+    id_dois = segundo["ciclo"]["id"]
+    assert id_dois != id_um
+    trilha.registrar(
+        tmp_path,
+        {
+            "quando": "9", "fase": "DESCOBERTA", "ferramenta": "Bash",
+            "alvo": "so_do_ciclo_dois", "risco": "travado", "regra": "R2",
+            "ciclo": id_dois,
+        },
+    )
+
+    saida = _rodar(
+        HOOK_SALVAR,
+        {"cwd": str(tmp_path), "hook_event_name": "PreCompact", "compaction_trigger": "manual"},
+        tmp_path,
+    )
+    assert saida.returncode == 0
+
+    dados = estado.carregar(tmp_path)
+    assert dados["resumo_trilha"] == {"travado": 1}, (
+        "o ciclo 2 tem UMA ação travada, não quatro rastreadas do ciclo 1 somadas"
+    )
 
 
 # --- Hook Stop: engine_gate.py -----------------------------------------------
