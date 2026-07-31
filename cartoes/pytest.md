@@ -1,6 +1,6 @@
 ---
 tecnologia: pytest
-detectar: ["pytest.ini", "pyproject.toml:pytest", "tests/**/test_*.py"]
+detectar: ["pytest.ini", "pyproject.toml", "tests/**/test_*.py"]
 papeis: [arquiteto, implementador, revisor]
 versao: 2026-07-30
 ---

@@ -14,7 +14,7 @@ versao: 2026-07-30
 ## Armadilhas
 - Argumento default mutável (`def f(x=[])`) é compartilhado entre chamadas.
 - `except Exception` sem re-levantar engole o erro; só é aceitável quando a falha segura é o requisito, e aí precisa de comentário dizendo isso.
-- `os.replace` é atômico; `shutil.move` entre volumes diferentes não é.
+- `os.replace` é atômico dentro do mesmo volume e falha entre volumes diferentes; `shutil.move` atravessa volumes mas não é atômico ao fazê-lo.
 - Comparar float com `==` falha; use `math.isclose`.
 
 ## Comandos
