@@ -1,6 +1,6 @@
 ---
 tecnologia: excel-vba
-detectar: ["*.bas", "*.cls", "*.frm", "*.xlsm"]
+detectar: ["*.xlsm", "*.xlam", "*.bas", "*.frm"]
 papeis: [arquiteto, implementador, revisor]
 versao: 2026-07-31
 ---

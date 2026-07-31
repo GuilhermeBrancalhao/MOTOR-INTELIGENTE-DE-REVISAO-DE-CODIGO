@@ -1,6 +1,6 @@
 ---
 tecnologia: fastapi
-detectar: ["main.py", "dependencies.py", "**/routers/**/*.py"]
+detectar: ["routers/*.py", "**/routers/*.py"]
 papeis: [arquiteto, implementador, testador, revisor]
 versao: 2026-07-31
 ---

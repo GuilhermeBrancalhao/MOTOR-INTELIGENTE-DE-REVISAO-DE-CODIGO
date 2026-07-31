@@ -29,9 +29,19 @@ de re-invocação, não `stop_hook_active`. (O Claude Code também tem um teto
 próprio de bloqueios consecutivos por turno; esta camada garante "uma cobrança
 por fase" independente dele.)
 
+**Ação do próprio motor não conta como evidência.** A única forma de entrar em
+BUILD/TESTE/REVISAO é rodar `ferramentas/cli.py fase <DESTINO>` por um comando de
+shell — e esse comando dispara o `PostToolUse`, que gravava na trilha uma linha já
+carimbada com a fase NOVA. O gate então achava "ação da fase" na primeira consulta
+e nunca cobrava nada em operação real (os testes que passavam mudavam a fase pela
+API, não pela CLI, e por isso não viam o buraco). Por isso `engine_trilha.py`
+marca essas linhas com `do_motor: true` e o gate as IGNORA: a evidência de uma fase
+não pode ser satisfeita pela própria chamada que mudou para essa fase.
+
 Cobra evidência quando, e só quando: o motor está ligado, a fase atual é
 BUILD, TESTE ou REVISAO, a trilha não tem nenhuma ação registrada daquela
-fase, e o contador da fase ainda está em zero. Qualquer outra situação —
+fase (fora as do próprio motor), e o contador da fase ainda está em zero.
+Qualquer outra situação —
 motor desligado, fase fora da lista, trilha já tem ação da fase, contador
 já em 1 ou mais, evento malformado, qualquer exceção — sai 0 sem cobrar.
 Nunca bloqueia por erro: ao contrário do PreToolUse (`engine_risco.py`), aqui
@@ -95,7 +105,10 @@ def principal() -> int:
         trilha_dados = trilha.ler(raiz)
         linhas = trilha_dados.get("linhas", [])
         tem_acao_da_fase = any(
-            isinstance(linha, dict) and linha.get("fase") == fase for linha in linhas
+            isinstance(linha, dict)
+            and linha.get("fase") == fase
+            and not linha.get("do_motor")
+            for linha in linhas
         )
         if tem_acao_da_fase:
             return 0

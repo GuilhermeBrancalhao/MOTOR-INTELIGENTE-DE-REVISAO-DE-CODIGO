@@ -1,6 +1,6 @@
 ---
 tecnologia: sqlite
-detectar: ["*.sqlite", "*.sqlite3", "*.db"]
+detectar: ["*.sqlite", "*.sqlite3"]
 papeis: [arquiteto, implementador, revisor]
 versao: 2026-07-31
 ---

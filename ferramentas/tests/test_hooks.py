@@ -323,7 +323,16 @@ def test_teto_12_com_muitas_decisoes_e_diffs_mantem_os_cinco_invariantes():
 # --- Hook PostToolUse: a trilha auditável ----------------------------------------
 
 
-def test_trilha_motor_ligado_gera_linha_com_os_seis_campos(tmp_path):
+def test_trilha_motor_ligado_gera_linha_com_os_campos_do_contrato(tmp_path):
+    """Sete campos: os seis originais mais `ciclo`.
+
+    `ciclo` entrou na correção da revisão adversarial da Fase 2 (CRÍTICO 3): sem o
+    id do ciclo na linha, o relatório do ciclo 2 contava as ações do ciclo 1. Este
+    teste tinha `== {seis campos}` e é o único teste pré-existente que a correção
+    obrigou a mexer — não há como gravar o id do ciclo e manter o conjunto de seis.
+    `do_motor` não aparece aqui porque só é gravado quando é verdadeiro (ação da
+    própria CLI do ENGINE), e `pytest -q` não é.
+    """
     _ligar(tmp_path)
     saida = _rodar(
         HOOK_TRILHA,
@@ -339,11 +348,14 @@ def test_trilha_motor_ligado_gera_linha_com_os_seis_campos(tmp_path):
     assert dados["_avisos"] == []
     assert len(dados["linhas"]) == 1
     linha = dados["linhas"][0]
-    assert set(linha.keys()) == {"quando", "fase", "ferramenta", "alvo", "risco", "regra"}
+    assert set(linha.keys()) == {
+        "quando", "fase", "ferramenta", "alvo", "risco", "regra", "ciclo",
+    }
     assert linha["fase"] == "DESCOBERTA"
     assert linha["ferramenta"] == "Bash"
     assert linha["alvo"] == "pytest -q"
     assert linha["risco"] == "rastreado"
+    assert linha["ciclo"] == estado.carregar(tmp_path)["ciclo"]["id"]
 
 
 def test_trilha_motor_desligado_nao_gera_nada(tmp_path):
@@ -595,3 +607,81 @@ def test_gate_stdin_malformado_sai_0(tmp_path):
     assert saida.returncode == 0
     dados = estado.carregar(tmp_path)
     assert dados.get("cobrancas_por_fase", {}) == {}
+
+
+# --- Revisão adversarial, CRÍTICO 1: o cenário REAL de entrada em BUILD ----------
+#
+# Os testes de gate acima mudam a fase por `_definir_fase` (API + disco). Em
+# operação real ninguém faz isso: entra-se em BUILD rodando `cli.py fase BUILD`
+# por um comando de shell — e esse comando dispara o PostToolUse, que gravava na
+# trilha uma linha JÁ com `fase: BUILD`. O gate então achava "ação da fase" e nunca
+# cobrava nada. Os dois testes abaixo reproduzem o caminho real: transição pela CLI
+# em subprocesso, `engine_trilha` sobre o mesmo comando, e só então o Stop.
+
+CLI = RAIZ_PLUGIN / "ferramentas" / "cli.py"
+
+
+def _cli_fase(raiz: Path, destino: str) -> tuple[subprocess.CompletedProcess, str]:
+    """Roda `cli.py fase <destino>` como o Claude Code rodaria (via shell) e devolve
+    também o texto do comando, para alimentar o PostToolUse logo em seguida."""
+    argumentos = [sys.executable, str(CLI), "fase", destino]
+    resultado = subprocess.run(
+        argumentos,
+        capture_output=True,
+        text=True,
+        cwd=str(raiz),
+        env={**os.environ, "ENGINE_RAIZ": str(raiz)},
+    )
+    comando = f'{sys.executable} "{CLI}" fase {destino}'
+    return resultado, comando
+
+
+def _caminhar_ate_build_pela_cli(raiz: Path) -> None:
+    """DESCOBERTA -> ANALISE -> PLANO -> BUILD, cada passo pela CLI de verdade,
+    cada um seguido do PostToolUse sobre o próprio comando que rodou a CLI."""
+    for destino in ("ANALISE", "PLANO", "BUILD"):
+        resultado, comando = _cli_fase(raiz, destino)
+        assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+        saida_trilha = _rodar(
+            HOOK_TRILHA,
+            {"tool_name": "Bash", "tool_input": {"command": comando}, "cwd": str(raiz)},
+            raiz,
+        )
+        assert saida_trilha.returncode == 0
+
+
+def test_gate_cobra_quando_a_unica_acao_da_fase_e_a_propria_cli_do_motor(tmp_path):
+    _ligar(tmp_path)
+    _caminhar_ate_build_pela_cli(tmp_path)
+
+    linhas = trilha.ler(tmp_path)["linhas"]
+    assert any(linha["fase"] == "BUILD" for linha in linhas), (
+        "a trilha precisa ter a linha carimbada com BUILD — é ela que cegava o gate"
+    )
+    assert all(linha.get("do_motor") for linha in linhas), (
+        "toda ação até aqui é chamada da própria CLI do ENGINE"
+    )
+
+    saida = _rodar(HOOK_GATE, {"cwd": str(tmp_path), "stop_hook_active": False}, tmp_path)
+    assert saida.returncode == 2, (
+        "chamar a CLI do motor não é evidência de trabalho da fase: o gate tem de cobrar"
+    )
+    assert "BUILD" in saida.stderr
+    assert estado.carregar(tmp_path)["cobrancas_por_fase"]["BUILD"] == 1
+
+
+def test_gate_nao_cobra_quando_ha_acao_de_verdade_alem_da_cli_do_motor(tmp_path):
+    _ligar(tmp_path)
+    _caminhar_ate_build_pela_cli(tmp_path)
+
+    # Uma ação de trabalho de verdade na fase BUILD (não é a CLI do motor).
+    saida_trilha = _rodar(
+        HOOK_TRILHA,
+        {"tool_name": "Bash", "tool_input": {"command": "pytest -q"}, "cwd": str(tmp_path)},
+        tmp_path,
+    )
+    assert saida_trilha.returncode == 0
+
+    saida = _rodar(HOOK_GATE, {"cwd": str(tmp_path), "stop_hook_active": False}, tmp_path)
+    assert saida.returncode == 0
+    assert estado.carregar(tmp_path).get("cobrancas_por_fase", {}).get("BUILD", 0) == 0

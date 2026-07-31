@@ -209,9 +209,14 @@ def _relatar_retomada(raiz: Path, dados: dict) -> str:
         for item in ultimas:
             if not isinstance(item, dict):
                 continue
+            # `trilha.redigir` aqui é defesa em profundidade: `trilha.registrar` já
+            # redige antes de gravar, mas uma trilha escrita antes dessa correção
+            # ainda tem credencial em claro no arquivo — e é esta impressão que
+            # levaria o texto de volta para o contexto do modelo.
+            alvo = trilha.redigir(str(item.get("alvo", "?")))
             linhas.append(
                 f"- {item.get('quando', '?')} · {item.get('ferramenta', '?')} · "
-                f"{item.get('alvo', '?')} · {item.get('risco', '?')}"
+                f"{alvo} · {item.get('risco', '?')}"
             )
 
     linhas += ["", "## Diffs por apresentar", ""]

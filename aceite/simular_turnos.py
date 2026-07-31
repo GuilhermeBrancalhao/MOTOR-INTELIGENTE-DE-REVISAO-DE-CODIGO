@@ -9,6 +9,13 @@ SUBPROCESSO, na mesma ordem em que o Claude Code os chamaria dentro de um turno:
     engine_contexto.py (UserPromptSubmit) -> engine_risco.py (PreToolUse)
         -> engine_trilha.py (PostToolUse), só se a ação não foi bloqueada.
 
+Depois dos 20 turnos, o roteiro dispara o quinto hook, `engine_gate.py` (Stop) — o
+único que BLOQUEIA a saída do Claude e, até a revisão adversarial da Fase 2, o único
+que este aceite nunca exercitava. A entrada na fase BUILD é feita pelo caminho REAL
+(`ferramentas/cli.py fase BUILD` em subprocesso, seguido do `PostToolUse` sobre o
+mesmo comando), e o Stop é disparado duas vezes: a primeira tem de cobrar evidência,
+a segunda não.
+
 No turno 10, entre um turno e o próximo, dispara `engine_salvar.py` (PreCompact) —
 a mesma simulação da compactação de contexto. No meio da sequência (turnos 4 e 8),
 a fase avança de verdade via `ferramentas.estado.transicionar` + `estado.gravar`,
@@ -35,6 +42,7 @@ adaptação 4, sobre por que `sys.executable` é o único caminho garantido corr
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -49,6 +57,19 @@ HOOK_CONTEXTO = RAIZ_PLUGIN / "hooks" / "engine_contexto.py"
 HOOK_RISCO = RAIZ_PLUGIN / "hooks" / "engine_risco.py"
 HOOK_TRILHA = RAIZ_PLUGIN / "hooks" / "engine_trilha.py"
 HOOK_SALVAR = RAIZ_PLUGIN / "hooks" / "engine_salvar.py"
+HOOK_GATE = RAIZ_PLUGIN / "hooks" / "engine_gate.py"
+
+#: Fase esperada ao fim dos 20 turnos, dado o ROTEIRO e TRANSICOES_NO_MEIO abaixo.
+#: Valor LITERAL de propósito: a verificação (a) comparava o cartão do turno 20 com
+#: a fase lida do mesmo disco que o cartão leu — tautologia. Apagar as duas
+#: transições do meio mantinha a verificação verde, que é exatamente o defeito que
+#: ela deveria pegar. Se o ROTEIRO mudar, este valor muda junto, à mão.
+FASE_ESPERADA_NO_FIM = "PLANO"
+
+#: Fase em que o gate (`engine_gate.py`) é exercitado depois dos 20 turnos. Tem de
+#: ser uma das três que exigem evidência (BUILD/TESTE/REVISAO) e alcançável a partir
+#: de FASE_ESPERADA_NO_FIM pelo grafo de `ferramentas.estado.TRANSICOES`.
+FASE_DO_GATE = "BUILD"
 
 OBJETIVO_CICLO = "aceite F2-T8: simular 20 turnos e uma compactacao do ENGINE"
 
@@ -165,6 +186,59 @@ def _aplicar_efeito_no_disco(tipo: str, tool_input: dict, ultimo_novo: dict, tur
         )
 
 
+def _exercitar_o_gate(
+    raiz: Path, linhas_de_log: list[str]
+) -> tuple[subprocess.CompletedProcess, subprocess.CompletedProcess]:
+    """Roda `engine_gate.py` (Stop) de verdade, pelo caminho REAL de entrada na fase.
+
+    O gate é o hook mais perigoso do projeto — é o único que BLOQUEIA a saída do
+    Claude — e até esta correção o roteiro de aceite não o disparava uma vez sequer.
+
+    A entrada na fase é feita como acontece de verdade: `ferramentas/cli.py fase
+    BUILD` num subprocesso, seguido do `PostToolUse` sobre o mesmo comando. Esse é
+    justamente o caminho que cegava o gate (a chamada da CLI gravava na trilha uma
+    linha já carimbada com a fase nova, e o gate a lia como "evidência de trabalho").
+    Depois disso o Stop é disparado duas vezes: a primeira tem de COBRAR (saída 2),
+    a segunda NÃO (o contador `cobrancas_por_fase` está persistido em disco).
+    """
+    caminho_cli = RAIZ_PLUGIN / "ferramentas" / "cli.py"
+    resultado_cli = subprocess.run(
+        [sys.executable, str(caminho_cli), "fase", FASE_DO_GATE],
+        capture_output=True,
+        text=True,
+        cwd=str(raiz),
+        env={**os.environ, "ENGINE_RAIZ": str(raiz)},
+    )
+    linhas_de_log.append(
+        f"          -- transição pela CLI REAL: {FASE_ESPERADA_NO_FIM} -> {FASE_DO_GATE} "
+        f"(cli.py exit={resultado_cli.returncode})"
+    )
+
+    comando = f'{sys.executable} "{caminho_cli}" fase {FASE_DO_GATE}'
+    saida_trilha = _rodar(
+        HOOK_TRILHA,
+        {"tool_name": "Bash", "tool_input": {"command": comando}, "cwd": str(raiz)},
+        raiz,
+    )
+    linhas_de_log.append(
+        f"          -- PostToolUse sobre o comando da própria CLI "
+        f"(exit={saida_trilha.returncode}; a linha vai para a trilha marcada do_motor)"
+    )
+
+    payload_stop = {"cwd": str(raiz), "stop_hook_active": False}
+    primeira = _rodar(HOOK_GATE, payload_stop, raiz)
+    linhas_de_log.append(
+        f"          -- Stop (engine_gate.py) 1ª parada em {FASE_DO_GATE}: "
+        f"exit={primeira.returncode} (esperado 2 = COBROU)"
+    )
+    segunda = _rodar(HOOK_GATE, payload_stop, raiz)
+    linhas_de_log.append(
+        f"          -- Stop (engine_gate.py) 2ª parada em {FASE_DO_GATE}: "
+        f"exit={segunda.returncode} (esperado 0 = não cobra de novo)"
+    )
+    return primeira, segunda
+
+
 def _teto_efetivo(raiz: Path) -> int:
     cfg = config.carregar(raiz)
     bruto = cfg.get("teto_cartao_linhas", TETO_PADRAO)
@@ -248,6 +322,19 @@ def main() -> int:
                     f"(via estado.transicionar + estado.gravar)"
                 )
 
+    # ---- Estado ao fim dos 20 turnos, ANTES de exercitar o gate ----
+    # Capturado aqui de propósito: a etapa do gate avança a fase, e as verificações
+    # (a)-(d) falam do que sobreviveu aos 20 turnos, não do que veio depois.
+    estado_final = estado.carregar(raiz)
+    fase_final = estado_final.get("fase") if estado_final else None
+    objetivo_final = estado_final.get("ciclo", {}).get("objetivo") if estado_final else None
+    # A trilha também é lida ANTES da etapa do gate: aquela etapa acrescenta a linha
+    # da própria CLI, que não é um dos 20 turnos e não entra na contagem de (c).
+    trilha_dados = trilha.ler(raiz)
+
+    # ---- Etapa do gate: o hook mais perigoso do projeto, exercitado de verdade ----
+    saida_gate_primeira, saida_gate_segunda = _exercitar_o_gate(raiz, linhas_de_log)
+
     for linha in linhas_de_log:
         print(linha)
 
@@ -256,20 +343,19 @@ def main() -> int:
     print("== Verificações finais ==")
     falhas: list[str] = []
 
-    estado_final = estado.carregar(raiz)
-    fase_final = estado_final.get("fase") if estado_final else None
-    objetivo_final = estado_final.get("ciclo", {}).get("objetivo") if estado_final else None
-
-    # (a) o cartão do turno 20 ainda traz a fase e o objetivo corretos.
+    # (a) o cartão do turno 20 traz a fase ESPERADA (valor literal) e o objetivo.
+    # Comparar o cartão com `estado.carregar()` seria circular: os dois leem o mesmo
+    # disco, então apagar as transições do meio mantinha esta verificação verde.
     ok_a = bool(
         estado_final
-        and fase_final
-        and objetivo_final
-        and f"Fase: {fase_final}" in cartao_turno_20
-        and objetivo_final in cartao_turno_20
+        and fase_final == FASE_ESPERADA_NO_FIM
+        and objetivo_final == OBJETIVO_CICLO
+        and f"Fase: {FASE_ESPERADA_NO_FIM}" in cartao_turno_20
+        and OBJETIVO_CICLO in cartao_turno_20
     )
     print(
-        f"(a) cartão do turno 20 traz fase ({fase_final}) e objetivo corretos: "
+        f"(a) fase ao fim dos 20 turnos é {FASE_ESPERADA_NO_FIM!r} (lida: {fase_final!r}) "
+        f"e o cartão do turno 20 traz essa fase e o objetivo: "
         f"{'OK' if ok_a else 'FALHOU'}"
     )
     if not ok_a:
@@ -288,7 +374,6 @@ def main() -> int:
 
     # (c) a trilha tem o número esperado de linhas: um registro por turno NÃO
     # bloqueado (ações bloqueadas nunca executam, nunca geram PostToolUse).
-    trilha_dados = trilha.ler(raiz)
     linhas_trilha = trilha_dados.get("linhas", [])
     esperado_trilha = 20 - turnos_bloqueados
     ok_c = len(linhas_trilha) == esperado_trilha
@@ -328,6 +413,28 @@ def main() -> int:
         falhas.append("(e) comando travado não bloqueou")
         if saida_risco_turno_12 is not None and saida_risco_turno_12.stderr:
             print(f"    stderr: {saida_risco_turno_12.stderr.strip()}")
+
+    # (f) o gate COBRA na primeira parada da fase sem evidência (saída 2).
+    ok_f = saida_gate_primeira.returncode == 2 and FASE_DO_GATE in saida_gate_primeira.stderr
+    print(
+        f"(f) gate cobra evidência na 1ª parada em {FASE_DO_GATE} "
+        f"(saída {saida_gate_primeira.returncode}, esperado 2): {'OK' if ok_f else 'FALHOU'}"
+    )
+    if not ok_f:
+        falhas.append("(f) gate não cobrou na primeira parada")
+        if saida_gate_primeira.stderr:
+            print(f"    stderr: {saida_gate_primeira.stderr.strip()}")
+
+    # (g) o gate NÃO cobra de novo na mesma fase (contador persistido em disco).
+    ok_g = saida_gate_segunda.returncode == 0
+    print(
+        f"(g) gate não cobra na 2ª parada na mesma fase "
+        f"(saída {saida_gate_segunda.returncode}, esperado 0): {'OK' if ok_g else 'FALHOU'}"
+    )
+    if not ok_g:
+        falhas.append("(g) gate cobrou duas vezes na mesma fase")
+        if saida_gate_segunda.stderr:
+            print(f"    stderr: {saida_gate_segunda.stderr.strip()}")
 
     print()
     print("FALHAS:", falhas or "nenhuma")

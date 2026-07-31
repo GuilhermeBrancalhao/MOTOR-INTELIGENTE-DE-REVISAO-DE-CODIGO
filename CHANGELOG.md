@@ -1,5 +1,57 @@
 # CHANGELOG
 
+## 2026-07-31 — Fase 2, revisão adversarial
+
+Seis correções apontadas por revisão adversarial da branch `feat/fase-2`, todas
+verificadas por execução antes de serem reportadas. Suíte: **247 → 261 testes
+verdes**; `aceite/fase-2.md` reexecutado e atualizado.
+
+- **O gate nunca cobrava em operação real (CRÍTICO).** O único jeito de entrar em
+  BUILD/TESTE/REVISAO é rodar `ferramentas/cli.py fase <DESTINO>` por um comando de
+  shell — e esse comando dispara o `PostToolUse`, que gravava na trilha uma linha já
+  carimbada com a fase NOVA. O gate lia isso como evidência de trabalho e saía 0
+  sempre. Os 9 testes que passavam mudavam a fase pela API (`estado.transicionar`),
+  nunca pela CLI, e por isso não viam o buraco. `engine_trilha.py` passa a marcar
+  `do_motor: true` nas ações que são chamadas da própria CLI, e `engine_gate.py` as
+  ignora ao procurar evidência da fase. Teste novo reproduz o caminho real
+  (transição pela CLI em subprocesso → `engine_trilha` sobre o mesmo comando → Stop).
+- **Segredo em texto puro na trilha (CRÍTICO).** `psql
+  "postgresql://admin:senha@db.prod/app"` e `curl -H "Authorization: Bearer sk-…"`
+  são `rastreado` (executam) e iam literais para `.engine/trilha.jsonl`, de onde
+  `relatorio.de_fase` e o verbo `retomar` os traziam de volta ao contexto. Nova
+  `trilha.redigir` substitui por `«redigido»` senha embutida em URL, valor de
+  cabeçalho `Authorization:` e os padrões de credencial de `ferramentas/risco.py`
+  (reutilizados por referência — `risco.py` segue selado). Aplicada em `registrar`
+  (o dado não chega ao disco em claro) e também na impressão do relatório e do
+  `retomar` (defesa em profundidade, para trilhas gravadas antes desta correção).
+- **A trilha não separava ciclos (CRÍTICO).** `novo_ciclo` zera o estado mas não a
+  trilha (append-only por contrato), e o relatório do ciclo 2 contava as ações do
+  ciclo 1 — número errado, não só verboso. Cada linha passa a carregar o `ciclo` que
+  a gerou; `de_ciclo`/`de_fase` filtram pelo ciclo corrente e dizem quantas linhas
+  sem id ignoraram. Junto: `_arquivos_tocados` deixou de ser O(n²) e nenhum
+  relatório passa de 300 linhas (corta a listagem e diz quantas omitiu). Medido numa
+  trilha de 50 mil linhas: 23,5 s / 3,1 MB impressos → 0,33 s / 12,9 KB.
+- **Falso positivo grosseiro na detecção de stack.** Um projeto com `main.py` +
+  `dados.db` + `schema.sql` disparava `fastapi`, `postgresql` **e** `sqlite`.
+  `detectar:` passa a aceitar só âncora forte (regra documentada em
+  `cartoes/_catalogo.md`): saíram `main.py`/`dependencies.py` (fastapi), `*.sql`
+  (postgresql), `*.db` (sqlite), `*.cls` (excel-vba, colide com LaTeX e Apex) e
+  `*.ts` solto (typescript). Onde não há âncora forte possível por nome de arquivo,
+  a escolha é NÃO detectar — carregar cartão errado propaga o erro para todo o ciclo.
+- **`agents/sentinela.md` e `agents/designer.md` prometiam o que as `tools` proíbem.**
+  O sentinela dizia invocar `ecc:security-reviewer`/`ecc:performance-optimizer` sem
+  ter ferramenta de despacho; o designer dizia consumir o MCP `open-design` sem ter
+  tool de MCP. O TEXTO dos dois foi ajustado ao que eles realmente fazem. O sentinela
+  **continua sem Bash e sem escrita** de propósito — é a garantia estrutural de que
+  ele não conserta em silêncio; despacho a partir dele fica registrado como item de
+  Fase 3, não como promessa.
+- **`aceite/simular_turnos.py`: verificação tautológica e gate não exercitado.** A
+  verificação (a) comparava o cartão do turno 20 com a fase lida do mesmo disco —
+  apagando as duas transições do meio, continuava verde. Agora afirma o valor
+  literal (`PLANO`), e apagar as transições faz falhar (confirmado por execução).
+  O roteiro ganhou o quinto hook: `engine_gate.py` é disparado pelo caminho real de
+  entrada na fase e verifica que cobra uma vez (f) e não cobra na segunda (g).
+
 ## 2026-07-31 — Fase 2 (elenco)
 
 Completa o elenco do motor: 247 testes verdes (eram 152 ao fim da Fase 1) e

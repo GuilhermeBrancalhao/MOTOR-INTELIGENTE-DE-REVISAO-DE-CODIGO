@@ -85,6 +85,68 @@ def test_ler_linha_corrompida_que_nao_e_objeto_json_vira_aviso(tmp_path):
     assert len(dados["_avisos"]) == 1
 
 
+# --- Revisão adversarial, CRÍTICO 2: segredo nunca chega ao disco em claro ------
+#
+# Os dois comandos abaixo são os que o revisor verificou por execução: ambos são
+# `rastreado` (executam, não travam) e iam literais para a trilha, de onde o
+# relatório de fase e o verbo `retomar` os traziam de volta para o contexto.
+
+
+def _entrada(alvo: str) -> dict:
+    return {
+        "quando": "2026-07-31T10:00:00",
+        "fase": "BUILD",
+        "ferramenta": "Bash",
+        "alvo": alvo,
+        "risco": "rastreado",
+        "regra": "",
+    }
+
+
+def test_registrar_redige_senha_embutida_em_url(tmp_path):
+    comando = 'psql "postgresql://admin:S3nh4Secreta@db.prod:5432/app"'
+    trilha.registrar(tmp_path, _entrada(comando))
+
+    bruto = trilha.caminho(tmp_path).read_text(encoding="utf-8")
+    assert "S3nh4Secreta" not in bruto
+    assert trilha.MARCA_REDIGIDO in bruto
+    # O que não é segredo continua legível: sem isso a trilha perde utilidade.
+    assert "admin" in bruto
+    assert "db.prod" in bruto
+
+
+def test_registrar_redige_valor_do_cabecalho_authorization(tmp_path):
+    segredo = "sk-proj-ABCdefGHIjklMNOpqrs1234567890"
+    comando = f'curl -H "Authorization: Bearer {segredo}" https://api.exemplo/v1/x'
+    trilha.registrar(tmp_path, _entrada(comando))
+
+    bruto = trilha.caminho(tmp_path).read_text(encoding="utf-8")
+    assert segredo not in bruto
+    assert "Bearer" not in bruto
+    assert trilha.MARCA_REDIGIDO in bruto
+    assert "curl" in bruto
+    assert "https://api.exemplo/v1/x" in bruto
+
+
+def test_redigir_cobre_os_padroes_de_chave_conhecida_do_modulo_de_risco():
+    casos = [
+        "AKIA1234567890ABCDEF",
+        "ghp_abcdefghijklmnopqrstuvwxyz0123",
+        "github_pat_abcdefghijklmnopqrstuvwxyz0123456789",
+        "xoxb-1234567890-abcdefghij",
+        "-----BEGIN RSA PRIVATE KEY-----",
+    ]
+    for segredo in casos:
+        redigido = trilha.redigir(f"echo {segredo} >> saida.txt")
+        assert segredo not in redigido, f"não redigiu {segredo!r}"
+        assert trilha.MARCA_REDIGIDO in redigido
+
+
+def test_redigir_nao_mexe_em_comando_sem_credencial():
+    comando = "python -m pytest ferramentas/tests -q"
+    assert trilha.redigir(comando) == comando
+
+
 def test_registrar_nunca_propaga_excecao_com_diretorio_sem_permissao(tmp_path, monkeypatch):
     entrada = {"quando": "1", "fase": "BUILD", "ferramenta": "Bash", "alvo": "a", "risco": "livre", "regra": ""}
 

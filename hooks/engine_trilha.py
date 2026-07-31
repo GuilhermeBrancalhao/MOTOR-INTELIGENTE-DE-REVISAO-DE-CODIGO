@@ -44,6 +44,32 @@ def _agora() -> str:
     return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
 
+#: Marcas de que a ação registrada é uma invocação da PRÓPRIA CLI do ENGINE.
+#: Comparadas contra o texto normalizado (barras para frente, minúsculas), porque no
+#: Windows o comando chega com barra invertida (`ferramentas\cli.py`).
+_MARCAS_DO_MOTOR = ("ferramentas/cli.py", "ferramentas.cli")
+
+
+def _e_do_motor(tool_input: dict, alvo: str) -> bool:
+    """Diz se a ação é uma chamada à CLI do próprio ENGINE.
+
+    Existe por causa do buraco central do gate (`hooks/engine_gate.py`): o único
+    jeito de entrar em BUILD/TESTE/REVISAO é rodar `cli.py fase BUILD` por um
+    comando de shell — e esse comando dispara este hook, que gravava na trilha uma
+    linha JÁ com `fase: BUILD`. A partir daí o gate sempre achava "ação da fase" e
+    nunca cobrava evidência de nada. Evidência de uma fase não pode ser satisfeita
+    pela própria chamada que mudou para essa fase.
+    """
+    candidatos = [alvo, tool_input.get("command")]
+    for texto in candidatos:
+        if not isinstance(texto, str):
+            continue
+        normalizado = texto.replace("\\", "/").lower()
+        if any(marca in normalizado for marca in _MARCAS_DO_MOTOR):
+            return True
+    return False
+
+
 def _alvo(tool_name: str, tool_input: dict) -> str:
     """Extrai um alvo textual legível da ação, para a coluna `alvo` da trilha.
 
@@ -94,14 +120,24 @@ def principal() -> int:
         except Exception:  # noqa: BLE001
             return 0
 
+        alvo = _alvo(tool_name, tool_input)
         entrada = {
             "quando": _agora(),
             "fase": dados.get("fase", "?"),
             "ferramenta": tool_name,
-            "alvo": _alvo(tool_name, tool_input),
+            "alvo": alvo,
             "risco": veredito.nivel,
             "regra": veredito.regra,
+            # Sem o id do ciclo na linha, `novo_ciclo` zerava o estado mas não a
+            # trilha, e o relatório do ciclo 2 contava as ações do ciclo 1 como se
+            # fossem suas. A separação por ciclo tem de estar no DADO, não na
+            # esperança de que alguém apague o arquivo entre um ciclo e outro.
+            "ciclo": str((dados.get("ciclo") or {}).get("id") or ""),
         }
+        if _e_do_motor(tool_input, alvo):
+            # Chave presente só quando é verdadeira: mantém a linha enxuta e deixa
+            # `linha.get("do_motor")` valer como "ação de trabalho de verdade?".
+            entrada["do_motor"] = True
         trilha.registrar(raiz, entrada)
         return 0
     except Exception:  # noqa: BLE001

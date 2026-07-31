@@ -1,6 +1,6 @@
 ---
 tecnologia: typescript
-detectar: ["tsconfig.json", "*.ts", "*.tsx"]
+detectar: ["tsconfig.json", "tsconfig.*.json", "*.tsx"]
 papeis: [arquiteto, implementador, testador, revisor]
 versao: 2026-07-31
 ---

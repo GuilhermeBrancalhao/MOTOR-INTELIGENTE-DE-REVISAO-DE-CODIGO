@@ -158,6 +158,45 @@ def test_cartao_com_underscore_e_ignorado(tmp_path):
     assert resultado == []
 
 
+def test_projeto_ambiguo_nao_dispara_fastapi_postgresql_nem_sqlite(tmp_path):
+    """O falso positivo grosseiro que a revisão adversarial da Fase 2 verificou.
+
+    `main.py` é o nome de arquivo mais comum do Python inteiro, `*.sql` vale para
+    qualquer banco relacional e `*.db` para qualquer arquivo — juntos, disparavam
+    três cartões de uma vez num projeto que pode não usar nenhuma das três
+    tecnologias. Carregar cartão errado propaga o erro para todo código do ciclo.
+    """
+    (tmp_path / "main.py").write_text("print('oi')\n", encoding="utf-8")
+    (tmp_path / "dados.db").write_bytes(b"\x00qualquer coisa binaria")
+    (tmp_path / "schema.sql").write_text("create table x (id int);\n", encoding="utf-8")
+
+    resultado = detectar.cartoes_do_projeto(tmp_path, RAIZ_PLUGIN)
+
+    assert "fastapi" not in resultado, "main.py não é âncora de FastAPI"
+    assert "postgresql" not in resultado, "*.sql não é âncora de PostgreSQL"
+    assert "sqlite" not in resultado, "*.db não é âncora de SQLite"
+    # `python` não é afirmado aqui de propósito: o cartão da Fase 1 detecta por
+    # `**/*.py`, que exige pelo menos um diretório no caminho e não casa um
+    # `main.py` na raiz. É uma lacuna pré-existente do cartão `python`, não efeito
+    # desta correção — a contraprova de que estreitar não virou "nunca detecta"
+    # está no teste seguinte.
+
+
+def test_ancoras_fortes_ainda_detectam_as_tres_tecnologias(tmp_path):
+    """Contraprova do teste acima: estreitar não pode virar "nunca detecta"."""
+    routers = tmp_path / "app" / "routers"
+    routers.mkdir(parents=True)
+    (routers / "usuarios.py").write_text("router = None\n", encoding="utf-8")
+    (tmp_path / "postgresql.conf").write_text("port = 5432\n", encoding="utf-8")
+    (tmp_path / "app.sqlite3").write_bytes(b"\x00")
+
+    resultado = detectar.cartoes_do_projeto(tmp_path, RAIZ_PLUGIN)
+
+    assert "fastapi" in resultado
+    assert "postgresql" in resultado
+    assert "sqlite" in resultado
+
+
 def test_padrao_invalido_e_ignorado_com_seguranca(tmp_path):
     plugin = tmp_path / "plugin"
     (plugin / "cartoes").mkdir(parents=True)

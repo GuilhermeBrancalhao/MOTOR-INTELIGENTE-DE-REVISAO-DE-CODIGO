@@ -1,6 +1,6 @@
 ---
 tecnologia: postgresql
-detectar: ["postgresql.conf", "pg_hba.conf", "*.sql"]
+detectar: ["postgresql.conf", "pg_hba.conf", "pg_ident.conf", ".pgpass"]
 papeis: [arquiteto, implementador, revisor]
 versao: 2026-07-31
 ---
