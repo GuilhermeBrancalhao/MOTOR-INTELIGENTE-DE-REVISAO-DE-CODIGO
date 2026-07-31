@@ -1,4 +1,4 @@
-# Metadados do volume 31. Lido por ferramentas/validar.py e ferramentas/status.py.
+# Metadados do volume 31. Lido por ferramentas/validar.py (status.py ainda nao existe -- pendencia aberta).
 # depende_de esta vazio de proposito: o vizinho mais proximo e o 32-QUALITY (o
 # indicador agregado que consome a pratica descrita aqui), mas 32 ainda nao tem
 # secao escrita -- existe so como pasta com _VOLUME.yml. Apontar depende_de para

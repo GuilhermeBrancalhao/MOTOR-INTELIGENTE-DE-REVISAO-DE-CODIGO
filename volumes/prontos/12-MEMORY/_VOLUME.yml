@@ -1,4 +1,4 @@
-# Metadados do volume 12. Lido por ferramentas/validar.py e ferramentas/status.py.
+# Metadados do volume 12. Lido por ferramentas/validar.py (status.py ainda nao existe -- pendencia aberta).
 # depende_de esta vazio de proposito, e a razao e diferente da de um volume sem
 # vizinhos: o 11-KNOWLEDGE E o vizinho natural (ele cura a base congelada que este
 # volume consome como origem), mas ainda nao tem secao escrita -- existe so como
@@ -12,4 +12,4 @@ tipo: ENGINE
 status: PRONTO
 perecivel: false
 depende_de: []
-escopo:
+escopo: O armazem de decisoes observadas com procedencia por origem e a regra de precedencia entre origens que discordam -- dominancia crua, filtragem de eco e deteccao de contradicao com veredicto justificado.
