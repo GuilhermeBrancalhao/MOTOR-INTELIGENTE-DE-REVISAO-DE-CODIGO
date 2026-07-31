@@ -529,3 +529,50 @@ def test_excecao_interna_resulta_em_travado(tmp_path, monkeypatch):
     resultado = risco.classificar("Bash", {"command": "ls"}, raiz=tmp_path, config=CFG)
     assert resultado.nivel == risco.TRAVADO
     assert resultado.regra == "R0"
+
+
+# Falso positivo achado no PRIMEIRO uso real do motor, numa sessão do Claude Code: um
+# comando de diagnóstico inofensivo travou por R8 porque a string literal 'EXEC(ruim)'
+# casava `\bexec\(` — o padrão era compilado com re.I. Identificador Python é sensível
+# a maiúsculas, então o re.I nunca deveria ter estado ali.
+CAIXA_ALTA_NAO_E_CHAMADA = [
+    ("exec-maiusculo-em-literal", "python -c \"print('EXEC(ruim)')\""),
+    ("eval-maiusculo-em-literal", "python -c \"print('EVAL(x)')\""),
+    ("rmtree-maiusculo-em-literal", "python -c \"print('SHUTIL.RMTREE')\""),
+    ("os-system-maiusculo", "python -c \"print('OS.SYSTEM')\""),
+    ("subprocess-maiusculo", "python -c \"print('SUBPROCESS')\""),
+]
+
+
+@pytest.mark.parametrize(
+    "ident,comando",
+    CAIXA_ALTA_NAO_E_CHAMADA,
+    ids=[c[0] for c in CAIXA_ALTA_NAO_E_CHAMADA],
+)
+def test_caixa_alta_em_literal_nao_trava(ident, comando, tmp_path):
+    """Texto em caixa alta não é chamada Python — não pode travar como se fosse."""
+    resultado = risco.classificar(
+        "Bash", {"command": comando}, raiz=tmp_path, config=CFG
+    )
+    assert resultado.nivel != risco.TRAVADO, f"{ident} é falso positivo: {resultado}"
+
+
+CHAMADA_DE_VERDADE = [
+    ("exec-minusculo", "python -c \"exec('import os')\""),
+    ("eval-minusculo", "python -c \"eval('1+1')\""),
+    ("rmtree-minusculo", "python -c \"import shutil; shutil.rmtree('x')\""),
+    ("os-system-minusculo", "python -c \"import os; os.system('cat /etc/passwd')\""),
+]
+
+
+@pytest.mark.parametrize(
+    "ident,comando",
+    CHAMADA_DE_VERDADE,
+    ids=[c[0] for c in CHAMADA_DE_VERDADE],
+)
+def test_chamada_minuscula_continua_travando(ident, comando, tmp_path):
+    """A correção da caixa não pode ter aberto buraco: o real continua travado."""
+    resultado = risco.classificar(
+        "Bash", {"command": comando}, raiz=tmp_path, config=CFG
+    )
+    assert resultado.nivel == risco.TRAVADO, f"{ident} deveria travar: {resultado}"

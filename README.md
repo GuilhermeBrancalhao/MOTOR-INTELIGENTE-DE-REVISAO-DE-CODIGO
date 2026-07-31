@@ -3,10 +3,6 @@
 Um motor de engenharia persistente para o [Claude Code](https://claude.com/claude-code),
 empacotado como plugin.
 
-> ⚠️ **Hoje só funciona no Windows.** Os hooks são lançados com `py`, o Python Launcher, que
-> não existe em macOS nem Linux. Veja [Outras plataformas](#outras-plataformas) — é uma linha
-> para trocar, mas a troca não foi testada fora do Windows.
-
 ## O problema que ele resolve
 
 Um "modo de engenharia" para o Claude Code costuma ser tentado como **um prompt longo** colado
@@ -70,9 +66,24 @@ O mesmo raciocínio produziu a família **R9**: escrita em `.engine/` é travada
 gravar `{"ativo": false}` no estado desligava os dois hooks — o motor não protegia o próprio
 painel de controle.
 
-## Instalação
+## Requisitos
 
-Requer Claude Code e Python 3.11+.
+- [Claude Code](https://claude.com/claude-code).
+- Python 3.11+, alcançável no PATH como `py` (Windows), `python3` ou `python` — o lançador
+  (`hooks/engine.sh`) tenta os três, nessa ordem.
+- **No Windows, [Git Bash](https://git-scm.com/downloads/win)** (instalado junto com o Git para
+  Windows). Os cinco hooks usam a forma shell do `hooks.json`, que no Windows roda em Git Bash;
+  sem ele, o Claude Code cai para PowerShell, onde `hooks/engine.sh` — um script bash — não
+  executa.
+
+Se nenhum interpretador Python for encontrado no PATH, o hook `PreToolUse` (o classificador de
+risco) **trava toda ação de ferramenta de propósito**, com uma mensagem em stderr explicando o
+motivo. Isso é comportamento desejado, não defeito: um gate de segurança que não consegue rodar
+tem que bloquear, nunca liberar em silêncio. Os outros quatro hooks (`UserPromptSubmit`,
+`PostToolUse`, `PreCompact`, `Stop`), em contraste, saem em silêncio quando não acham Python —
+eles nunca podem atrapalhar o turno do usuário.
+
+## Instalação
 
 ```bash
 git clone https://github.com/AlphaContabilidade/planejamento-do-motor-de-revisao-de-codigo.git ENGINE
@@ -99,15 +110,6 @@ claude plugin details engine
 
 Você deve ver `Skills (1)`, `Agents (9)` e `Hooks (5)`.
 
-### Outras plataformas
-
-`hooks/hooks.json` lança os cinco hooks com `"command": "py"`. Em macOS e Linux, troque `py`
-por `python3` nas cinco entradas. **Isso não foi testado** — e a falha, se houver, é silenciosa
-e perigosa: se o hook não iniciar, o classificador de risco simplesmente não existe, enquanto
-você acredita estar protegido. Antes de confiar nele fora do Windows, rode
-`python aceite/verificar_familias.py`, que dispara os hooks de verdade como subprocesso e
-confirma que as famílias travadas travam.
-
 ## Uso
 
 ```bash
@@ -129,7 +131,7 @@ O motor entra em DESCOBERTA, e a partir daí o cartão de estado aparece a cada 
 python -m pytest ferramentas/tests -v
 ```
 
-266 testes, apenas biblioteca padrão do Python — nenhuma dependência de runtime.
+280 testes, apenas biblioteca padrão do Python — nenhuma dependência de runtime.
 
 Além deles, dois scripts de aceite disparam os hooks de verdade como subprocesso:
 
@@ -151,8 +153,10 @@ e uma compactação chamando os hooks reais, o que demonstra a **mecânica** —
 sessão. Até que isso seja verificado, trate "sobrevive à compactação" como projeto, não como
 fato observado.
 
-Também pendente: os quatro cenários de aceite com projetos-cobaia, e o suporte real a
-plataformas não-Windows.
+Também pendente: os quatro cenários de aceite com projetos-cobaia. O lançador
+(`hooks/engine.sh`) tem suíte automatizada (`ferramentas/tests/test_lancador.py`) cobrindo os
+cenários de PATH via subprocesso, mas **nunca rodou numa máquina macOS ou Linux de verdade** —
+só sob Git Bash no Windows, onde a forma shell também roda.
 
 ## Documentação
 

@@ -5,8 +5,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "py",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/engine_risco.py"]
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh\" --travar-sem-python \"${CLAUDE_PLUGIN_ROOT}/hooks/engine_risco.py\"",
+            "shell": "bash"
           }
         ]
       }
@@ -16,8 +16,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "py",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/engine_trilha.py"]
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh\" \"${CLAUDE_PLUGIN_ROOT}/hooks/engine_trilha.py\"",
+            "shell": "bash"
           }
         ]
       }
@@ -27,8 +27,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "py",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/engine_contexto.py"]
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh\" \"${CLAUDE_PLUGIN_ROOT}/hooks/engine_contexto.py\"",
+            "shell": "bash"
           }
         ]
       }
@@ -38,8 +38,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "py",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/engine_salvar.py"]
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh\" \"${CLAUDE_PLUGIN_ROOT}/hooks/engine_salvar.py\"",
+            "shell": "bash"
           }
         ]
       }
@@ -49,8 +49,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "py",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/engine_gate.py"]
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh\" \"${CLAUDE_PLUGIN_ROOT}/hooks/engine_gate.py\"",
+            "shell": "bash"
           }
         ]
       }

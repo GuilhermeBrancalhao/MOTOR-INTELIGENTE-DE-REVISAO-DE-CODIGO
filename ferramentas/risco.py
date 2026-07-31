@@ -160,12 +160,19 @@ _CANO_INTERPRETE = re.compile(
     re.I,
 )
 _PY_INLINE = re.compile(r"\bpython[0-9.]*\s+-c\s", re.I)
+#: Chamadas perigosas dentro de um `python -c`.
+#:
+#: SEM `re.I`, de propósito. Estes são identificadores Python, e identificador Python é
+#: sensível a maiúsculas: `SHUTIL.RMTREE` não é chamada nenhuma, é texto. Casar sem
+#: distinguir caixa produzia falso positivo em prosa e em literal de string — o caso real
+#: que expôs isso foi a string `'EXEC(ruim)'` dentro de um comando de diagnóstico
+#: inofensivo, travado por `\beval\(|\bexec\(`. Falso positivo frequente é o que leva o
+#: humano a aprovar no automático, e aprovação automática anula a proteção inteira.
 _PY_PERIGO = re.compile(
     r"shutil\.rmtree|shutil\.move|os\.remove|os\.unlink|os\.rmdir|subprocess"
     r"|requests\.(post|put|delete|patch)|urlopen"
     r"|os\.system|os\.popen|os\.exec\w*|os\.spawn\w*"
-    r"|\beval\(|\bexec\(|Path\(.*\)\.unlink",
-    re.I,
+    r"|\beval\(|\bexec\(|Path\(.*\)\.unlink"
 )
 
 #: Nome do diretório do painel de controle do motor. Estado e configuração vivem
