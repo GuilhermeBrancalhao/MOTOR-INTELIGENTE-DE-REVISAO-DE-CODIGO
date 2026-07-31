@@ -27,8 +27,7 @@ conhecimento por tecnologia, e portas de segurança graduadas por risco. Vale em
 projeto do usuário.
 
 **Não é:** um substituto do ECC ou do superpowers (ambos permanecem instalados e são usados
-como mão de obra); um gerador de documentação; e não tem relação com o acervo
-AI-ENGINEERING-OS, que é outro projeto, já construído e selado.
+como mão de obra); nem um gerador de documentação.
 
 **Fronteira de projeto.** O ENGINE vive em repositório próprio (`~/Desktop/ENGINE`). Nada
 do seu desenvolvimento cria, edita ou apaga arquivo de outro projeto do usuário.
@@ -38,7 +37,7 @@ do seu desenvolvimento cria, edita ou apaga arquivo de outro projeto do usuário
 | # | Decisão | Alternativas descartadas | Razão |
 |---|---|---|---|
 | D1 | Motor próprio completo: agents, hooks, commands e config próprios | roteador fino sobre o ECC; só um revisor de código | controle total do comportamento; escolha explícita do usuário, ciente do custo |
-| D2 | Repositório próprio empacotado como plugin, instalado em escopo de usuário | escrever direto em `~/.claude`; dentro do AI-ENGINEERING-OS; no repositório de conciliação | versionável, testável, desinstalável; não mistura assunto com outros projetos |
+| D2 | Repositório próprio empacotado como plugin, instalado em escopo de usuário | escrever direto em `~/.claude`; hospedar dentro de um projeto já existente | versionável, testável, desinstalável; não mistura assunto com outros projetos |
 | D3 | Autonomia **graduada por risco** | confirmação por fase; confirmação por arquivo existente; autônomo até a entrega | autonomia real no que é barato desfazer, trava no que não é; confirmação por arquivo vira aprovação automática, que é pior que não perguntar |
 | D4 | 9 papéis + cartões de tecnologia | um agente por domínio (40+); mínimo de 4 papéis | 9 arquivos vivos em vez de 40; tecnologia nova custa 1 cartão de ~60 linhas |
 | D5 | O ciclo é sempre do motor; ECC/superpowers executam **dentro** de uma fase | isolamento total; coexistência sem regra; sessão dedicada | aproveita os reviewers já instalados sem ceder o comando do ciclo |
@@ -383,6 +382,7 @@ Registrado para não ser reaberto por esquecimento:
 
 - **Um agente por tecnologia** (40+). Substituído por cartões (D4).
 - **A lista de 42 especializações como conteúdo escrito.** É prosa, não capacidade.
-- **Qualquer coisa do AI-ENGINEERING-OS.** Projeto distinto, já construído e selado.
+- **Conteúdo pertencente a outro projeto do autor.** Cada projeto é um assunto; este não
+  absorve nem descreve nenhum outro.
 - **Interface gráfica ou painel web para o motor.** Só depois de as três camadas de
   verificação estarem verdes.
