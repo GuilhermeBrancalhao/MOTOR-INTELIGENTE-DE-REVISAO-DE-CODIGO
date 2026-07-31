@@ -46,9 +46,18 @@ justificativa de cada decisão, e **espere** o usuário. É a única parada por 
 
 ## Papéis
 
-Despache o subagente do papel correspondente à fase (`agents/`): `arquiteto` no PLANO,
-`implementador` no BUILD, `revisor` na REVISAO, `documentador` no DOC. Antes de despachar,
-leia os cartões de `cartoes/` relevantes à stack e passe o conteúdo ao subagente.
+Despache o subagente do papel correspondente à fase (`agents/`). Antes de despachar, leia
+os cartões de `cartoes/` relevantes à stack e passe o conteúdo ao subagente.
+
+| Fase | Papel |
+|---|---|
+| DESCOBERTA | `descobridor` |
+| ANALISE / EVOLUCAO | `cartografo` |
+| PLANO | `arquiteto` (e `designer`, quando houver direção visual a decidir) |
+| BUILD | `implementador` |
+| TESTE | `testador` |
+| REVISAO | `revisor` e `sentinela` |
+| DOC | `documentador` |
 
 ## Quando o hook travar uma ação
 
