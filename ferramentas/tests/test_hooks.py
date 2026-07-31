@@ -239,3 +239,96 @@ def test_avisos_de_config_tambem_respeitam_o_teto():
     cfg = {"teto_cartao_linhas": 5, "_avisos": [f"aviso {i}" for i in range(50)]}
     cartao = contexto._com_avisos("linha 1\nlinha 2\nlinha 3", cfg)
     assert len(cartao.splitlines()) <= cfg["teto_cartao_linhas"]
+
+
+# --- Correção: piso do teto do cartão garante cabeçalho e invariantes ------------
+#
+# `linhas[:teto]` com `teto` negativo remove as últimas N linhas em vez de
+# limitar a N; e mesmo um teto pequeno positivo (< 9) cortava cabeçalho e/ou
+# rodapé antes da correção. O piso `MINIMO_CARTAO = 9` (3 de cabeçalho + 6 de
+# rodapé) garante que fase, objetivo e os cinco invariantes sempre cabem.
+
+
+@pytest.mark.parametrize("teto", [0, -5, 3])
+def test_teto_abaixo_do_piso_produz_cartao_com_exatamente_9_linhas(teto):
+    from ferramentas import config
+
+    contexto = _importar_contexto()
+    cfg = dict(config.PADRAO)
+    cfg["teto_cartao_linhas"] = teto
+    dados = {
+        "ativo": True,
+        "fase": "DESCOBERTA",
+        "ciclo": {"objetivo": "objetivo do ciclo", "modo": "normal"},
+        "cartoes": [],
+        "decisoes": [{"o_que": f"decisao {i}", "porque": "motivo"} for i in range(50)],
+        "diffs_pendentes": [],
+        "pendencias": [],
+    }
+    cartao = contexto.montar_cartao(dados, cfg)
+    linhas = cartao.splitlines()
+    assert len(linhas) == 9
+    assert "DESCOBERTA" in cartao
+    assert "objetivo do ciclo" in cartao
+    for invariante in contexto.INVARIANTES:
+        assert invariante in cartao
+
+
+def test_teto_nao_numerico_cai_no_default_sem_levantar_excecao():
+    from ferramentas import config
+
+    contexto = _importar_contexto()
+    cfg = dict(config.PADRAO)
+    cfg["teto_cartao_linhas"] = "quarenta"
+    dados = {
+        "ativo": True,
+        "fase": "BUILD",
+        "ciclo": {"objetivo": "objetivo qualquer", "modo": "normal"},
+        "cartoes": [],
+        "decisoes": [],
+        "diffs_pendentes": [],
+        "pendencias": [],
+    }
+    cartao = contexto.montar_cartao(dados, cfg)
+    assert len(cartao.splitlines()) <= 40
+    for invariante in contexto.INVARIANTES:
+        assert invariante in cartao
+
+
+def test_teto_12_com_muitas_decisoes_e_diffs_mantem_os_cinco_invariantes():
+    from ferramentas import config
+
+    contexto = _importar_contexto()
+    cfg = dict(config.PADRAO)
+    cfg["teto_cartao_linhas"] = 12
+    dados = {
+        "ativo": True,
+        "fase": "BUILD",
+        "ciclo": {"objetivo": "objetivo qualquer", "modo": "normal"},
+        "cartoes": [],
+        "decisoes": [{"o_que": f"decisao {i}", "porque": "motivo"} for i in range(50)],
+        "diffs_pendentes": [f"arquivo_{i}.py" for i in range(50)],
+        "pendencias": [],
+    }
+    cartao = contexto.montar_cartao(dados, cfg)
+    linhas = cartao.splitlines()
+    assert len(linhas) <= 12
+    for invariante in contexto.INVARIANTES:
+        assert invariante in cartao
+
+
+def test_avisos_com_teto_apertado_e_muitas_decisoes_fica_dentro_do_teto():
+    contexto = _importar_contexto()
+    cfg = {"teto_cartao_linhas": 3, "_avisos": [f"aviso {i}" for i in range(50)]}
+    dados = {
+        "ativo": True,
+        "fase": "DESCOBERTA",
+        "ciclo": {"objetivo": "objetivo qualquer", "modo": "normal"},
+        "cartoes": [],
+        "decisoes": [{"o_que": f"decisao {i}", "porque": "motivo"} for i in range(50)],
+        "diffs_pendentes": [f"arquivo_{i}.py" for i in range(50)],
+        "pendencias": [],
+    }
+    cartao = contexto.montar_cartao(dados, cfg)
+    cartao = contexto._com_avisos(cartao, cfg)
+    assert len(cartao.splitlines()) <= cfg["teto_cartao_linhas"]

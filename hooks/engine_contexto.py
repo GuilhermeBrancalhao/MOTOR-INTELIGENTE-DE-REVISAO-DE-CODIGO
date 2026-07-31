@@ -49,6 +49,28 @@ INVARIANTES = (
     "5. Toda decisão técnica sai com a justificativa junto.",
 )
 
+# Piso do teto de linhas do cartão: as 3 linhas de cabeçalho (título, fase/modo,
+# objetivo) mais as 6 do rodapé (título "Invariantes:" + os 5 invariantes). Um
+# teto configurado abaixo disso é erro de configuração, não instrução — por isso
+# vira piso, não é obedecido ao pé da letra.
+MINIMO_CARTAO = 9
+
+
+def _teto_efetivo(cfg: dict) -> int:
+    """Lê `cfg['teto_cartao_linhas']`, normaliza pra inteiro com segurança (valor
+    não numérico cai no default 40) e aplica o piso `MINIMO_CARTAO`.
+
+    Sem isso, `linhas[:teto]` com `teto` negativo vira "remova as últimas N
+    linhas" em vez de "limite a N" — e um teto positivo mas menor que o piso
+    corta cabeçalho e/ou rodapé, que são inegociáveis.
+    """
+    bruto = cfg.get("teto_cartao_linhas", 40)
+    try:
+        teto = int(bruto)
+    except (TypeError, ValueError):
+        teto = 40
+    return max(teto, MINIMO_CARTAO)
+
 
 def _cortar(texto: str, limite: int) -> str:
     """Colapsa espaços e corta com reticência — protege o teto de linhas de um
@@ -58,13 +80,16 @@ def _cortar(texto: str, limite: int) -> str:
 
 
 def montar_cartao(dados: dict, cfg: dict) -> str:
-    """Monta o cartão de estado, sempre dentro do teto de `cfg['teto_cartao_linhas']`.
+    """Monta o cartão de estado, sempre dentro do teto efetivo de linhas.
 
-    Cabeçalho (fase/modo/objetivo) e rodapé (invariantes) são fixos — eles carregam
-    a informação que nunca pode ser cortada. O corpo (cartões, decisões, diffs
-    pendentes, pendências) some primeiro quando o orçamento de linhas aperta.
+    O teto de `cfg['teto_cartao_linhas']` passa por `_teto_efetivo`: normalizado
+    pra inteiro (valor não numérico cai no default 40) e nunca abaixo do piso
+    `MINIMO_CARTAO`. Com o piso garantido, cabeçalho (fase/modo/objetivo) e
+    rodapé (invariantes) NUNCA são cortados — são inegociáveis. Quem cede quando
+    o orçamento de linhas aperta é o corpo (cartões, decisões, diffs pendentes,
+    pendências), que pode ficar vazio.
     """
-    teto = int(cfg.get("teto_cartao_linhas", 40))
+    teto = _teto_efetivo(cfg)
     ciclo = dados.get("ciclo", {})
     cabecalho = [
         "== ENGINE ativo ==",
