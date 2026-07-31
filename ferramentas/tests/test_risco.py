@@ -146,47 +146,15 @@ def test_familias_travadas(ident, ferramenta, entrada, regra, tmp_path):
     assert resultado.regra == regra
 
 
+# SÉTIMA RODADA — a categoria "comando de shell livre" foi ELIMINADA. Todos os casos
+# de comando que moravam aqui migraram, com a linha preservada, para `RASTREADOS`.
+# `livre` sobrou só para ferramenta de ARQUIVO, onde o alvo é um caminho inspecionável
+# e não uma linguagem inteira: ler o que não é segredo, escrever arquivo novo,
+# escrever sob `tests/`.
 LIVRES = [
-    # Uma correção anterior alargou a âncora de R3 para `(^|[\s;|&'"])` só para
-    # pegar `bash -c "rm -rf x"`. Isso travava buscas de texto corriqueiras que
-    # apenas mencionam `rm`/`erase` dentro de aspas. A correção certa reverteu a
-    # âncora e tratou execução indireta extraindo e reclassificando o payload —
-    # estes casos provam que o falso positivo morreu sem reabrir o buraco original.
-    # (`git-log-grep-rm` e `git-log-grep-rm-bugfix` migraram para RASTREADOS: a regra
-    # nova recusa `=` em argumento de git, que é o que mata `--output=` e
-    # `-c chave=valor` sem enumerar a família. `git log --grep=` executa igual, só
-    # passa a aparecer no relatório.)
-    ("grep-rm-em-string", "Bash", {"command": 'grep "rm this" arquivo.txt'}),
-    ("findstr-erase-em-string", "Bash", {"command": 'findstr "erase old logic" notas.txt'}),
-    # Provam que as correções dos CRÍTICOS A e B não reabriram falso positivo:
-    # texto literal em `echo` continua livre, e cano para um comando qualquer
-    # (não um interpretador) continua livre.
-    ("echo-texto-literal", "Bash", {"command": 'echo "texto literal sem risco"'}),
-    # Sob a lista de permissões, LIVRE deixa de ser omissão e passa a ser prova: os
-    # casos abaixo provam que o dia a dia (ler repositório, listar, buscar, rodar a
-    # suíte) continua sem atrito depois da inversão.
-    ("permitido-git-status", "Bash", {"command": "git status --short"}),
-    ("permitido-git-log", "Bash", {"command": "git log --oneline"}),
-    ("permitido-pytest", "Bash", {"command": "pytest -q"}),
-    ("permitido-ls", "Bash", {"command": "ls -la"}),
-    ("permitido-grep", "Bash", {"command": 'grep "rm this" a.txt'}),
-    ("permitido-cat", "Bash", {"command": "cat README.md"}),
-    # BLOQUEIO 1/2 (git -c / flags de saída disfarçadas de leitura): provam que a
-    # correção não pegou o uso normal de `sort`, `uniq`, `find` e `git status`.
-    # (`permitido-sort`, `permitido-uniq` e `permitido-find` migraram para
-    # RASTREADOS: os três saíram da lista mínima, porque cada um escreve por flag
-    # ou é apelido de cmdlet rico. `git status` continua livre logo acima.)
-    # QUINTA RODADA — o essencial do dia a dia sobreviveu ao encolhimento da lista.
-    # Sem estes oito, a inversão teria trocado risco por atrito, e atrito diário é
-    # o que faz um humano desligar a trava.
-    ("cotidiano-git-status", "Bash", {"command": "git status --short"}),
-    ("cotidiano-git-log", "Bash", {"command": "git log --oneline"}),
-    ("cotidiano-git-diff", "Bash", {"command": "git diff"}),
-    ("cotidiano-pytest", "Bash", {"command": "pytest -q"}),
-    ("cotidiano-ls", "Bash", {"command": "ls -la"}),
-    ("cotidiano-cat", "Bash", {"command": "cat README.md"}),
-    ("cotidiano-grep", "Bash", {"command": "grep padrao arquivo.py"}),
-    ("cotidiano-pwd", "Bash", {"command": "pwd"}),
+    ("arquivo-leitura-comum", "Read", {"file_path": "README.md"}),
+    ("arquivo-novo", "Write", {"file_path": "modulo_novo.py"}),
+    ("arquivo-de-teste", "Write", {"file_path": "tests/test_novo.py"}),
 ]
 
 
@@ -196,9 +164,17 @@ def test_familias_livres(ident, ferramenta, entrada, tmp_path):
     assert resultado.nivel == risco.LIVRE, f"{ident} deveria ficar livre, veio {resultado}"
 
 
-# O default da política nova. Nada aqui é perigoso o bastante para travar, e nada é
-# comprovadamente inócuo o bastante para liberar: executa e fica no relatório.
+# O default da política nova, e para comando de shell o ÚNICO destino que não é
+# travado. Nada aqui é perigoso o bastante para travar; nada aqui é liberado, porque
+# comando de shell não é mais liberável. Executa e fica no relatório.
 RASTREADOS = [
+    # --- O dia a dia, agora rastreado (novos casos desta rodada) ---
+    # Não estão aqui por serem suspeitos: estão porque a categoria `livre` para
+    # comando deixou de existir. São a prova de que o caminho normal ainda executa.
+    ("shell-echo-literal", "Bash", {"command": 'echo "texto literal"'}),
+    ("shell-git-status", "Bash", {"command": "git status --short"}),
+    ("shell-pytest", "Bash", {"command": "pytest -q"}),
+    ("shell-ls", "Bash", {"command": "ls -la"}),
     # Saiu de LIVRES na inversão: `ps` é leitura, mas não está na lista de permitidos
     # e a lista não se amplia por palpite. Rastreado é exatamente o lugar certo.
     ("cano-ps-grep-python", "Bash", {"command": "ps aux | grep python"}),
@@ -254,6 +230,39 @@ RASTREADOS = [
     # `remote` e `branch` liam o repositório na maioria das formas e MUTAVAM em duas.
     ("git-remote-set-url", "Bash", {"command": "git remote set-url origin https://evil"}),
     ("git-branch-delete", "Bash", {"command": "git branch -D main"}),
+    # --- MIGRADOS DE `LIVRES` NA SÉTIMA RODADA (linhas preservadas, nível mudou) ---
+    # Todos eram comando de shell, e comando de shell não é mais liberável. Nenhum
+    # deles ficou mais perigoso; o que mudou é que a prova de inocuidade que os
+    # liberava era uma lista, e lista de comando permitido não converge — cada rodada
+    # de revisão achou um caminho novo para `livre` com ação destrutiva usando nomes
+    # que estavam na lista. Executam igual; passam a aparecer no relatório da fase.
+    #
+    # Uma correção anterior alargou a âncora de R3 para `(^|[\s;|&'"])` só para
+    # pegar `bash -c "rm -rf x"`. Isso travava buscas de texto corriqueiras que
+    # apenas mencionam `rm`/`erase` dentro de aspas. A correção certa reverteu a
+    # âncora e tratou execução indireta extraindo e reclassificando o payload —
+    # estes casos provam que o falso positivo morreu sem reabrir o buraco original
+    # (continuam RASTREADOS, não TRAVADOS).
+    ("grep-rm-em-string", "Bash", {"command": 'grep "rm this" arquivo.txt'}),
+    ("findstr-erase-em-string", "Bash", {"command": 'findstr "erase old logic" notas.txt'}),
+    # A válvula do emissor inerte (`echo`/`printf`) era a última coisa capaz de
+    # liberar um segmento por prefixo, e por isso uma classe inteira de bypass. Texto
+    # literal continua executando; só deixa de ser invisível no relatório.
+    ("echo-texto-literal", "Bash", {"command": 'echo "texto literal sem risco"'}),
+    ("permitido-git-status", "Bash", {"command": "git status --short"}),
+    ("permitido-git-log", "Bash", {"command": "git log --oneline"}),
+    ("permitido-pytest", "Bash", {"command": "pytest -q"}),
+    ("permitido-ls", "Bash", {"command": "ls -la"}),
+    ("permitido-grep", "Bash", {"command": 'grep "rm this" a.txt'}),
+    ("permitido-cat", "Bash", {"command": "cat README.md"}),
+    ("cotidiano-git-status", "Bash", {"command": "git status --short"}),
+    ("cotidiano-git-log", "Bash", {"command": "git log --oneline"}),
+    ("cotidiano-git-diff", "Bash", {"command": "git diff"}),
+    ("cotidiano-pytest", "Bash", {"command": "pytest -q"}),
+    ("cotidiano-ls", "Bash", {"command": "ls -la"}),
+    ("cotidiano-cat", "Bash", {"command": "cat README.md"}),
+    ("cotidiano-grep", "Bash", {"command": "grep padrao arquivo.py"}),
+    ("cotidiano-pwd", "Bash", {"command": "pwd"}),
 ]
 
 
@@ -266,6 +275,40 @@ def test_default_e_rastreado(ident, ferramenta, entrada, tmp_path):
         f"{ident} deveria ficar rastreado, veio {resultado}"
     )
     assert resultado.motivo, f"{ident} precisa dizer por que não foi liberado"
+
+
+#: Comandos cotidianos e inofensivos. Nenhum é perigoso; nenhum pode ser `livre`.
+COTIDIANOS_INOFENSIVOS = [
+    "pwd",
+    "whoami",
+    "date",
+    "ls -la",
+    "cat README.md",
+    "grep x a.py",
+    "git status",
+    "git log --oneline",
+    "pytest -q",
+    "echo oi",
+]
+
+
+def test_nenhum_comando_de_shell_e_livre(tmp_path):
+    """A trava da política: comando de shell nunca é `livre`, nem o mais inocente.
+
+    Este teste existe para quebrar se alguém reintroduzir uma lista de comandos
+    permitidos sem perceber. Sete rodadas de revisão adversarial acharam, uma por
+    rodada, um caminho novo para `livre` com ação destrutiva usando só nomes que
+    estavam na lista — porque cada comando permitido é ele próprio uma linguagem.
+    A categoria inteira foi eliminada; reabri-la é uma mudança de política, e tem
+    de custar este teste vermelho.
+    """
+    for comando in COTIDIANOS_INOFENSIVOS:
+        resultado = risco.classificar(
+            "Bash", {"command": comando}, raiz=tmp_path, config=CFG
+        )
+        assert resultado.nivel != risco.LIVRE, (
+            f"`{comando}` voltou a ser LIVRE: a lista de permitidos foi reintroduzida"
+        )
 
 
 def test_segredo_trava_mesmo_em_arquivo_novo(tmp_path):

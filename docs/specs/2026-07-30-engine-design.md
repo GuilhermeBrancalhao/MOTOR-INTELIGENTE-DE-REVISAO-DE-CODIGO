@@ -150,43 +150,34 @@ qualquer outra linha de código.
 
 | Nível | Critério | Comportamento do hook |
 |---|---|---|
-| **travado** | casa uma das famílias da lista fechada abaixo (R1–R8) | **bloqueia** e devolve o motivo; o motor pergunta ao usuário com opções clicáveis |
-| **livre** | **prova positiva de inocuidade**: leitura de arquivo que não é segredo; escrita em caminho inexistente em disco; escrita sob `tests/`; e, para comando, o segmento inteiro casar a **lista de permissões** (`COMANDOS_LIVRES` + `SUBCOMANDOS_GIT_LIVRES`, sem substituição de comando, sem redirecionamento, sem argumento de segredo) | permite; registra na trilha |
-| **rastreado** | **DEFAULT** — tudo que não é comprovadamente travado nem comprovadamente livre: edição de arquivo que já existe, ferramenta desconhecida, comando ausente, e qualquer comando fora da lista de permissões | permite; acrescenta o caminho a `diffs_pendentes`; o motivo entra no relatório de fim de fase |
+| **travado** | casa uma das famílias da lista fechada abaixo (R1–R8), inclusive a checagem de segredo, o cano para interpretador e a substituição de comando dentro do argumento — para **comando** e para **arquivo** | **bloqueia** e devolve o motivo; o motor pergunta ao usuário com opções clicáveis |
+| **livre** | só **ferramenta de arquivo**: leitura de arquivo que não é segredo; escrita em caminho inexistente em disco; escrita sob `tests/` ou com nome `test_*`. **Nenhum comando de shell é livre, nunca** | permite; registra na trilha |
+| **rastreado** | **DEFAULT** — edição de arquivo que já existe, ferramenta desconhecida, comando ausente, e **todo comando de shell que não travou** | permite; acrescenta o caminho a `diffs_pendentes`; o motivo entra no relatório de fim de fase |
 
-**O default é `rastreado`, e isso é uma inversão deliberada da arquitetura.** A versão
-original classificava por lista de proibições: o que não casasse uma família proibida saía
-`livre`. Quatro rodadas de revisão sobre essa versão acharam **doze bypasses**, e a quarta
-rodada — já com onze correções aplicadas — ainda achou cinco novos, todos confirmados por
-execução: quebra de linha não separava segmentos (`echo ok⏎rm -rf /dados`), substituição de
-comando só era checada dentro de `echo` e do `-m` do git (`ls $(rm -rf /dados)`), os
-interpretadores do Windows não eram reconhecidos (`cmd /c`, `pwsh -c`,
-`powershell -EncodedCommand`) num projeto que roda em Windows, opção global despistava o
-padrão do git (`git -C /repo push --force`), e ler segredo pelo shell escapava
-(`cat .env`). A conclusão não é que faltou um padrão: é que **lista de proibições não
-converge** — o conjunto de vetores é aberto, e cada correção só prova que o próximo ainda
-não foi imaginado. Com a inversão, um vetor que ninguém previu deixa de ser livre **por não
-estar na lista de permitidos**, sem precisar ter sido previsto. O preço é aceitar `rastreado`
-como resposta normal para comando legítimo porém não enumerado: ele executa, e aparece no
-relatório.
+**Comando de shell tem duas saídas, e só duas: `travado` ou `rastreado`.** Não existe
+caminho que leve um comando a `livre` — nem `pwd`, nem `echo`, nem `git status`.
 
-**A lista de permissões é MÍNIMA, e permite comando + forma de argumento.** Permitir por
-nome de comando não fecha: cada comando permitido é ele próprio uma linguagem, e a quinta
-revisão achou cinco caminhos para `livre` com ação destrutiva usando só nomes de leitura
-(`git diff --output=<arquivo>`, `ls | where {…::Delete…}` no PowerShell,
-`find . -okdir mv {} /tmp \;`, `git remote set-url`, `cat $HOME/.ssh/id_rsa`). A resposta é
-inverter mais um nível, em vez de enumerar as flags perigosas de cada programa. `COMANDOS_LIVRES`
-encolheu para o mínimo (saíram `find`, `sort`, `uniq`, `where`, `diff`, `node`, `npm`;
-`SUBCOMANDOS_GIT_LIVRES` perdeu `remote` e `branch`), o PowerShell passou a ter lista própria e
-curta — sem nenhum apelido ambíguo, porque lá `where`/`diff`/`sort` são cmdlets que rodam bloco
-de script com .NET arbitrário —, e nenhum segmento é livre se algum argumento tiver `$`, crase,
-`{}`, `[]`, `::`, `|`, `>`, `<`, `&`, `;` ou flag de saída (`-o…`, `--out…`, `-f…`, `--file…`);
-em `git`, qualquer argumento com `=` também desqualifica, o que mata `--output=` e
-`-c chave=valor` sem precisar enumerá-los. Os padrões de segredo cobrem agora chave privada
-(`id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, `*.ppk`, `*.p8`), credencial de registro
-(`.npmrc`, `.netrc`, `.pypirc`), token (`*token*`) e cofre (`*.jks`, `*.keystore`). O custo de
-encolher é quase nulo — **`rastreado` é seguro**: custa uma linha no relatório de fim de fase,
-não um estrago —, enquanto o custo de manter a lista generosa é ilimitado.
+O motivo é estrutural, não uma flag esquecida. As versões anteriores tentaram liberar
+comando de três jeitos: lista de proibições, depois lista de nomes permitidos, depois lista
+de nomes **mais** forma de argumento. **Sete rodadas de revisão adversarial atacaram essas
+listas e, a cada rodada, acharam um caminho novo para `livre` com ação destrutiva** — a
+última foi `git diff --output=/home/user/.bashrc`, que sobrescreve arquivo arbitrário com o
+nome de um comando de leitura, e o apelido `where` do PowerShell, que é `Where-Object` e
+roda .NET arbitrário dentro de um bloco de script. A causa é que **cada comando permitido é
+ele próprio uma linguagem**, com flags, apelidos e formas de argumento que nenhuma lista
+enumera até o fim. Enquanto a categoria existir, existe a próxima rodada. Eliminar a
+categoria fecha a família inteira de uma vez — incluindo o emissor inerte (`echo`/`printf`),
+que era a última válvula capaz de liberar um segmento só por reconhecer o prefixo.
+
+**O custo aceito é o relatório de fim de fase ficar mais longo**: todo comando executado
+aparece nele, do `pytest -q` ao `ls -la`, e o humano lê uma lista maior ao fechar a fase. É
+uma troca deliberada — `rastreado` custa uma linha de relatório; `livre` errado custa um
+estrago irreversível. Nada deixa de executar: `rastreado` permite.
+
+`ferramentas/tests/test_risco.py::test_nenhum_comando_de_shell_e_livre` é a trava desta
+decisão: percorre dez comandos cotidianos inofensivos e falha se algum voltar a ser `livre`.
+Reintroduzir uma lista de permitidos é uma mudança de política, e tem de custar esse teste
+vermelho.
 
 **Precedência.** Uma ação é avaliada contra os três níveis e recebe **o mais restritivo que
 casar**. Criar um arquivo novo chamado `.env` é travado, não livre; rodar `pytest` num
@@ -199,7 +190,7 @@ rebaixa um casamento de nível mais alto.
 2. Git que sai da máquina ou reescreve história: `push`, `push --force`, `reset --hard`, `rebase`, `clean -fd`, `checkout --` sobre arquivo modificado.
 3. Deleção: `rm`, `rmdir`, `Remove-Item`, `del`, e a ferramenta de deleção de arquivo.
 4. Banco: `DROP`, `TRUNCATE`, `ALTER TABLE`, `DELETE FROM` sem `WHERE`, execução de migração.
-5. Segredo: leitura **ou** escrita em `.env`, `*.pfx`, `*.pem`, `*.key`, `credentials*`, `*_secret*`; e qualquer conteúdo que case com padrões de chave conhecidos (`sk-`, `ghp_`, `AKIA`, JWT).
+5. Segredo: leitura **ou** escrita em `.env`, `*.pfx`, `*.pem`, `*.key`, `credentials*`, `*_secret*`, chave privada (`id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, `*.ppk`, `*.p8`), credencial de registro (`.npmrc`, `.netrc`, `.pypirc`), token (`*token*`) e cofre (`*.jks`, `*.keystore`); e qualquer conteúdo que case com padrões de chave conhecidos (`sk-`, `ghp_`, `AKIA`, JWT).
 6. Deploy e infraestrutura: `docker push`, `kubectl apply`, `terraform apply`, `gh workflow run`, `npm publish`, `twine upload`.
 7. Instalação global: `npm i -g`, `pip install` fora de venv, `winget install`, `choco install`.
 

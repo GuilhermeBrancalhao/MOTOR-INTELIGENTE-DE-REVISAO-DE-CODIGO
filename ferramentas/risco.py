@@ -3,32 +3,33 @@
 Regra de ouro: na dúvida, **RASTREADO** — nunca LIVRE. Este módulo nunca libera por
 falha e nunca libera por omissão.
 
-**Arquitetura: lista de permissões, não lista de proibições.** As famílias R1–R8
-continuam decidindo o que sobe para TRAVADO, mas o que sobra **não** é livre: só é
-livre o que casa com uma lista curta e explícita de operações comprovadamente
-inócuas (`COMANDOS_LIVRES`). Tudo o mais executa e fica no relatório.
+**Comando de shell nunca é `livre`.** Só existem duas saídas para um comando: ou ele
+casa uma das famílias R1–R8 (a checagem de segredo, o cano para interpretador e a
+substituição de comando entram aqui) e vira `TRAVADO`, ou vira `RASTREADO` — executa
+e aparece no relatório de fim de fase.
 
-A inversão veio de evidência: quatro rodadas de revisão acharam doze bypasses da
-lista de proibições, e a quarta ainda achou cinco novos (quebra de linha como
-separador, substituição de comando genérica, `cmd /c`, `git -C ... push`,
-`cat .env`). Lista de proibição não converge — sempre falta um vetor que ninguém
-enumerou. Lista de permissão fecha o buraco sem precisar prevê-lo.
+A política anterior tentava liberar comando por prova positiva: uma lista de nomes
+permitidos, depois lista de nomes **mais** forma de argumento. Sete rodadas de revisão
+adversarial atacaram essa lista e, a cada rodada, acharam um caminho novo para `livre`
+com ação destrutiva — a última foi `git diff --output=/home/user/.bashrc` e o apelido
+`where` do PowerShell rodando .NET arbitrário dentro de um bloco de script. A causa é
+estrutural, não uma flag esquecida: **cada comando permitido é ele próprio uma
+linguagem**, com flags, apelidos e formas de argumento que nenhuma lista enumera até o
+fim. Enquanto existir a categoria, existe a próxima rodada.
 
-**Permitir por NOME DE COMANDO não fecha: cada comando permitido é ele próprio uma
-linguagem.** Uma quinta revisão achou cinco caminhos para `livre` com ação destrutiva
-usando só comandos "de leitura" (`git diff --output=~/.bashrc`, `ls | where {…::Delete…}`,
-`find . -okdir mv {} /tmp \\;`, `git remote set-url`, `cat $HOME/.ssh/id_rsa`). A resposta
-é inverter mais um nível: permitir **comando + FORMA DE ARGUMENTO**. A lista de comandos
-encolheu para o mínimo, e um segmento só é livre se, além do primeiro token estar na
-lista, seus argumentos não contiverem nenhuma das construções que transformam um leitor
-em executor ou escritor (`$`, crase, `{}`, `[]`, `::`, `|`, `>`, `<`, `&`, `;`, flags de
-saída). `rastreado` é seguro — custa uma linha no relatório, não um estrago —, então
-encolher a lista quase não tem custo e mantê-la generosa tem custo ilimitado.
+Eliminar a categoria fecha a família inteira de uma vez, incluindo o emissor inerte
+(`echo`/`printf`), que era a última válvula capaz de liberar um segmento por prefixo.
+O custo aceito é o relatório de fim de fase ficar mais longo: todo comando aparece
+nele. `rastreado` custa uma linha de relatório; `livre` errado custa um estrago.
 
 As famílias são casadas sobre o comando CRU, de propósito: SQL perigoso quase sempre
 chega dentro de aspas (`psql -c "DROP TABLE x"`), então limpar literais antes de casar
-cegaria justamente a família mais cara. A proteção contra falso positivo é estreita e
-explícita: emissores inertes (`echo`, `printf`) e o texto de `-m` do git.
+cegaria justamente a família mais cara. A única proteção contra falso positivo que
+sobrou é estreita e explícita: o texto de `-m` do git.
+
+Ferramenta de ARQUIVO mantém a política de sempre — leitura que não é segredo é livre,
+escrita em arquivo novo ou sob `tests/` é livre, escrita em arquivo existente é
+rastreada, segredo é travado dos dois lados.
 """
 from __future__ import annotations
 
@@ -50,6 +51,10 @@ class Classificacao:
     regra: str
     motivo: str
 
+
+#: Motivo único de todo comando que não trava. Não há mais graduação a explicar: ou
+#: travou por regra, ou executa e fica registrado.
+_MOTIVO_COMANDO = "comando de shell: executado e registrado no relatório da fase"
 
 # Opções globais do git, que ficam ANTES do subcomando (`git -C /repo push`). Sem
 # reconhecê-las, o padrão de R2 exigia `git` colado em `push` e `git -C /repo push
@@ -111,150 +116,14 @@ FAMILIAS: tuple[tuple[str, str, str], ...] = (
     ),
 )
 
-# ---------------------------------------------------------------------------
-# Lista de permissões (o coração da política nova)
-# ---------------------------------------------------------------------------
-
-#: Primeiro token que, sozinho, pode tornar um segmento LIVRE — desde que todas as
-#: outras condições de `_motivo_fora_da_lista` também valham. Conjunto MÍNIMO e
-#: conservador: só leitura/inspeção da biblioteca padrão de qualquer máquina.
-#:
-#: Saíram daqui, de propósito, comandos que pareciam leitura e não são:
-#: `find` (`-exec`/`-okdir`/`-fprint` executam ou escrevem), `sort` e `uniq`
-#: (escrevem por flag ou por segundo posicional), `where`, `diff` e `select`
-#: (no PowerShell são apelidos de `Where-Object`/`Compare-Object`, que rodam bloco
-#: de script arbitrário), `node` e `npm` (executam script arbitrário). Todos passam
-#: a `rastreado`, que é o lugar certo: executam e aparecem no relatório.
-COMANDOS_LIVRES: frozenset[str] = frozenset(
-    {
-        "pwd",
-        "cd",
-        "whoami",
-        "date",
-        "hostname",
-        "ls",
-        "dir",
-        "tree",
-        "cat",
-        "type",
-        "head",
-        "tail",
-        "wc",
-        "stat",
-        "file",
-        "grep",
-        "findstr",
-        "rg",
-        "which",
-        "echo",
-        "printf",
-        "pytest",
-        "git",
-    }
-)
-
-#: Comandos livres cujo primeiro token, isolado, NÃO é inócuo: `python` só é livre
-#: como `python -m pytest`. Comparados por prefixo de tokens.
-COMANDOS_LIVRES_COMPOSTOS: tuple[str, ...] = ("python -m pytest",)
-
-#: PowerShell é MAIS restrito que o Bash: quase todo nome curto ali é apelido de um
-#: cmdlet rico, e o cmdlet aceita bloco de script com .NET arbitrário dentro
-#: (`ls | where {[IO.File]::Delete("x")}` é uma deleção escrita com dois comandos de
-#: leitura). Por isso a lista do PowerShell é própria, curta e sem nenhum apelido
-#: ambíguo (`where`, `diff`, `sort`, `select`, `foreach` NUNCA são livres aqui).
-COMANDOS_LIVRES_POWERSHELL: frozenset[str] = frozenset(
-    {
-        "get-location",
-        "get-childitem",
-        "get-content",
-        "select-string",
-        "get-date",
-        "pwd",
-        "ls",
-        "cat",
-        "git",
-    }
-)
-
-#: Subcomandos de git que apenas leem o repositório. `remote` e `branch` saíram:
-#: `git remote set-url origin https://evil` e `git branch -D main` mutam o
-#: repositório e passavam como leitura.
-SUBCOMANDOS_GIT_LIVRES: frozenset[str] = frozenset(
-    {
-        "status",
-        "log",
-        "diff",
-        "show",
-        "rev-parse",
-        "ls-files",
-        "blame",
-        "describe",
-        "shortlog",
-    }
-)
-
-#: Opções globais do git que consomem o argumento seguinte.
-_GIT_GLOBAIS_COM_VALOR = frozenset({"-C", "-c", "--git-dir", "--work-tree", "--namespace", "--exec-path"})
-
-#: Opções globais do git que ALTERAM COMO o git executa (config arbitrária,
-#: caminho do executável, diretórios) — não são "-C" (só muda o diretório de
-#: trabalho, inócuo). Um segmento com qualquer uma delas nunca é livre, mesmo que
-#: o subcomando encontrado depois seja `status`/`log`/etc: `git -c
-#: core.fsmonitor=./evil.sh status` roda o fsmonitor em todo `git status`, e
-#: `git --exec-path=/tmp/evil status` troca o executável usado internamente.
-_GIT_GLOBAIS_PERIGOSAS = ("-c", "--config-env", "--exec-path", "--git-dir", "--work-tree", "--namespace")
-
-#: `find` que executa, apaga ou escreve em arquivo não é leitura. Comparados por
-#: PREFIXO, não por token exato: a lista tinha `-ok` e `-exec` e mesmo assim
-#: `find . -okdir mv {} /tmp \;` passava, porque `-okdir` não é igual a `-ok`.
-#: Prefixo pega a família inteira (`-ok`→`-okdir`, `-exec`→`-execdir`) sem enumerar.
-_FIND_PERIGOSO = ("-exec", "-delete", "-ok", "-fprint", "-fls")
-
-#: Construções que desqualificam um segmento da lista de permissões, por mais inócuo
-#: que seja o primeiro token. Cada uma transforma um leitor em executor, em escritor
-#: ou em algo não inspecionável — e a inspeção do argumento é justamente o que a
-#: permissão por nome de comando não fazia.
-_CONSTRUCOES_PROIBIDAS: tuple[tuple[str, str], ...] = (
-    ("$(", "substituição de comando `$(...)`"),
-    ("${", "expansão de variável `${...}`"),
-    ("`", "crase (substituição de comando)"),
-    ("$", "expansão de variável (`$...`)"),
-    ("{", "chave `{` (bloco de script ou expansão)"),
-    ("}", "chave `}` (bloco de script ou expansão)"),
-    ("[", "colchete `[` (índice, tipo .NET ou classe de glob)"),
-    ("]", "colchete `]` (índice, tipo .NET ou classe de glob)"),
-    ("::", "acesso a tipo/namespace (`::`)"),
-    ("|", "cano (`|`)"),
-    (">", "redirecionamento de saída (`>`)"),
-    ("<", "redirecionamento de entrada (`<`)"),
-    ("&", "encadeamento ou segundo plano (`&`)"),
-    (";", "separador de comando (`;`)"),
-)
-
-#: Flags de saída em forma LONGA. `--output=x` também morre pela regra do `=` no git,
-#: mas a forma separada (`--output x`) e os demais programas precisam desta.
-#: `--out` já cobre `--output`; `--oneline` NÃO é atingido, porque só casa `--out*`.
-_FLAGS_SAIDA_LONGAS = ("--out", "--output", "--file")
-
-#: Flags de saída em forma CURTA (um traço só). Comparadas por prefixo: `-o`,
-#: `-ofoo`, `-fprint`. Só valem para token que começa com um único `-` — flag longa
-#: (`--oneline`, `--follow`) é julgada por `_FLAGS_SAIDA_LONGAS`, senão `git log
-#: --oneline`, que é leitura pura e diária, cairia em rastreado sem motivo.
-_FLAGS_SAIDA_CURTAS = ("-o", "-f")
-
-_INERTE = re.compile(r"^\s*(echo|printf|#)\b", re.I)
 _MSG_GIT = re.compile(r"(-m|--message)\s+('[^']*'|\"[^\"]*\")")
 #: Formas que EXECUTAM um comando escondido dentro do argumento de outro. Checadas
 #: sobre o segmento inteiro, não só dentro de `echo`/`-m`: `ls $(rm -rf /dados)` e
 #: ``ls `rm -rf /dados` `` escapavam justamente porque a checagem era local.
 _EXECUCAO_ESCONDIDA = re.compile(r"\$\(|`|<\(|>\(")
-#: Expansão de variável não executa nada, mas torna o segmento não inspecionável:
-#: desqualifica da lista de permissões (vira RASTREADO), sem travar. Está em
-#: `_CONSTRUCOES_PROIBIDAS` como `$` cru — checar só `${` deixava `$HOME` passar, e
-#: era assim que `cat $HOME/.ssh/id_rsa` escapava da inspeção do argumento.
 _REDIRECT = re.compile(r">>?\s*([^\s;|&]+)")
 #: Disparadores de execução indireta. Inclui os interpretadores do Windows — o projeto
-#: roda em Windows e `cmd /c "del /s /q C:\dados"` saía livre.
+#: roda em Windows e `cmd /c "del /s /q C:\dados"` precisa ter o payload inspecionado.
 _EXEC_INDIRETA = re.compile(
     r"\b(bash|sh|zsh|ksh|dash)\s+-c\s"
     r"|\b(pwsh|powershell)(\.exe)?\s+"
@@ -294,11 +163,11 @@ def classificar(ferramenta: str, entrada: dict, *, raiz: Path, config: dict) -> 
             bruto = entrada.get("command")
             if bruto is None:
                 # Antes isto virava a string "None" (ou "") e saía LIVRE por omissão.
-                # Sem comando legível não há prova positiva de inocuidade nenhuma.
+                # Sem comando legível não há nada a inspecionar — e nada a liberar.
                 return Classificacao(
-                    RASTREADO, "", "comando ausente ou nulo: nada a liberar por prova"
+                    RASTREADO, "", "comando ausente ou nulo: nada a inspecionar"
                 )
-            return _classificar_comando(str(bruto), config, ferramenta=ferramenta)
+            return _classificar_comando(str(bruto), config)
         return Classificacao(RASTREADO, "", f"ferramenta não classificada: {ferramenta}")
     except Exception as erro:  # noqa: BLE001 — falha segura é o requisito
         return Classificacao(
@@ -370,7 +239,7 @@ def _dividir_segmentos(comando: str) -> list[str]:
 
     Quebra de linha é separador de comando tanto quanto `;`: um bloco de várias linhas
     é uma LISTA de comandos. Sem tratá-la, `"echo ok\\nrm -rf /dados"` chegava como um
-    segmento só, começado por `echo` — e saía livre pela válvula do emissor inerte.
+    segmento só, e a família R3 nunca via o `rm` no início de um segmento.
 
     Um separador dentro de aspas não encadeia comandos: é conteúdo literal, como o
     `;` em `python -c "import shutil; shutil.rmtree('x')"`. Dividir ali cegava a
@@ -419,11 +288,9 @@ def _dividir_segmentos(comando: str) -> list[str]:
 _LIMITE_PROFUNDIDADE_INDIRETA = 3
 
 
-def _classificar_comando(
-    comando: str, config: dict, profundidade: int = 0, *, ferramenta: str = "Bash"
-) -> Classificacao:
+def _classificar_comando(comando: str, config: dict, profundidade: int = 0) -> Classificacao:
     if not comando.strip():
-        return Classificacao(RASTREADO, "", "comando vazio: nada a liberar por prova")
+        return Classificacao(RASTREADO, "", "comando vazio: nada a inspecionar")
     if _CANO_INTERPRETE.search(comando):
         # Checagem sobre o comando INTEIRO, antes de dividir em segmentos: dividir
         # primeiro quebra `curl ... | bash` em "curl ..." de um lado e "bash" do
@@ -436,41 +303,37 @@ def _classificar_comando(
     for segmento in _dividir_segmentos(comando):
         if not segmento.strip():
             continue
-        parcial = _classificar_segmento(segmento, config, profundidade, ferramenta=ferramenta)
+        parcial = _classificar_segmento(segmento, config, profundidade)
         resultado = parcial if resultado is None else _pior(resultado, parcial)
     if resultado is None:
-        return Classificacao(RASTREADO, "", "comando vazio: nada a liberar por prova")
+        return Classificacao(RASTREADO, "", "comando vazio: nada a inspecionar")
     return resultado
 
 
 def _classificar_segmento(
-    segmento: str, config: dict, profundidade: int = 0, *, ferramenta: str = "Bash"
+    segmento: str, config: dict, profundidade: int = 0
 ) -> Classificacao:
+    """Trava o segmento se ele casar uma regra; senão devolve RASTREADO.
+
+    Não há terceira saída. Nenhum prefixo, nome de comando ou forma de argumento
+    produz LIVRE aqui — foi exatamente a tentativa de produzir LIVRE que sete rodadas
+    de revisão furaram, uma vez por rodada.
+    """
     for alvo_cru in _REDIRECT.findall(segmento):
         # O alvo pode vir entre aspas (`> ".env"`): tira as aspas antes de comparar
-        # com os padrões de segredo, senão o fnmatch nunca casa e o redirecionamento
-        # sai LIVRE por engano.
+        # com os padrões de segredo, senão o fnmatch nunca casa.
         alvo = alvo_cru.strip("'\"")
         if _e_segredo(alvo, config):
             return Classificacao(TRAVADO, "R5", f"redirecionamento para segredo: {alvo}")
 
     if _EXECUCAO_ESCONDIDA.search(segmento):
         # `$(...)`, crase e substituição de processo executam um comando escondido
-        # dentro do argumento de outro, seja qual for o comando de fora. A checagem
-        # era local (só `echo` e o `-m` do git); `ls $(rm -rf /dados)` passava.
+        # dentro do argumento de outro, seja qual for o comando de fora.
         return Classificacao(
             TRAVADO, "R8", "substituição de comando dentro do argumento"
         )
 
-    if _INERTE.match(segmento) and not _REDIRECT.search(segmento):
-        # `echo`/`printf` sem substituição de comando e sem redirecionamento só
-        # imprimem texto literal na tela. A válvula existe para não travar buscas e
-        # mensagens que apenas MENCIONAM um verbo perigoso. Com `>` no meio deixa de
-        # ser emissão e vira escrita em disco, que não é livre — segue o fluxo.
-        return Classificacao(LIVRE, "", "emissor inerte")
-
-    eh_git = re.match(r"\s*git\b", segmento)
-    if eh_git:
+    if re.match(r"\s*git\b", segmento):
         # O texto de `-m` é literal (a substituição de comando já foi travada acima):
         # apagá-lo evita que a mensagem do commit case uma família por engano.
         limpo = _MSG_GIT.sub(" ", segmento)
@@ -482,8 +345,8 @@ def _classificar_segmento(
             return Classificacao(TRAVADO, regra, motivo)
 
     for token in _tokens(limpo)[1:]:
-        # `cat .env` não é leitura inócua: até então só a ferramenta `Read` travava
-        # segredo, e qualquer leitura pelo shell escapava.
+        # `cat .env` não é leitura inócua: sem isto, só a ferramenta `Read` travaria
+        # segredo, e qualquer leitura pelo shell escaparia.
         if _e_segredo(token, config):
             return Classificacao(TRAVADO, "R5", f"argumento aponta para segredo: {token}")
 
@@ -495,14 +358,9 @@ def _classificar_segmento(
         )
 
     if _EXEC_INDIRETA.search(segmento):
-        return _classificar_execucao_indireta(
-            segmento, config, profundidade, ferramenta=ferramenta
-        )
+        return _classificar_execucao_indireta(segmento, config, profundidade)
 
-    motivo = _motivo_fora_da_lista(segmento, config, ferramenta=ferramenta)
-    if motivo is None:
-        return Classificacao(LIVRE, "", "operação na lista de permissões")
-    return Classificacao(RASTREADO, "", motivo)
+    return Classificacao(RASTREADO, "", _MOTIVO_COMANDO)
 
 
 def _tokens(segmento: str) -> list[str]:
@@ -515,143 +373,14 @@ def _tokens(segmento: str) -> list[str]:
     return [bruto.strip("'\"") for bruto in segmento.split() if bruto.strip("'\"")]
 
 
-def _subcomando_git(tokens: list[str]) -> str:
-    """Primeiro token do git que não seja opção global (`git -C /repo status` → status)."""
-    i = 1
-    while i < len(tokens):
-        token = tokens[i]
-        if token in _GIT_GLOBAIS_COM_VALOR:
-            i += 2
-            continue
-        if token.startswith("-"):
-            i += 1
-            continue
-        return token
-    return ""
-
-
-def _git_opcao_perigosa(tokens: list[str]) -> str | None:
-    """Devolve a opção global perigosa (`-c`, `--exec-path`, ...) presente nos
-    tokens de um comando git, ou `None` se nenhuma aparecer.
-
-    Casa tanto a forma separada (`-c valor`, `--exec-path valor`) quanto a forma
-    colada com `=` (`--exec-path=valor`) — `_subcomando_git` só reconhecia a
-    primeira, então `git --exec-path=/tmp/evil status` despistava a checagem e
-    ainda encontrava `status` como subcommand livre.
-    """
-    for token in tokens[1:]:
-        for opcao in _GIT_GLOBAIS_PERIGOSAS:
-            if token == opcao or token.startswith(opcao + "="):
-                return opcao
-    return None
-
-
-def _motivo_forma_do_argumento(segmento: str, tokens: list[str]) -> str | None:
-    """Devolve o motivo de a FORMA dos argumentos desqualificar o segmento, ou `None`.
-
-    Permitir por nome de comando não fecha, porque cada comando permitido é ele
-    próprio uma linguagem: `git diff --output=<arquivo>` sobrescreve arquivo
-    arbitrário, `ls | where {[IO.File]::Delete("x")}` apaga arquivo com dois nomes
-    de leitura. Em vez de enumerar as flags perigosas de cada programa — outra lista
-    de proibições, que não converge —, esta função exige que o argumento tenha
-    forma SIMPLES: nada de execução, nada de redirecionamento, nada de flag de saída.
-    """
-    for construcao, descricao in _CONSTRUCOES_PROIBIDAS:
-        if construcao in segmento:
-            return f"argumento com construção não permitida: {descricao}"
-
-    for token in tokens[1:]:
-        if token.startswith("--"):
-            for flag in _FLAGS_SAIDA_LONGAS:
-                if token.startswith(flag):
-                    return f"flag de saída em argumento: `{token}` (começa com `{flag}`)"
-        elif token.startswith("-"):
-            for flag in _FLAGS_SAIDA_CURTAS:
-                if token.startswith(flag):
-                    return f"flag de saída em argumento: `{token}` (começa com `{flag}`)"
-    return None
-
-
-def _motivo_fora_da_lista(segmento: str, config: dict, *, ferramenta: str = "Bash") -> str | None:
-    """Devolve `None` se o segmento é comprovadamente inócuo; senão, o motivo textual
-    de ele não ter sido liberado.
-
-    Esta função é a inversão da política: nada é livre por não casar uma proibição;
-    é livre por casar uma PERMISSÃO — de comando **e** de forma de argumento.
-    """
-    tokens = _tokens(segmento)
-    if not tokens:
-        return "segmento sem comando identificável"
-
-    motivo_forma = _motivo_forma_do_argumento(segmento, tokens)
-    if motivo_forma is not None:
-        return motivo_forma
-
-    primeiro = tokens[0]
-    if ferramenta == "PowerShell":
-        # No PowerShell a resolução de nome é insensível a maiúsculas, então a
-        # comparação também precisa ser — senão `LS` despistaria a lista. Nenhum
-        # apelido ambíguo está nela, então normalizar não abre porta nenhuma.
-        if primeiro.lower() not in COMANDOS_LIVRES_POWERSHELL:
-            return f"comando fora da lista de permitidos do PowerShell: `{primeiro}`"
-    else:
-        composto = " ".join(tokens[:3])
-        livre_composto = any(
-            composto.startswith(prefixo) for prefixo in COMANDOS_LIVRES_COMPOSTOS
-        )
-        if not livre_composto and primeiro not in COMANDOS_LIVRES:
-            return f"comando fora da lista de permitidos: `{primeiro}`"
-
-    if primeiro.lower() == "git":
-        opcao_perigosa = _git_opcao_perigosa(tokens)
-        if opcao_perigosa is not None:
-            return f"git com opção global que altera execução: {opcao_perigosa}"
-        for token in tokens[1:]:
-            # `=` mata a família inteira de uma vez (`--output=`, `-c chave=valor`,
-            # `--upload-pack=`) sem precisar enumerá-la. Nenhum subcomando de
-            # leitura precisa de `=` para o uso diário.
-            if "=" in token:
-                return f"argumento de git com `=`: `{token}`"
-        sub = _subcomando_git(tokens)
-        if sub not in SUBCOMANDOS_GIT_LIVRES:
-            return f"subcomando git fora da lista de permitidos: `{sub or '(nenhum)'}`"
-
-    # As três checagens abaixo miram comandos que JÁ SAÍRAM de `COMANDOS_LIVRES`.
-    # Ficam como defesa em profundidade: se algum dia um deles voltar à lista, ele
-    # volta já com a trava, em vez de voltar nu.
-    if primeiro == "find":
-        for token in tokens[1:]:
-            for perigoso in _FIND_PERIGOSO:
-                if token.startswith(perigoso):
-                    return f"`find` com `{token}` executa, apaga ou escreve, não é leitura"
-
-    if primeiro == "sort":
-        for flag in ("-o", "--output"):
-            if flag in tokens or any(t.startswith(flag + "=") for t in tokens):
-                return f"`sort` com `{flag}` escreve arquivo de saída, não é leitura"
-
-    if primeiro == "uniq":
-        posicionais = [t for t in tokens[1:] if not t.startswith("-")]
-        if len(posicionais) > 1:
-            return "`uniq` com dois argumentos posicionais: o segundo é arquivo de saída"
-
-    for token in tokens[1:]:
-        if _e_segredo(token, config):
-            return f"argumento aponta para segredo: {token}"
-
-    return None
-
-
 def _classificar_execucao_indireta(
-    segmento: str, config: dict, profundidade: int, *, ferramenta: str = "Bash"
+    segmento: str, config: dict, profundidade: int
 ) -> Classificacao:
     """Extrai o payload entre aspas de uma execução indireta e reclassifica-o.
 
     `bash -c "rm -rf x"` não pode sair RASTREADO só por reconhecer a superfície
     do padrão: o comando real mora dentro das aspas. Sem extrair e reclassificar
-    esse literal recursivamente, um `rm` disfarçado de `bash -c` escaparia — foi
-    exatamente esse escape que motivou (erradamente) alargar a âncora de R3 no
-    lugar de tratar a execução indireta de verdade.
+    esse literal recursivamente, um `rm` disfarçado de `bash -c` escaparia.
 
     O mesmo vale para os interpretadores do Windows: `cmd /c "del /s /q C:\\dados"`
     e `pwsh -c "rm -rf x"`. Quando não há payload legível — o caso de
@@ -670,9 +399,7 @@ def _classificar_execucao_indireta(
             TRAVADO, "R8", "execução indireta sem payload legível"
         )
 
-    resultado_payload = _classificar_comando(
-        payload, config, profundidade + 1, ferramenta=ferramenta
-    )
+    resultado_payload = _classificar_comando(payload, config, profundidade + 1)
     resultado_segmento = Classificacao(RASTREADO, "R8", "execução indireta")
     return _pior(resultado_segmento, resultado_payload)
 
