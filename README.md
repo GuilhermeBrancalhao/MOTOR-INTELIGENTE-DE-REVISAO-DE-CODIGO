@@ -131,7 +131,7 @@ O motor entra em DESCOBERTA, e a partir daí o cartão de estado aparece a cada 
 python -m pytest ferramentas/tests -v
 ```
 
-271 testes, apenas biblioteca padrão do Python — nenhuma dependência de runtime.
+280 testes, apenas biblioteca padrão do Python — nenhuma dependência de runtime.
 
 Além deles, dois scripts de aceite disparam os hooks de verdade como subprocesso:
 
