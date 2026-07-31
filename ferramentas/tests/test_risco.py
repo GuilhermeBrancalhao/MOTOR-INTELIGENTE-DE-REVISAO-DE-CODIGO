@@ -132,6 +132,98 @@ TRAVADOS = [
     # (a checagem só olhava `${`); aqui o caminho é literal, para provar que o que
     # trava é o PADRÃO DE SEGREDO novo, e não a regra de forma de argumento.
     ("cat-chave-ssh", "Bash", {"command": "cat /home/u/.ssh/id_rsa"}, "R5"),
+    # --- REVISÃO FINAL, CRÍTICO 1: o motor não protegia o próprio painel de controle.
+    # `Edit` em `.engine/estado.json` saía RASTREADO (executava — bastava gravar
+    # `"ativo": false` para desligar os dois hooks) e `Write` em `.engine/config.json`
+    # saía LIVRE, em silêncio (`{"padroes_segredo": []}` desarma a família R5 inteira).
+    (
+        "R9-edit-estado",
+        "Edit",
+        {"file_path": ".engine/estado.json"},
+        "R9",
+    ),
+    (
+        "R9-write-config",
+        "Write",
+        {"file_path": ".engine/config.json"},
+        "R9",
+    ),
+    (
+        "R9-notebookedit-painel",
+        "NotebookEdit",
+        {"notebook_path": ".engine/analise.ipynb"},
+        "R9",
+    ),
+    # O painel pode estar sob um caminho absoluto ou aninhado: o que decide é o
+    # componente `.engine` no caminho, não o prefixo textual.
+    (
+        "R9-caminho-aninhado",
+        "Write",
+        {"file_path": "sub/projeto/.engine/estado.json"},
+        "R9",
+    ),
+    # O outro transporte de escrita: desligar o motor pelo shell.
+    (
+        "R9-redirect-shell",
+        "Bash",
+        {"command": 'echo {"ativo": false} > .engine/estado.json'},
+        "R9",
+    ),
+    # --- REVISÃO FINAL, IMPORTANTE 6: a spec (seção 5, item 5) sempre prometeu que a
+    # família de segredo casa também o CONTEÚDO. `risco.py` só casava caminho, então
+    # `Write` com uma chave da AWS no corpo saía LIVRE por ser arquivo novo.
+    (
+        "R5-conteudo-akia",
+        "Write",
+        {"file_path": "config.py", "content": "AWS = 'AKIA0000000000000000'"},
+        "R5",
+    ),
+    (
+        "R5-conteudo-sk",
+        "Write",
+        {"file_path": "cliente.py", "content": "chave = 'sk-abcdefghij0123456789'"},
+        "R5",
+    ),
+    (
+        "R5-conteudo-ghp",
+        "Write",
+        {"file_path": "ci.py", "content": "token = 'ghp_abcdefghij0123456789'"},
+        "R5",
+    ),
+    (
+        "R5-conteudo-github-pat",
+        "Write",
+        {"file_path": "ci.py", "content": "t = 'github_pat_abcdefghij0123456789_XY'"},
+        "R5",
+    ),
+    (
+        "R5-conteudo-slack",
+        "Write",
+        {"file_path": "bot.py", "content": "t = 'xoxb-1234567890-abcdefghij'"},
+        "R5",
+    ),
+    (
+        "R5-conteudo-chave-privada",
+        "Write",
+        {"file_path": "notas.txt", "content": "-----BEGIN RSA PRIVATE KEY-----\nMII"},
+        "R5",
+    ),
+    (
+        "R5-conteudo-jwt",
+        "Write",
+        {
+            "file_path": "sessao.py",
+            "content": "jwt = 'eyJhbGciOiJIUzI1.eyJzdWIiOiIxMjM0.assinatura'",
+        },
+        "R5",
+    ),
+    # `Edit` traz o texto novo em `new_string`, não em `content`.
+    (
+        "R5-conteudo-em-new-string",
+        "Edit",
+        {"file_path": "config.py", "new_string": "AWS = 'AKIA0000000000000000'"},
+        "R5",
+    ),
 ]
 
 
@@ -155,6 +247,19 @@ LIVRES = [
     ("arquivo-leitura-comum", "Read", {"file_path": "README.md"}),
     ("arquivo-novo", "Write", {"file_path": "modulo_novo.py"}),
     ("arquivo-de-teste", "Write", {"file_path": "tests/test_novo.py"}),
+    # REVISÃO FINAL, CRÍTICO 1: R9 trava a ESCRITA no painel, não a leitura. Ler o
+    # estado ou a configuração do motor não muda nada — e travar isso quebraria o
+    # próprio motor, que precisa se olhar para relatar.
+    ("painel-leitura-estado", "Read", {"file_path": ".engine/estado.json"}),
+    ("painel-leitura-config", "Read", {"file_path": ".engine/config.json"}),
+    # REVISÃO FINAL, IMPORTANTE 6: a contraprova da checagem de conteúdo. Texto comum
+    # num arquivo novo continua livre — a checagem casa forma de chave conhecida, não
+    # "parece um segredo".
+    (
+        "arquivo-novo-conteudo-comum",
+        "Write",
+        {"file_path": "modulo.py", "content": "def somar(a, b):\n    return a + b\n"},
+    ),
 ]
 
 
@@ -340,6 +445,78 @@ def test_alvo_relativo_resolve_contra_a_raiz(tmp_path):
         "Edit", {"file_path": "servico.py"}, raiz=tmp_path, config=CFG
     )
     assert resultado.nivel == risco.RASTREADO
+
+
+# --- REVISÃO FINAL, IMPORTANTE 7: teste existente deixa de ser LIVRE --------------
+#
+# Sob `tests/`, arquivo NOVO continua livre; arquivo que já existe passa a ser
+# rastreado. Enquanto sobrescrever teste existente era livre, a violação do
+# invariante "nunca ajustar o teste para o código passar" era justamente a única
+# escrita que não aparecia no relatório da fase.
+
+
+def test_sobrescrever_teste_existente_e_rastreado(tmp_path):
+    alvo = tmp_path / "tests" / "test_servico.py"
+    alvo.parent.mkdir()
+    alvo.write_text("def test_x():\n    assert True\n", encoding="utf-8")
+    resultado = risco.classificar(
+        "Write", {"file_path": str(alvo)}, raiz=tmp_path, config=CFG
+    )
+    assert resultado.nivel == risco.RASTREADO, resultado
+
+
+def test_editar_teste_existente_fora_de_tests_tambem_e_rastreado(tmp_path):
+    """O outro reconhecedor de teste é o nome `test_*`, mesmo fora de `tests/`."""
+    alvo = tmp_path / "test_avulso.py"
+    alvo.write_text("def test_x():\n    assert True\n", encoding="utf-8")
+    resultado = risco.classificar(
+        "Edit", {"file_path": str(alvo)}, raiz=tmp_path, config=CFG
+    )
+    assert resultado.nivel == risco.RASTREADO, resultado
+
+
+def test_criar_teste_novo_continua_livre(tmp_path):
+    alvo = tmp_path / "tests" / "test_novo.py"
+    assert not alvo.exists()
+    resultado = risco.classificar(
+        "Write", {"file_path": str(alvo)}, raiz=tmp_path, config=CFG
+    )
+    assert resultado.nivel == risco.LIVRE, resultado
+
+
+# --- REVISÃO FINAL, CRÍTICO 1: o painel de controle, com raiz de verdade ----------
+
+
+def test_escrita_no_painel_trava_com_caminho_absoluto(tmp_path):
+    """O alvo real que a revisão verificou: desligar o motor gravando `ativo: false`."""
+    alvo = tmp_path / ".engine" / "estado.json"
+    alvo.parent.mkdir()
+    alvo.write_text('{"ativo": true}', encoding="utf-8")
+    resultado = risco.classificar(
+        "Edit", {"file_path": str(alvo)}, raiz=tmp_path, config=CFG
+    )
+    assert resultado.nivel == risco.TRAVADO
+    assert resultado.regra == "R9"
+
+
+def test_leitura_do_painel_continua_livre_com_caminho_absoluto(tmp_path):
+    alvo = tmp_path / ".engine" / "estado.json"
+    alvo.parent.mkdir()
+    alvo.write_text('{"ativo": true}', encoding="utf-8")
+    resultado = risco.classificar(
+        "Read", {"file_path": str(alvo)}, raiz=tmp_path, config=CFG
+    )
+    assert resultado.nivel == risco.LIVRE, resultado
+
+
+def test_arquivo_chamado_engineering_nao_e_o_painel(tmp_path):
+    """Falso positivo que R9 não pode ter: casa componente de caminho, não prefixo."""
+    resultado = risco.classificar(
+        "Write", {"file_path": str(tmp_path / ".engineering" / "notas.md")},
+        raiz=tmp_path,
+        config=CFG,
+    )
+    assert resultado.nivel != risco.TRAVADO, resultado
 
 
 def test_excecao_interna_resulta_em_travado(tmp_path, monkeypatch):

@@ -18,8 +18,24 @@ python -m pytest ferramentas/tests -v
 
 ## Estado atual
 
-Fase 1 (núcleo) em andamento. Prontos: configuração, classificador de risco, máquina de
-fases e estado em disco, os dois hooks (`PreToolUse` e `UserPromptSubmit`), a skill
-`/engine`, e este empacotamento como plugin instalável. Faltam, ainda dentro da Fase 1: os
-quatro papéis por fase (`agents/`), os cartões de stack (`cartoes/`) e o aceite formal
-(`aceite/`). Fases 2 e 3 descritas na seção 15 da especificação.
+**Fase 1 (núcleo) completa.** Estão no repositório e cobertos por testes:
+
+- `ferramentas/` — configuração (`config.py`), classificador de risco (`risco.py`),
+  máquina de fases e estado em disco (`estado.py`) e a CLI da skill (`cli.py`);
+- `hooks/` — os dois hooks (`PreToolUse` de risco e `UserPromptSubmit` de contexto) e o
+  `hooks.json` que os registra;
+- `skills/engine/` — a skill `/engine`, com `on`/`off`/`status`;
+- `agents/` — os quatro papéis por fase: `arquiteto`, `implementador`, `revisor`,
+  `documentador`;
+- `cartoes/` — os cartões de stack (`python`, `pytest`, `ui-ux`) e o `_catalogo.md`;
+- `aceite/` — o aceite formal da fase (`fase-1.md`) e o script `verificar_familias.py`,
+  que dispara o hook de verdade como subprocesso e confirma que as famílias travadas
+  travam;
+- empacotamento como plugin instalável.
+
+Ficou para a **Fase 2 (elenco)**, segundo a seção 15 da especificação: os outros cinco
+papéis (`descobridor`, `cartografo`, `designer`, `testador`, `sentinela`), os nove cartões
+restantes, `trilha.py` e `relatorio.py`, os hooks `trilha`, `salvar` e `gate`, e
+`/engine retomar`. E para a **Fase 3 (prova)**: o modo `--dry` na skill, os quatro
+cenários de aceite, os cartões de Office completos e a documentação de instalação do
+plugin.

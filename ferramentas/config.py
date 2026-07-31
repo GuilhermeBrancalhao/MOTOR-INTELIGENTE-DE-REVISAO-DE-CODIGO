@@ -5,6 +5,17 @@ PADRAO -> <plugin>/engine.config.json -> <projeto>/.engine/config.json
 
 Arquivo malformado nunca derruba a sessão nem passa despercebido: cai no default
 e registra um aviso em `_avisos`, que o hook de contexto mostra uma vez.
+
+**A absorção é por LISTA BRANCA, não por `update`.** Antes, `cfg.update(dados)` copiava
+qualquer chave do arquivo do hospedeiro para dentro da configuração efetiva — inclusive
+`_avisos` (que sobrescrevia a lista interna e apagava a trilha de problemas) e
+`padroes_segredo` (o único insumo da família R5, que um `[]` no arquivo desarmava
+inteira). Agora: só chave presente em `PADRAO` pode ser sobreposta por arquivo, chave
+desconhecida é ignorada com aviso, e `_avisos` nunca vem de arquivo.
+
+`padroes_segredo` é o único caso especial: o valor do arquivo é **acrescentado** ao
+default em vez de substituí-lo. Ampliar a lista de segredos por config é legítimo;
+reduzi-la não pode ser possível, porque seria desarmar a proteção pelo lado de fora.
 """
 from __future__ import annotations
 
@@ -70,7 +81,37 @@ def carregar(raiz_projeto: Path) -> dict:
             )
             continue
         if isinstance(dados, dict):
-            cfg.update(dados)
+            _aplicar(cfg, dados, caminho.name)
         else:
             cfg["_avisos"].append(f"{caminho.name} não é um objeto JSON; usando o default")
     return cfg
+
+
+#: Chaves que só se ACRESCENTAM ao default; nunca o substituem. Ver o docstring do
+#: módulo: reduzir a lista de segredos por arquivo é desarmar a família R5.
+_SOMENTE_ACRESCENTA = ("padroes_segredo",)
+
+
+def _aplicar(cfg: dict, dados: dict, nome: str) -> None:
+    """Sobrepõe em `cfg` só as chaves da lista branca (as presentes em `PADRAO`)."""
+    for chave, valor in dados.items():
+        if chave not in PADRAO:
+            cfg["_avisos"].append(
+                f"{nome}: chave desconhecida {chave!r} ignorada (não está no contrato)"
+            )
+            continue
+        if chave in _SOMENTE_ACRESCENTA:
+            _acrescentar(cfg, chave, valor, nome)
+            continue
+        cfg[chave] = valor
+
+
+def _acrescentar(cfg: dict, chave: str, valor, nome: str) -> None:
+    if not isinstance(valor, list):
+        cfg["_avisos"].append(
+            f"{nome}: {chave!r} não é uma lista; mantendo só o default"
+        )
+        return
+    for item in valor:
+        if item not in cfg[chave]:
+            cfg[chave].append(item)

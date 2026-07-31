@@ -81,6 +81,70 @@ def test_desligar_sem_ciclo_nunca_ligado_nao_estoura(tmp_path):
     assert "desligado" in saida.stdout.lower()
 
 
+# --- REVISÃO FINAL, IMPORTANTE 5: `desligar` não suja projeto alheio --------------
+#
+# Num projeto que nunca teve ciclo, `desligar` CRIAVA `.engine/estado.json` com
+# `{"ativo": false}` — e a partir dali `status` imprimia o relatório verboso para
+# sempre naquele projeto.
+
+
+def test_desligar_sem_ciclo_nao_cria_arquivo_nenhum(tmp_path):
+    saida = _cli(tmp_path, "desligar")
+    assert saida.returncode == 0
+    assert not (tmp_path / ".engine" / "estado.json").exists()
+    assert not (tmp_path / ".engine").exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_status_depois_de_desligar_sem_ciclo_segue_limpo(tmp_path):
+    _cli(tmp_path, "desligar")
+    saida = _cli(tmp_path, "status")
+    assert saida.returncode == 0
+    assert saida.stdout.strip() == "**ENGINE:** desligado (nenhum ciclo neste projeto)."
+
+
+# --- REVISÃO FINAL, CRÍTICO 3: a CLI roda como SCRIPT, de qualquer diretório -------
+
+
+def test_cli_roda_como_script_de_qualquer_diretorio(tmp_path):
+    """A forma que a skill documenta: `py <plugin>/ferramentas/cli.py`, cwd alheio.
+
+    A forma antiga (`python -m ferramentas.cli`) rodada da raiz de um projeto
+    hospedeiro dá `ModuleNotFoundError: No module named 'ferramentas'`.
+    """
+    projeto = tmp_path / "projeto"
+    projeto.mkdir()
+    saida = subprocess.run(
+        [sys.executable, str(RAIZ_PLUGIN / "ferramentas" / "cli.py"), "status"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        cwd=str(projeto),
+        env={**os.environ, "ENGINE_RAIZ": str(projeto)},
+    )
+    assert saida.returncode == 0, saida.stderr
+    assert "desligado" in saida.stdout.lower()
+    assert "Traceback" not in saida.stderr
+
+
+def test_cli_como_script_liga_e_desliga_um_ciclo(tmp_path):
+    def _script(*args: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(RAIZ_PLUGIN / "ferramentas" / "cli.py"), *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            cwd=str(tmp_path),
+            env={**os.environ, "ENGINE_RAIZ": str(tmp_path)},
+        )
+
+    assert _script("ligar", "objetivo pela forma de script").returncode == 0
+    assert (tmp_path / ".engine" / "estado.json").is_file()
+    saida = _script("desligar")
+    assert saida.returncode == 0
+    assert "desligado" in saida.stdout.lower()
+
+
 def test_desligar_com_estado_corrompido_nao_estoura(tmp_path):
     _corromper_estado(tmp_path)
     saida = _cli(tmp_path, "desligar")

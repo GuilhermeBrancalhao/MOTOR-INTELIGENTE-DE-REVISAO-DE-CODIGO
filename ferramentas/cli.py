@@ -7,6 +7,18 @@ Nenhum verbo pode terminar em traceback: erro de uso ou de estado sai com mensag
 legível e código 1. `principal` tem uma rede de segurança final para qualquer exceção
 que os `except` específicos não previrem — melhor uma mensagem genérica do que um
 stack trace no terminal do usuário.
+
+Roda das DUAS formas, de propósito:
+
+    py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" status   # script, de qualquer lugar
+    python -m ferramentas.cli status                       # módulo, da raiz do plugin
+
+A forma de script é a que a skill usa, porque o diretório corrente é sempre o do
+projeto hospedeiro — e ali `python -m ferramentas.cli` dá `ModuleNotFoundError`, já
+que o pacote `ferramentas` não está no `sys.path`. Executado como script, o Python
+põe `ferramentas/` no `sys.path` (não a raiz do plugin), então `from ferramentas
+import estado` também falharia: por isso a inserção explícita da raiz abaixo, feita
+só quando não há pacote (`__package__` vazio), isto é, só no caminho de script.
 """
 from __future__ import annotations
 
@@ -15,9 +27,15 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from ferramentas import estado
+if not __package__:  # executado como script: a raiz do plugin não está no sys.path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-USO = "uso: python -m ferramentas.cli {ligar <objetivo> [--forcar]|desligar|status|fase <DESTINO>}"
+from ferramentas import estado  # noqa: E402
+
+USO = (
+    'uso: py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" '
+    "{ligar <objetivo> [--forcar]|desligar|status|fase <DESTINO>}"
+)
 
 
 def _forcar_utf8() -> None:
@@ -77,11 +95,20 @@ def _verbo_ligar(raiz: Path, resto: list[str]) -> int:
 
 
 def _verbo_desligar(raiz: Path) -> int:
-    dados = estado.desligar(raiz)
-    if not dados:
+    """Desliga o ciclo — e não CRIA estado num projeto que nunca teve ciclo.
+
+    Antes, `desligar` num projeto alheio gravava `.engine/estado.json` com
+    `{"ativo": false}`, e a partir dali `status` imprimia o relatório verboso para
+    sempre naquele projeto. Sem estado em disco não há o que desligar: imprime a
+    mesma linha limpa que `status` usa nesse caso e sai 0 sem gravar nada.
+
+    (A guarda `if not dados` que existia depois de `estado.desligar` era código morto:
+    `desligar` sempre devolve um dicionário com `ativo`, nunca um vazio.)
+    """
+    if not estado.caminho(raiz).is_file():
         print(_relatar_desligado())
         return 0
-    print(_relatar(dados))
+    print(_relatar(estado.desligar(raiz)))
     return 0
 
 

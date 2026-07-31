@@ -13,25 +13,30 @@ quando o ciclo termina. Instrução direta do usuário sempre vence o motor.
 
 | Pedido do usuário | O que fazer |
 |---|---|
-| `/engine <pedido>` | rode `python -m ferramentas.cli ligar "<objetivo em uma frase>"` e entre em DESCOBERTA |
-| `/engine off` | rode `python -m ferramentas.cli desligar` e apresente o resumo do ciclo |
-| `/engine status` | rode `python -m ferramentas.cli status` e apresente a saída |
+| `/engine <pedido>` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" ligar "<objetivo em uma frase>"` e entre em DESCOBERTA |
+| `/engine off` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" desligar` e apresente o resumo do ciclo |
+| `/engine status` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" status` e apresente a saída |
 
-Rode sempre a partir da raiz do plugin, com `ENGINE_RAIZ` apontando para a raiz do projeto
-em que se está trabalhando.
+Essa é a forma que funciona **de qualquer diretório**, e é a única que se deve usar. O
+diretório corrente é o do projeto do usuário, não o do plugin: ali `python -m
+ferramentas.cli` falha com `ModuleNotFoundError: No module named 'ferramentas'`, porque o
+pacote do plugin não está no `sys.path`. `${CLAUDE_PLUGIN_ROOT}` é expandido pelo Claude
+Code para a raiz do plugin instalado, e `ENGINE_RAIZ` diz à CLI qual é o projeto
+hospedeiro — o diretório corrente. Nunca troque de diretório para rodar a CLI.
 
 Se `ligar` recusar porque já existe um ciclo ativo, apresente o objetivo do ciclo em
-andamento ao usuário e pergunte se quer retomá-lo ou recomeçar. Só use
-`python -m ferramentas.cli ligar "<objetivo>" --forcar` se o usuário confirmar
-explicitamente que quer descartar o ciclo em andamento.
+andamento ao usuário e pergunte se quer retomá-lo ou recomeçar. Só acrescente `--forcar`
+ao fim do comando de `ligar` se o usuário confirmar explicitamente que quer descartar o
+ciclo em andamento.
 
 ## O ciclo
 
 `DESCOBERTA → ANALISE → [EVOLUCAO, se o projeto já existe] → PLANO → ⟨porta⟩ → BUILD ⇄
 TESTE → REVISAO → DOC → ENTREGA`
 
-Avance de fase com `python -m ferramentas.cli fase <DESTINO>`. A CLI recusa transição fora
-do grafo — se ela recusar, a fase pretendida está errada, não a máquina.
+Avance de fase com `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" fase
+<DESTINO>`. A CLI recusa transição fora do grafo — se ela recusar, a fase pretendida está
+errada, não a máquina.
 
 **Porta do plano.** Ao terminar PLANO, apresente arquitetura, stack, estrutura e a
 justificativa de cada decisão, e **espere** o usuário. É a única parada por fase.

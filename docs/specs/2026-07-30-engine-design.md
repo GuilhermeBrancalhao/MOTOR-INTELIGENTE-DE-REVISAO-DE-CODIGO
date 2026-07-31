@@ -150,8 +150,8 @@ qualquer outra linha de código.
 
 | Nível | Critério | Comportamento do hook |
 |---|---|---|
-| **travado** | casa uma das famílias da lista fechada abaixo (R1–R8), inclusive a checagem de segredo, o cano para interpretador e a substituição de comando dentro do argumento — para **comando** e para **arquivo** | **bloqueia** e devolve o motivo; o motor pergunta ao usuário com opções clicáveis |
-| **livre** | só **ferramenta de arquivo**: leitura de arquivo que não é segredo; escrita em caminho inexistente em disco; escrita sob `tests/` ou com nome `test_*`. **Nenhum comando de shell é livre, nunca** | permite; registra na trilha |
+| **travado** | casa uma das famílias da lista fechada abaixo (R1–R9), inclusive a checagem de segredo (por caminho **e** por conteúdo), o cano para interpretador, a substituição de comando dentro do argumento e a escrita no painel de controle do motor — para **comando** e para **arquivo** | **bloqueia** e devolve o motivo; o motor pergunta ao usuário com opções clicáveis |
+| **livre** | só **ferramenta de arquivo**: leitura de arquivo que não é segredo (inclusive sob `.engine/`); escrita em caminho inexistente em disco, inclusive teste NOVO sob `tests/` ou com nome `test_*` — sobrescrever teste que **já existe** é rastreado, senão a violação do invariante "nunca ajustar o teste para o código passar" seria a única escrita invisível no relatório. **Nenhum comando de shell é livre, nunca** | permite; registra na trilha |
 | **rastreado** | **DEFAULT** — edição de arquivo que já existe, ferramenta desconhecida, comando ausente, e **todo comando de shell que não travou** | permite; acrescenta o caminho a `diffs_pendentes`; o motivo entra no relatório de fim de fase |
 
 **Comando de shell tem duas saídas, e só duas: `travado` ou `rastreado`.** Não existe
@@ -193,6 +193,7 @@ rebaixa um casamento de nível mais alto.
 5. Segredo: leitura **ou** escrita em `.env`, `*.pfx`, `*.pem`, `*.key`, `credentials*`, `*_secret*`, chave privada (`id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, `*.ppk`, `*.p8`), credencial de registro (`.npmrc`, `.netrc`, `.pypirc`), token (`*token*`) e cofre (`*.jks`, `*.keystore`); e qualquer conteúdo que case com padrões de chave conhecidos (`sk-`, `ghp_`, `AKIA`, JWT).
 6. Deploy e infraestrutura: `docker push`, `kubectl apply`, `terraform apply`, `gh workflow run`, `npm publish`, `twine upload`.
 7. Instalação global: `npm i -g`, `pip install` fora de venv, `winget install`, `choco install`.
+8. **Painel de controle do motor (R9):** qualquer ESCRITA cujo alvo esteja sob um diretório `.engine/` — `Write`, `Edit`, `NotebookEdit` e redirecionamento de shell que aponte para lá. É o próprio interruptor do motor: `.engine/estado.json` guarda `"ativo"` (gravar `false` desliga os dois hooks) e `.engine/config.json` guarda `padroes_segredo` (gravar `[]` desarma a família 5 inteira). **Leitura de `.engine/` continua livre**: ler o painel não muda nada.
 
 **Falha segura.** Se `risco.py` levantar exceção, o hook classifica como **travado**. Um
 classificador quebrado nunca libera; ele para. O modo de falha contrário — liberar quando

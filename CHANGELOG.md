@@ -1,5 +1,38 @@
 # CHANGELOG
 
+## 2026-07-30 — Correções da revisão final da Fase 1
+
+Sete achados fechados; 183 testes verdes (eram 152) e `aceite/verificar_familias.py`
+segue sem falhas.
+
+- **R9, família nova — o painel de controle do motor.** Qualquer escrita sob um
+  diretório `.engine/` é **travada**, por `Write`/`Edit`/`NotebookEdit` e por
+  redirecionamento de shell. Antes, `Edit` em `.engine/estado.json` saía `rastreado`
+  (executava: `"ativo": false` desligava os dois hooks) e `Write` em
+  `.engine/config.json` saía `livre`, em silêncio (`{"padroes_segredo": []}` desarmava
+  a família R5 inteira). **Leitura de `.engine/` continua `livre`.**
+- **`config.py` absorve por lista branca.** `cfg.update(dados)` aceitava qualquer chave
+  do arquivo do hospedeiro, inclusive `_avisos`. Agora só chave presente em `PADRAO`
+  pode ser sobreposta, chave desconhecida é ignorada com aviso, e `padroes_segredo` do
+  arquivo é **acrescentado** ao default: ampliar a lista de segredos é legítimo,
+  reduzi-la deixou de ser possível.
+- **R5 passa a casar CONTEÚDO, não só caminho.** A seção 5 da spec sempre prometeu isso;
+  o código só olhava o nome do arquivo, e `Write` com `AKIA…` no corpo saía `livre`.
+  Padrões cobertos: `sk-`, `ghp_`, `github_pat_`, `AKIA`, `xox[baprs]-`, cabeçalho de
+  chave privada PEM e JWT.
+- **Sobrescrever teste que já existe é `rastreado`.** Era `livre`, o que fazia da
+  violação do invariante "nunca ajustar o teste para o código passar" a única escrita
+  invisível no relatório da fase. Criar teste novo continua `livre`.
+- **A CLI roda como script, de qualquer diretório:**
+  `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" status`. A skill
+  documentava `python -m ferramentas.cli`, que da raiz de um projeto hospedeiro dá
+  `ModuleNotFoundError`. As duas formas funcionam agora.
+- **`desligar` não suja projeto alheio.** Sem estado em disco, imprime a linha limpa e
+  sai 0 **sem gravar nada** — antes criava `.engine/estado.json` com `{"ativo": false}`
+  e o `status` daquele projeto virava verboso para sempre.
+- **`README.md` corrigido:** dizia que `agents/`, `cartoes/` e `aceite/` faltavam; os
+  três existem e estão commitados desde `eb302cc`/`e93630e`.
+
 ## 2026-07-30 — Fase 1 (núcleo)
 
 - `config`, `risco`, `estado`, `cli` em Python de biblioteca padrão.

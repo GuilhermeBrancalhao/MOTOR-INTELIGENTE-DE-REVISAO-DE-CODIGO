@@ -4,9 +4,24 @@ Regra de ouro: na dúvida, **RASTREADO** — nunca LIVRE. Este módulo nunca lib
 falha e nunca libera por omissão.
 
 **Comando de shell nunca é `livre`.** Só existem duas saídas para um comando: ou ele
-casa uma das famílias R1–R8 (a checagem de segredo, o cano para interpretador e a
-substituição de comando entram aqui) e vira `TRAVADO`, ou vira `RASTREADO` — executa
-e aparece no relatório de fim de fase.
+casa uma das famílias R1–R9 (a checagem de segredo, o cano para interpretador, a
+substituição de comando e a escrita no painel de controle entram aqui) e vira
+`TRAVADO`, ou vira `RASTREADO` — executa e aparece no relatório de fim de fase.
+
+Famílias documentadas: **R1** escrita de rede · **R2** git que sai da máquina ou
+reescreve história · **R3** deleção · **R4** alteração destrutiva de banco · **R5**
+segredo (caminho **e** conteúdo com padrão de credencial) · **R6** deploy ou
+infraestrutura · **R7** instalação global · **R8** execução indireta, cano para
+interpretador e substituição de comando · **R9** escrita no painel de controle do
+motor (qualquer alvo sob um diretório `.engine/`). `R0` é a falha segura do próprio
+classificador.
+
+**R9 protege o painel de controle.** `.engine/estado.json` guarda `"ativo"`, o
+interruptor dos dois hooks; `.engine/config.json` guarda `padroes_segredo`, o único
+insumo da família R5. Sem R9, uma única escrita nesses dois arquivos desligava o motor
+inteiro (`"ativo": false`) ou desarmava a checagem de segredo (`"padroes_segredo": []`)
+— e a escrita saía `rastreado` ou até `livre`, isto é, executava. Leitura de `.engine/`
+continua `livre`: ler o painel não muda nada.
 
 A política anterior tentava liberar comando por prova positiva: uma lista de nomes
 permitidos, depois lista de nomes **mais** forma de argumento. Sete rodadas de revisão
@@ -28,8 +43,14 @@ cegaria justamente a família mais cara. A única proteção contra falso positi
 sobrou é estreita e explícita: o texto de `-m` do git.
 
 Ferramenta de ARQUIVO mantém a política de sempre — leitura que não é segredo é livre,
-escrita em arquivo novo ou sob `tests/` é livre, escrita em arquivo existente é
-rastreada, segredo é travado dos dois lados.
+escrita em arquivo NOVO (inclusive sob `tests/`) é livre, escrita em arquivo que já
+existe é rastreada, segredo é travado dos dois lados.
+
+**Sobrescrever teste que já existe é `rastreado`, não `livre`.** Antes, todo alvo sob
+`tests/` (ou com nome `test_*`) saía `livre` mesmo por cima de um arquivo existente —
+o que fazia da violação do invariante "nunca ajustar o teste para o código passar"
+justamente a única escrita invisível no relatório da fase. Criar teste novo continua
+`livre`; reescrever um que já existe aparece no relatório.
 """
 from __future__ import annotations
 
@@ -147,6 +168,25 @@ _PY_PERIGO = re.compile(
     re.I,
 )
 
+#: Nome do diretório do painel de controle do motor. Estado e configuração vivem
+#: dentro dele, e escrever ali é desligar ou desarmar o próprio motor (família R9).
+_PAINEL = ".engine"
+
+#: Padrões de chave conhecidos, casados contra o CONTEÚDO de uma escrita. A spec
+#: (seção 5, item 5) sempre prometeu esta checagem; sem ela, `Write` com uma chave da
+#: AWS no corpo saía `livre` só porque o nome do arquivo não casava `padroes_segredo`.
+#: São formas com prefixo fixo e comprimento mínimo, de propósito: reconhecem a chave
+#: pela forma que o emissor lhe deu, não por adivinhação sobre o texto em volta.
+_PADROES_CREDENCIAL = re.compile(
+    r"sk-[A-Za-z0-9]{16,}"
+    r"|ghp_[A-Za-z0-9]{16,}"
+    r"|github_pat_[A-Za-z0-9_]{20,}"
+    r"|AKIA[0-9A-Z]{16}"
+    r"|xox[baprs]-[A-Za-z0-9-]{10,}"
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----"
+    r"|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\."
+)
+
 _LEITURA = {"Read", "Glob", "Grep", "NotebookRead"}
 _ESCRITA = {"Write", "Edit", "NotebookEdit"}
 _COMANDO = {"Bash", "PowerShell"}
@@ -193,6 +233,19 @@ def _e_segredo(alvo: str, config: dict) -> bool:
     return False
 
 
+def _sob_painel(alvo: str) -> bool:
+    """Diz se o alvo está sob um diretório `.engine/` (o painel de controle).
+
+    Olha os componentes do caminho, não o prefixo textual: `.engine/estado.json`,
+    `C:/proj/.engine/config.json` e `sub/.engine/x` casam todos, enquanto um arquivo
+    chamado `.engineering` não casa. Normaliza a barra invertida do Windows antes,
+    porque o alvo de um redirecionamento de shell chega como texto cru.
+    """
+    if not alvo:
+        return False
+    return _PAINEL in Path(alvo.replace("\\", "/")).parts
+
+
 def _resolver_alvo(alvo: str, raiz: Path) -> Path:
     """Resolve um alvo relativo contra a raiz do projeto hospedeiro.
 
@@ -224,13 +277,41 @@ def _classificar_escrita(entrada: dict, raiz: Path, config: dict) -> Classificac
     if not alvo:
         return Classificacao(RASTREADO, "", "escrita sem alvo identificável")
     caminho = _resolver_alvo(alvo, raiz)
+    if _sob_painel(alvo) or _sob_painel(caminho.as_posix()):
+        # R9 vem antes de tudo: gravar em `.engine/` é mexer no interruptor do motor,
+        # e é o único alvo cuja escrita compromete a decisão sobre todos os outros.
+        return Classificacao(TRAVADO, "R9", "escrita no painel de controle do motor")
     if _e_segredo(caminho.as_posix(), config):
         return Classificacao(TRAVADO, "R5", f"arquivo de segredo: {caminho.name}")
-    if "tests" in caminho.parts or caminho.name.startswith("test_"):
-        return Classificacao(LIVRE, "", "arquivo de teste")
+    if _conteudo_com_credencial(entrada):
+        return Classificacao(TRAVADO, "R5", "conteúdo com padrão de credencial")
     if caminho.exists():
+        # Ordem invertida de propósito: a checagem de `tests/` ficava ACIMA desta e
+        # liberava a sobrescrita de teste existente. Existir em disco decide primeiro.
+        if _e_teste(caminho):
+            return Classificacao(RASTREADO, "", "teste que já existe em disco")
         return Classificacao(RASTREADO, "", "arquivo já existe em disco")
+    if _e_teste(caminho):
+        return Classificacao(LIVRE, "", "arquivo de teste novo")
     return Classificacao(LIVRE, "", "arquivo novo")
+
+
+def _e_teste(caminho: Path) -> bool:
+    return "tests" in caminho.parts or caminho.name.startswith("test_")
+
+
+def _conteudo_com_credencial(entrada: dict) -> bool:
+    """Procura padrão de chave conhecida no corpo que a escrita vai gravar.
+
+    `Write` traz o texto inteiro em `content`; `Edit` traz o trecho novo em
+    `new_string`. Sem inspecioná-los, a família R5 só via o NOME do arquivo — e
+    `Write` de um `AKIA…` dentro de `config.py` saía `livre`.
+    """
+    for chave in ("content", "new_string"):
+        valor = entrada.get(chave)
+        if isinstance(valor, str) and _PADROES_CREDENCIAL.search(valor):
+            return True
+    return False
 
 
 def _dividir_segmentos(comando: str) -> list[str]:
@@ -323,6 +404,12 @@ def _classificar_segmento(
         # O alvo pode vir entre aspas (`> ".env"`): tira as aspas antes de comparar
         # com os padrões de segredo, senão o fnmatch nunca casa.
         alvo = alvo_cru.strip("'\"")
+        if _sob_painel(alvo):
+            # `echo '{"ativo": false}' > .engine/estado.json` desliga o motor pelo
+            # shell. A porta de R9 tem de cobrir os dois transportes de escrita.
+            return Classificacao(
+                TRAVADO, "R9", "escrita no painel de controle do motor"
+            )
         if _e_segredo(alvo, config):
             return Classificacao(TRAVADO, "R5", f"redirecionamento para segredo: {alvo}")
 
