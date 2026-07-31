@@ -10,9 +10,10 @@ import pytest
 RAIZ_PLUGIN = Path(__file__).resolve().parents[2]
 HOOK_RISCO = RAIZ_PLUGIN / "hooks" / "engine_risco.py"
 HOOK_CONTEXTO = RAIZ_PLUGIN / "hooks" / "engine_contexto.py"
+HOOK_TRILHA = RAIZ_PLUGIN / "hooks" / "engine_trilha.py"
 
 sys.path.insert(0, str(RAIZ_PLUGIN))
-from ferramentas import estado  # noqa: E402
+from ferramentas import estado, trilha  # noqa: E402
 
 
 def _rodar(hook: Path, payload: dict, cwd: Path) -> subprocess.CompletedProcess:
@@ -315,6 +316,119 @@ def test_teto_12_com_muitas_decisoes_e_diffs_mantem_os_cinco_invariantes():
     assert len(linhas) <= 12
     for invariante in contexto.INVARIANTES:
         assert invariante in cartao
+
+
+# --- Hook PostToolUse: a trilha auditável ----------------------------------------
+
+
+def test_trilha_motor_ligado_gera_linha_com_os_seis_campos(tmp_path):
+    _ligar(tmp_path)
+    saida = _rodar(
+        HOOK_TRILHA,
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "pytest -q"},
+            "cwd": str(tmp_path),
+        },
+        tmp_path,
+    )
+    assert saida.returncode == 0
+    dados = trilha.ler(tmp_path)
+    assert dados["_avisos"] == []
+    assert len(dados["linhas"]) == 1
+    linha = dados["linhas"][0]
+    assert set(linha.keys()) == {"quando", "fase", "ferramenta", "alvo", "risco", "regra"}
+    assert linha["fase"] == "DESCOBERTA"
+    assert linha["ferramenta"] == "Bash"
+    assert linha["alvo"] == "pytest -q"
+    assert linha["risco"] == "rastreado"
+
+
+def test_trilha_motor_desligado_nao_gera_nada(tmp_path):
+    saida = _rodar(
+        HOOK_TRILHA,
+        {"tool_name": "Bash", "tool_input": {"command": "pytest -q"}, "cwd": str(tmp_path)},
+        tmp_path,
+    )
+    assert saida.returncode == 0
+    assert not trilha.caminho(tmp_path).is_file()
+
+
+def test_trilha_reclassifica_acao_travada_e_registra_a_regra(tmp_path):
+    _ligar(tmp_path)
+    saida = _rodar(
+        HOOK_TRILHA,
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": "git push origin main"},
+            "cwd": str(tmp_path),
+        },
+        tmp_path,
+    )
+    assert saida.returncode == 0
+    dados = trilha.ler(tmp_path)
+    linha = dados["linhas"][0]
+    assert linha["risco"] == "travado"
+    assert linha["regra"] == "R2"
+
+
+def test_trilha_registra_alvo_de_ferramenta_de_arquivo(tmp_path):
+    _ligar(tmp_path)
+    alvo = tmp_path / "servico.py"
+    saida = _rodar(
+        HOOK_TRILHA,
+        {"tool_name": "Write", "tool_input": {"file_path": str(alvo)}, "cwd": str(tmp_path)},
+        tmp_path,
+    )
+    assert saida.returncode == 0
+    dados = trilha.ler(tmp_path)
+    assert dados["linhas"][0]["alvo"] == str(alvo)
+
+
+def test_trilha_linha_corrompida_pre_existente_nao_impede_append_e_ler_avisa(tmp_path):
+    _ligar(tmp_path)
+    caminho_trilha = trilha.caminho(tmp_path)
+    caminho_trilha.parent.mkdir(parents=True, exist_ok=True)
+    caminho_trilha.write_text("isso nao e json\n", encoding="utf-8")
+
+    saida = _rodar(
+        HOOK_TRILHA,
+        {"tool_name": "Bash", "tool_input": {"command": "pytest -q"}, "cwd": str(tmp_path)},
+        tmp_path,
+    )
+    assert saida.returncode == 0
+
+    dados = trilha.ler(tmp_path)
+    assert len(dados["linhas"]) == 1
+    assert len(dados["_avisos"]) == 1
+
+
+def test_trilha_stdin_malformado_sai_0(tmp_path):
+    _ligar(tmp_path)
+    saida = _rodar_stdin_cru(HOOK_TRILHA, "isso nao e json", tmp_path)
+    assert saida.returncode == 0
+    assert not trilha.caminho(tmp_path).is_file()
+
+
+def test_trilha_evento_sem_tool_name_sai_0_sem_gravar(tmp_path):
+    _ligar(tmp_path)
+    saida = _rodar(HOOK_TRILHA, {"cwd": str(tmp_path)}, tmp_path)
+    assert saida.returncode == 0
+    assert not trilha.caminho(tmp_path).is_file()
+
+
+def test_trilha_cwd_em_subdiretorio_ainda_encontra_o_estado(tmp_path):
+    _ligar(tmp_path)
+    subdiretorio = tmp_path / "pacote" / "subpacote"
+    subdiretorio.mkdir(parents=True)
+    saida = _rodar(
+        HOOK_TRILHA,
+        {"tool_name": "Bash", "tool_input": {"command": "pytest -q"}, "cwd": str(subdiretorio)},
+        tmp_path,
+    )
+    assert saida.returncode == 0
+    dados = trilha.ler(tmp_path)
+    assert len(dados["linhas"]) == 1
 
 
 def test_avisos_com_teto_apertado_e_muitas_decisoes_fica_dentro_do_teto():
