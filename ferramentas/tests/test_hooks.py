@@ -203,7 +203,7 @@ def test_cartao_traz_fase_objetivo_e_invariantes(tmp_path):
     assert "Nunca afirmar sucesso sem ter olhado" in saida.stdout
 
 
-def test_cartao_respeita_o_teto_de_linhas():
+def test_cartao_respeita_o_teto_de_linhas(tmp_path):
     from ferramentas import config
 
     contexto = _importar_contexto()
@@ -217,7 +217,7 @@ def test_cartao_respeita_o_teto_de_linhas():
         "diffs_pendentes": [f"arquivo_{i}.py" for i in range(50)],
         "pendencias": [],
     }
-    cartao = contexto.montar_cartao(dados, cfg)
+    cartao = contexto.montar_cartao_estendido(dados, cfg, tmp_path, str(tmp_path))
     assert len(cartao.splitlines()) <= cfg["teto_cartao_linhas"]
 
 
@@ -253,7 +253,7 @@ def test_avisos_de_config_tambem_respeitam_o_teto():
 
 
 @pytest.mark.parametrize("teto", [0, -5, 3])
-def test_teto_abaixo_do_piso_produz_cartao_com_exatamente_9_linhas(teto):
+def test_teto_abaixo_do_piso_produz_cartao_com_exatamente_9_linhas(teto, tmp_path):
     from ferramentas import config
 
     contexto = _importar_contexto()
@@ -268,7 +268,7 @@ def test_teto_abaixo_do_piso_produz_cartao_com_exatamente_9_linhas(teto):
         "diffs_pendentes": [],
         "pendencias": [],
     }
-    cartao = contexto.montar_cartao(dados, cfg)
+    cartao = contexto.montar_cartao_estendido(dados, cfg, tmp_path, str(tmp_path))
     linhas = cartao.splitlines()
     assert len(linhas) == 9
     assert "DESCOBERTA" in cartao
@@ -277,7 +277,7 @@ def test_teto_abaixo_do_piso_produz_cartao_com_exatamente_9_linhas(teto):
         assert invariante in cartao
 
 
-def test_teto_nao_numerico_cai_no_default_sem_levantar_excecao():
+def test_teto_nao_numerico_cai_no_default_sem_levantar_excecao(tmp_path):
     from ferramentas import config
 
     contexto = _importar_contexto()
@@ -292,13 +292,13 @@ def test_teto_nao_numerico_cai_no_default_sem_levantar_excecao():
         "diffs_pendentes": [],
         "pendencias": [],
     }
-    cartao = contexto.montar_cartao(dados, cfg)
+    cartao = contexto.montar_cartao_estendido(dados, cfg, tmp_path, str(tmp_path))
     assert len(cartao.splitlines()) <= 40
     for invariante in contexto.INVARIANTES:
         assert invariante in cartao
 
 
-def test_teto_12_com_muitas_decisoes_e_diffs_mantem_os_cinco_invariantes():
+def test_teto_12_com_muitas_decisoes_e_diffs_mantem_os_cinco_invariantes(tmp_path):
     from ferramentas import config
 
     contexto = _importar_contexto()
@@ -313,7 +313,7 @@ def test_teto_12_com_muitas_decisoes_e_diffs_mantem_os_cinco_invariantes():
         "diffs_pendentes": [f"arquivo_{i}.py" for i in range(50)],
         "pendencias": [],
     }
-    cartao = contexto.montar_cartao(dados, cfg)
+    cartao = contexto.montar_cartao_estendido(dados, cfg, tmp_path, str(tmp_path))
     linhas = cartao.splitlines()
     assert len(linhas) <= 12
     for invariante in contexto.INVARIANTES:
@@ -445,7 +445,7 @@ def test_trilha_cwd_em_subdiretorio_ainda_encontra_o_estado(tmp_path):
     assert len(dados["linhas"]) == 1
 
 
-def test_avisos_com_teto_apertado_e_muitas_decisoes_fica_dentro_do_teto():
+def test_avisos_com_teto_apertado_e_muitas_decisoes_fica_dentro_do_teto(tmp_path):
     contexto = _importar_contexto()
     cfg = {"teto_cartao_linhas": 3, "_avisos": [f"aviso {i}" for i in range(50)]}
     dados = {
@@ -457,7 +457,7 @@ def test_avisos_com_teto_apertado_e_muitas_decisoes_fica_dentro_do_teto():
         "diffs_pendentes": [f"arquivo_{i}.py" for i in range(50)],
         "pendencias": [],
     }
-    cartao = contexto.montar_cartao(dados, cfg)
+    cartao = contexto.montar_cartao_estendido(dados, cfg, tmp_path, str(tmp_path))
     cartao = contexto._com_avisos(cartao, cfg)
     assert len(cartao.splitlines()) <= cfg["teto_cartao_linhas"]
 

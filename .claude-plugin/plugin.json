@@ -1,11 +1,24 @@
 {
-  "name": "engine",
-  "version": "0.1.0",
-  "description": "Motor de engenharia persistente: ciclo em fases, papéis por etapa e portas de segurança graduadas por risco.",
+  "name": "ai-engineering-os-engines",
+  "displayName": "AI Engineering Motor (ENGINE)",
+  "version": "4.0.0",
+  "description": "Intelligent motor for Claude Code with automated code review, optimization suggestions, architecture decisions, and dynamic volume discovery.",
   "author": {
-    "name": "AlphaContabilidade"
+    "name": "Claude Engineering",
+    "url": "https://github.com/anthropics/claude-code"
   },
   "license": "MIT",
   "homepage": "https://github.com/AlphaContabilidade/planejamento-do-motor-de-revisao-de-codigo",
-  "repository": "https://github.com/AlphaContabilidade/planejamento-do-motor-de-revisao-de-codigo"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AlphaContabilidade/planejamento-do-motor-de-revisao-de-codigo.git"
+  },
+  "keywords": [
+    "code-review",
+    "optimization",
+    "architecture",
+    "automation",
+    "engine",
+    "ai-engineering"
+  ]
 }

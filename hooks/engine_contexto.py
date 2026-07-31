@@ -1,45 +1,67 @@
 #!/usr/bin/env python3
-"""Hook UserPromptSubmit do ENGINE.
+"""Hook UserPromptSubmit V4 — volumes dinâmicos ao vivo.
 
-Injeta o cartão de estado a cada turno. É este hook — e não o texto de nenhuma
-skill — que faz o modo do motor sobreviver à compactação do contexto: skills são
-texto de instrução que o modelo pode esquecer depois de compactar; o estado em
-disco (`ferramentas.estado`) não esquece, e este hook o traz de volta para dentro
-do turno a cada prompt do usuário.
+Estende V3 com detecção automática de volumes PRONTO.
+Sem hardcoding de nomes - descobre dinamicamente via git.
 
-Contrato (confirmado na documentação oficial do Claude Code, hooks.md): para a
-maioria dos eventos de hook, o stdout só vai para o log de depuração. `UserPromptSubmit`
-é uma das exceções explícitas — "stdout is added as context that Claude can see and
-act on" — então basta imprimir o cartão em texto puro no stdout e sair com `0`; não é
-preciso (nem obrigatório) devolver JSON com `hookSpecificOutput.additionalContext`.
-JSON só seria necessário para usar `decision: "block"`, o que este hook nunca faz.
+É este hook — e não o texto de nenhuma skill — que faz o modo do motor
+sobreviver à compactação do contexto: o estado em disco (`ferramentas.estado`)
+não esquece, e este hook o traz de volta para dentro do turno a cada prompt.
 
-Falha segura NA DIREÇÃO OPOSTA à do PreToolUse (`engine_risco.py`): lá, erro
-bloqueia a ação por segurança. Aqui, o cartão é conveniência, não trava — bloquear o
-turno do usuário porque o cartão não montou seria pior que não ter o cartão. Por
-isso qualquer falha no caminho (estado ilegível, config ilegível, montagem do
-cartão) devolve `0` sem imprimir nada, nunca propaga a exceção.
+Duas garantias de segurança valem para TODO o cartão (auditoria adversarial):
 
-Teto duro de linhas, lido de `teto_cartao_linhas`: acima dele, o motor passa a
-competir com o pedido do usuário pelo mesmo espaço de atenção — que é exatamente a
-doença que ele veio curar. O teto vale para qualquer estado, inclusive um com 50
-decisões, 50 cartões e 50 diffs pendentes.
+1. O teto de linhas (`teto_cartao_linhas`) só é lido via `_teto_bruto` /
+   `_teto_efetivo` — nunca `int(cfg.get(...))` direto. Valor não numérico cai
+   no default em vez de derrubar o cartão; teto zero/negativo é erro de
+   configuração e cai no default (em `_com_avisos`) ou no piso (no cartão).
+2. Todo texto que vem do estado ou de arquivo do projeto passa por `_campo`,
+   que redige credenciais com `trilha.redigir` ANTES de cortar. O cartão volta
+   ao contexto do modelo a cada turno — vazar `sk-…`/`ghp_…`/`AKIA…` aqui é
+   pior que na trilha, que só é lida sob demanda.
+
+Falha segura na direção oposta à do PreToolUse: qualquer erro devolve 0 sem
+imprimir nada — o cartão é conveniência, não pode atrapalhar o turno.
 """
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
+from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _comum import forcar_utf8, raiz_do_ciclo  # noqa: E402
 
-# Ver `_comum.forcar_utf8`: sem isso, acento no cartão sai como mojibake no console
-# do Windows.
 forcar_utf8()
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
 from ferramentas import config, estado, trilha  # noqa: E402
+
+# Importar módulos
+try:
+    from engine_analisa_diff import AnalisadorDiff
+except ImportError:
+    AnalisadorDiff = None
+
+try:
+    from volume_detector import DetectorVolumesAoVivo
+except ImportError:
+    DetectorVolumesAoVivo = None
+
+
+# Mapeamento: fase → motores consultáveis
+MOTORES_POR_FASE = {
+    "DESCOBERTA": [],
+    "ANALISE": [],
+    "PLANO": ["arquitetar-sistema", "materializar-ideia"],
+    "EVOLUCAO": ["arquitetar-sistema"],
+    "BUILD": ["materializar-ideia", "revisar-codigo"],
+    "TESTE": [],
+    "REVISAO": ["revisar-codigo", "otimizar-performance"],
+    "DOC": ["diagramar"],
+    "ENTREGA": [],
+}
 
 INVARIANTES = (
     "1. Nunca afirmar sucesso sem ter olhado. Rodou, cola a saída; não rodou, diz que não rodou.",
@@ -102,12 +124,93 @@ def _campo(texto, limite: int) -> str:
 
     Redigir ANTES de cortar: um token truncado pelo corte ainda seria
     reconhecível; redigido primeiro, o que sobra é só a marca.
+
+    Vale também para texto lido de ARQUIVO do projeto (descrição de motor,
+    resumo de volume): arquivo não é mais confiável que o estado.
     """
     return _cortar(trilha.redigir(str(texto)), limite)
 
 
+def _ler_descricao_motor(raiz: Path, motor: str) -> Optional[str]:
+    """Lê a descrição do motor de seu SKILL.md."""
+    skill_path = raiz / "motores" / motor / "SKILL.md"
+    if not skill_path.exists():
+        return None
+
+    try:
+        conteudo = skill_path.read_text(encoding="utf-8")
+        linhas = conteudo.split("\n")
+        in_frontmatter = False
+        for linha in linhas:
+            if linha.startswith("---"):
+                in_frontmatter = not in_frontmatter
+            elif in_frontmatter and linha.startswith("description:"):
+                desc = linha.replace("description:", "").strip().strip('"').strip("'")
+                # Texto vindo de arquivo entra no cartão: mesma redação do estado.
+                return _campo(desc, 100)
+    except Exception:
+        pass
+
+    return None
+
+
+def _detectar_volumes_dinamicos(raiz: Path) -> list[tuple[str, str]]:
+    """Detecta volumes PRONTO dinamicamente (V4 novo)."""
+    if not DetectorVolumesAoVivo:
+        return []
+
+    try:
+        detector = DetectorVolumesAoVivo(cache_ttl_segundos=300)
+        return detector.detectar_volumes(raiz)
+    except Exception:
+        return []
+
+
+def _extrair_diff_local(cwd: str) -> str:
+    """Extrai diff local via 'git diff'."""
+    try:
+        result = subprocess.run(
+            ["git", "diff"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.stdout if result.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+def _analisar_e_sugerir_motor(cwd: str, fase: str) -> Optional[str]:
+    """Analisa diff local e sugere motor apropriado."""
+    if not AnalisadorDiff:
+        return None
+
+    if fase in ["DESCOBERTA", "ANALISE"]:
+        return None
+
+    diff = _extrair_diff_local(cwd)
+    if not diff or not diff.strip():
+        return None
+
+    try:
+        analisador = AnalisadorDiff()
+        motor = analisador.analisar_diff(diff)
+        if motor:
+            return analisador.gerar_sugestao(motor)
+    except Exception:
+        pass
+
+    return None
+
+
 def montar_cartao(dados: dict, cfg: dict) -> str:
-    """Monta o cartão de estado, sempre dentro do teto efetivo de linhas.
+    """Monta o cartão de estado BASE (sem as seções dinâmicas do V4), sempre
+    dentro do teto efetivo de linhas.
+
+    Mantido ao lado de `montar_cartao_estendido` para quem não tem `raiz`/`cwd`
+    em mãos e para os testes de contrato de segurança: aqui não há subprocess
+    nem leitura de arquivo, então o resultado é determinístico.
 
     O teto de `cfg['teto_cartao_linhas']` passa por `_teto_efetivo`: normalizado
     pra inteiro (valor não numérico cai no default 40) e nunca abaixo do piso
@@ -121,7 +224,7 @@ def montar_cartao(dados: dict, cfg: dict) -> str:
     cabecalho = [
         "== ENGINE ativo ==",
         f"Fase: {dados.get('fase', '?')}   Modo: {ciclo.get('modo', 'normal')}",
-        f"Objetivo do ciclo: {_campo(ciclo.get('objetivo', ''), 160)}",
+        f"Objetivo: {_campo(ciclo.get('objetivo', ''), 160)}",
     ]
     rodape = ["Invariantes:", *INVARIANTES]
 
@@ -138,7 +241,7 @@ def montar_cartao(dados: dict, cfg: dict) -> str:
 
     decisoes = dados.get("decisoes") or []
     if decisoes:
-        acrescentar("Decisões fechadas:")
+        acrescentar("Decisões:")
         for item in decisoes:
             acrescentar(
                 f"  - {_campo(item.get('o_que', ''), 70)}: {_campo(item.get('porque', ''), 70)}"
@@ -147,9 +250,84 @@ def montar_cartao(dados: dict, cfg: dict) -> str:
     diffs = dados.get("diffs_pendentes") or []
     if diffs:
         acrescentar(
-            f"Diffs por apresentar ({len(diffs)}): {_campo(', '.join(map(str, diffs)), 120)}"
+            f"Diffs ({len(diffs)}): {_campo(', '.join(map(str, diffs)), 120)}"
         )
 
+    pendencias = dados.get("pendencias") or []
+    if pendencias:
+        acrescentar(
+            f"Pendências ({len(pendencias)}): {_campo('; '.join(map(str, pendencias)), 120)}"
+        )
+
+    linhas = cabecalho + corpo[:orcamento] + rodape
+    return "\n".join(linhas[:teto])
+
+
+def montar_cartao_estendido(dados: dict, cfg: dict, raiz: Path, cwd: str) -> str:
+    """Monta cartão com motores + volumes dinâmicos + sugestão automática."""
+    teto = _teto_efetivo(cfg)
+    ciclo = dados.get("ciclo", {})
+    fase = dados.get("fase", "?")
+
+    cabecalho = [
+        "== ENGINE ativo ==",
+        f"Fase: {fase}   Modo: {ciclo.get('modo', 'normal')}",
+        f"Objetivo: {_campo(ciclo.get('objetivo', ''), 160)}",
+    ]
+    rodape = ["Invariantes:", *INVARIANTES]
+
+    orcamento = max(teto - len(cabecalho) - len(rodape), 0)
+    corpo: list[str] = []
+
+    def acrescentar(linha: str) -> None:
+        if len(corpo) < orcamento:
+            corpo.append(linha)
+
+    # Seção: Motores da fase
+    motores = MOTORES_POR_FASE.get(fase, [])
+    if motores:
+        acrescentar("📋 Motores desta fase:")
+        for motor in motores:
+            desc = _ler_descricao_motor(raiz, motor)
+            if desc:
+                acrescentar(f"  • {motor}: {desc}")
+            else:
+                acrescentar(f"  • {motor}")
+
+    # Seção: Sugestão automática de motor (o texto vem de constantes internas do
+    # analisador — o diff só escolhe QUAL motor — então não precisa de redação)
+    sugestao = _analisar_e_sugerir_motor(str(cwd), fase)
+    if sugestao:
+        acrescentar(sugestao)
+
+    # Seção: Volumes PRONTO (V4 novo - detecta dinamicamente)
+    volumes_dinamicos = _detectar_volumes_dinamicos(raiz)
+
+    if volumes_dinamicos:
+        acrescentar("📚 Volumes PRONTO (consultáveis):")
+        for vol_nome, vol_resumo in volumes_dinamicos:
+            # Nome e resumo vêm de arquivo do projeto: mesma redação do estado.
+            acrescentar(f"  • {_campo(vol_nome, 60)}: {_campo(vol_resumo, 100)}")
+
+    # Seção: Cartões (original)
+    cartoes = dados.get("cartoes") or []
+    if cartoes:
+        acrescentar(f"Cartões: {_campo(', '.join(map(str, cartoes)), 120)}")
+
+    # Seção: Decisões (original)
+    decisoes = dados.get("decisoes") or []
+    if decisoes:
+        acrescentar("Decisões:")
+        for item in decisoes:
+            acrescentar(f"  - {_campo(item.get('o_que', ''), 60)}")
+
+    # Seção: Diffs pendentes (original)
+    diffs = dados.get("diffs_pendentes") or []
+    if diffs:
+        acrescentar(f"Diffs ({len(diffs)}): {_campo(', '.join(map(str, diffs)), 100)}")
+
+    # Seção: Pendências (original — segue no cartão: pendência fora do cartão é
+    # pendência esquecida)
     pendencias = dados.get("pendencias") or []
     if pendencias:
         acrescentar(
@@ -201,14 +379,15 @@ def principal() -> int:
         if not isinstance(evento, dict):
             return 0
 
-        raiz = raiz_do_ciclo(Path(evento.get("cwd") or "."))
+        cwd = evento.get("cwd") or "."
+        raiz = raiz_do_ciclo(Path(cwd))
 
         dados = estado.carregar(raiz)
         if not dados or not dados.get("ativo"):
             return 0
 
         cfg = config.carregar(raiz)
-        cartao = montar_cartao(dados, cfg)
+        cartao = montar_cartao_estendido(dados, cfg, raiz, cwd)
         cartao = _com_avisos(cartao, cfg)
 
         if cartao.strip():
