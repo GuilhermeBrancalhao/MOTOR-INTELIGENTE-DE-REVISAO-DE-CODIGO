@@ -1,0 +1,14 @@
+{
+  "name": "engine-marketplace",
+  "description": "Marketplace local do ENGINE, servindo o próprio repositório como plugin.",
+  "owner": {
+    "name": "AlphaContabilidade"
+  },
+  "plugins": [
+    {
+      "name": "engine",
+      "source": "./",
+      "description": "Motor de engenharia persistente: ciclo em fases, papéis por etapa e portas de segurança graduadas por risco."
+    }
+  ]
+}

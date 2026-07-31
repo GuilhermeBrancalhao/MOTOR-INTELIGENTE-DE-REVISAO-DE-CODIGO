@@ -1,5 +1,8 @@
 {
   "name": "engine",
   "version": "0.1.0",
-  "description": "Motor de engenharia persistente: ciclo em fases, papéis por etapa e portas de segurança graduadas por risco."
+  "description": "Motor de engenharia persistente: ciclo em fases, papéis por etapa e portas de segurança graduadas por risco.",
+  "author": {
+    "name": "AlphaContabilidade"
+  }
 }
