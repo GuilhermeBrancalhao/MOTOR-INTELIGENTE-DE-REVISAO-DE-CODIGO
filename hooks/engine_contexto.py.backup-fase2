@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Hook UserPromptSubmit V3 — injeta motores + volumes + sugestão automática.
+"""Hook UserPromptSubmit estendido — injeta motores + volumes PRONTO.
 
-Estende V2 adicionando:
-1. Análise de diffs locais (git diff)
-2. Sugestão automática de motor baseada em padrão de código
-3. Injeção de sugestão no cartão (após motores)
+Extends engine_contexto.py para carregar:
+1. Motores relevantes para a fase (revisar-codigo, materializar-ideia, etc)
+2. Volumes PRONTO do AI-ENGINEERING-OS (07-PROMPT-ENGINE, 12-MEMORY, 31-TESTING)
+
+Ambos carregados dinamicamente, dentro do teto de linhas do cartão.
 """
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 from typing import Optional
@@ -22,26 +22,21 @@ forcar_utf8()
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from ferramentas import config, estado  # noqa: E402
 
-# Importar analisador de diff
-try:
-    from engine_analisa_diff import AnalisadorDiff
-except ImportError:
-    AnalisadorDiff = None
-
 
 # Mapeamento: fase → motores consultáveis
 MOTORES_POR_FASE = {
-    "DESCOBERTA": [],
-    "ANALISE": [],
+    "DESCOBERTA": [],  # Descobridor não consulta motores
+    "ANALISE": [],  # Cartografo não consulta motores
     "PLANO": ["arquitetar-sistema", "materializar-ideia"],
     "EVOLUCAO": ["arquitetar-sistema"],
     "BUILD": ["materializar-ideia", "revisar-codigo"],
-    "TESTE": [],
+    "TESTE": [],  # Testador não consulta (ainda)
     "REVISAO": ["revisar-codigo", "otimizar-performance"],
     "DOC": ["diagramar"],
     "ENTREGA": [],
 }
 
+# Volumes sempre disponíveis se PRONTO
 VOLUMES_PRONTOS = [
     "07-PROMPT-ENGINE",
     "12-MEMORY",
@@ -81,12 +76,14 @@ def _ler_descricao_motor(raiz: Path, motor: str) -> Optional[str]:
 
     try:
         conteudo = skill_path.read_text(encoding="utf-8")
+        # Extrai a descrição do frontmatter (entre ---)
         linhas = conteudo.split("\n")
         in_frontmatter = False
         for linha in linhas:
             if linha.startswith("---"):
                 in_frontmatter = not in_frontmatter
             elif in_frontmatter and linha.startswith("description:"):
+                # Remove 'description: ' e aspas
                 desc = linha.replace("description:", "").strip().strip('"').strip("'")
                 return _cortar(desc, 100)
     except Exception:
@@ -97,21 +94,26 @@ def _ler_descricao_motor(raiz: Path, motor: str) -> Optional[str]:
 
 def _ler_resumo_volume(raiz: Path, volume: str) -> Optional[str]:
     """Lê resumo do volume de seu README ou _VOLUME.yml."""
+    # Tenta volume_prontos primeiro (symlink), depois AI-ENGINEERING-OS
     volume_path = raiz / "volumes" / "prontos" / volume
     if not volume_path.exists():
+        # Fallback para caminho absoluto
         volume_path = Path.home() / "projetos" / "AI_ENGINEERING_OS" / volume
 
     if not volume_path.exists():
         return None
 
     try:
+        # Tenta README.md
         readme = volume_path / "README.md"
         if readme.exists():
             conteudo = readme.read_text(encoding="utf-8")
+            # Pega primeira linha não-vazia
             for linha in conteudo.split("\n"):
                 if linha.strip() and not linha.startswith("#"):
                     return _cortar(linha.strip(), 100)
 
+        # Fallback: primeira seção do volume
         primeira = list(volume_path.glob("01-*.md"))
         if primeira:
             conteudo = primeira[0].read_text(encoding="utf-8")
@@ -124,47 +126,8 @@ def _ler_resumo_volume(raiz: Path, volume: str) -> Optional[str]:
     return f"Volume {volume}"
 
 
-def _extrair_diff_local(cwd: str) -> str:
-    """Extrai diff local via 'git diff'."""
-    try:
-        result = subprocess.run(
-            ["git", "diff"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        return result.stdout if result.returncode == 0 else ""
-    except Exception:
-        return ""
-
-
-def _analisar_e_sugerir_motor(cwd: str, fase: str) -> Optional[str]:
-    """Analisa diff local e sugere motor apropriado."""
-    if not AnalisadorDiff:
-        return None
-
-    # Não sugerir em fases iniciais
-    if fase in ["DESCOBERTA", "ANALISE"]:
-        return None
-
-    diff = _extrair_diff_local(cwd)
-    if not diff or not diff.strip():
-        return None
-
-    try:
-        analisador = AnalisadorDiff()
-        motor = analisador.analisar_diff(diff)
-        if motor:
-            return analisador.gerar_sugestao(motor)
-    except Exception:
-        pass
-
-    return None
-
-
-def montar_cartao_estendido(dados: dict, cfg: dict, raiz: Path, cwd: str) -> str:
-    """Monta cartão com motores + volumes + sugestão automática."""
+def montar_cartao_estendido(dados: dict, cfg: dict, raiz: Path) -> str:
+    """Monta cartão com motores + volumes injetados."""
     teto = _teto_efetivo(cfg)
     ciclo = dados.get("ciclo", {})
     fase = dados.get("fase", "?")
@@ -194,11 +157,6 @@ def montar_cartao_estendido(dados: dict, cfg: dict, raiz: Path, cwd: str) -> str
             else:
                 acrescentar(f"  • {motor}")
 
-    # Seção: Sugestão automática de motor (V3 novo)
-    sugestao = _analisar_e_sugerir_motor(str(cwd), fase)
-    if sugestao:
-        acrescentar(sugestao)
-
     # Seção: Volumes PRONTO
     volumes_existentes = []
     for vol in VOLUMES_PRONTOS:
@@ -221,7 +179,9 @@ def montar_cartao_estendido(dados: dict, cfg: dict, raiz: Path, cwd: str) -> str
     if decisoes:
         acrescentar("Decisões:")
         for item in decisoes:
-            acrescentar(f"  - {_cortar(item.get('o_que', ''), 60)}")
+            acrescentar(
+                f"  - {_cortar(item.get('o_que', ''), 60)}"
+            )
 
     # Seção: Diffs pendentes (original)
     diffs = dados.get("diffs_pendentes") or []
@@ -242,15 +202,14 @@ def principal() -> int:
         if not isinstance(evento, dict):
             return 0
 
-        cwd = evento.get("cwd") or "."
-        raiz = raiz_do_ciclo(Path(cwd))
+        raiz = raiz_do_ciclo(Path(evento.get("cwd") or "."))
 
         dados = estado.carregar(raiz)
         if not dados or not dados.get("ativo"):
             return 0
 
         cfg = config.carregar(raiz)
-        cartao = montar_cartao_estendido(dados, cfg, raiz, cwd)
+        cartao = montar_cartao_estendido(dados, cfg, raiz)
 
         if cartao.strip():
             print(cartao)
