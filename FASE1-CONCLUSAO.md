@@ -43,10 +43,10 @@ Documentado em `INTEGRACAO.md`, seção "Mapeamento".
 
 ### 3. **3 Volumes PRONTO Consultáveis** ✅
 
-Os volumes que chegaram ao status PRONTO no AI-ENGINEERING-OS agora estão:
+Os volumes de conhecimento que chegaram ao status PRONTO agora estão:
 
 - **Copiados** para `./volumes/prontos/`
-- **Symlinked** para o AI-ENGINEERING-OS
+- **Symlinked** para o acervo de conhecimento externo
 - **Documentados** em `./volumes/_catalogo.md`
 
 | Volume | Conteúdo | Consultado por |

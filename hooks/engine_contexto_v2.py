@@ -3,7 +3,7 @@
 
 Extends engine_contexto.py para carregar:
 1. Motores relevantes para a fase (revisar-codigo, materializar-ideia, etc)
-2. Volumes PRONTO do AI-ENGINEERING-OS (07-PROMPT-ENGINE, 12-MEMORY, 31-TESTING)
+2. Volumes de conhecimento PRONTO do acervo externo (07-PROMPT-ENGINE, 12-MEMORY, 31-TESTING)
 
 Ambos carregados dinamicamente, dentro do teto de linhas do cartão.
 """
@@ -94,11 +94,11 @@ def _ler_descricao_motor(raiz: Path, motor: str) -> Optional[str]:
 
 def _ler_resumo_volume(raiz: Path, volume: str) -> Optional[str]:
     """Lê resumo do volume de seu README ou _VOLUME.yml."""
-    # Tenta volume_prontos primeiro (symlink), depois AI-ENGINEERING-OS
+    # Tenta volume_prontos primeiro (symlink), depois o acervo externo
     volume_path = raiz / "volumes" / "prontos" / volume
     if not volume_path.exists():
-        # Fallback para caminho absoluto
-        volume_path = Path.home() / "projetos" / "AI_ENGINEERING_OS" / volume
+        # Fallback para caminho absoluto (exemplo: onde o acervo estiver clonado)
+        volume_path = Path.home() / "projetos" / "acervo" / volume
 
     if not volume_path.exists():
         return None

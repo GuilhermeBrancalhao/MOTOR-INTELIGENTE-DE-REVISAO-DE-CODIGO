@@ -45,7 +45,7 @@ planejamento-do-motor-de-revisao-de-codigo/
 │   ├── arquitetar-sistema/
 │   ├── otimizar-performance/
 │   └── diagramar/
-├── volumes/             ← Link aos 42 volumes do AI-ENGINEERING-OS (NOVO)
+├── volumes/             ← Link aos volumes do acervo de conhecimento (NOVO)
 │   ├── _catalogo.md
 │   └── prontos/         ← 3 volumes PRONTO consultáveis
 │       ├── 07-PROMPT-ENGINE/
@@ -134,9 +134,9 @@ cp -r ~/.claude/skills/{revisar-codigo,materializar-ideia,arquitetar-sistema,oti
 volumes/
 ├── _catalogo.md
 └── prontos/
-    ├── 07-PROMPT-ENGINE → /home/user/projetos/AI_ENGINEERING_OS/07-PROMPT-ENGINE/
-    ├── 12-MEMORY → /home/user/projetos/AI_ENGINEERING_OS/12-MEMORY/
-    └── 31-TESTING → /home/user/projetos/AI_ENGINEERING_OS/31-TESTING/
+    ├── 07-PROMPT-ENGINE → /caminho/do/acervo/07-PROMPT-ENGINE/
+    ├── 12-MEMORY → /caminho/do/acervo/12-MEMORY/
+    └── 31-TESTING → /caminho/do/acervo/31-TESTING/
 ```
 
 ### 3. `hooks/engine_contexto.py` — Modificar
@@ -220,7 +220,7 @@ def detectar_motor(diff: str, fase: str) -> str:
 ## Próximas fases (depois de Fase 1)
 
 ### Fase 2: Volumes consultáveis ao vivo
-- Integração com git para ler volumes do repo AI-ENGINEERING-OS em tempo real
+- Integração com git para ler volumes do repositório do acervo de conhecimento em tempo real
 - Sincronização automática quando novo volume fica PRONTO
 
 ### Fase 3: Detecção automática de motor

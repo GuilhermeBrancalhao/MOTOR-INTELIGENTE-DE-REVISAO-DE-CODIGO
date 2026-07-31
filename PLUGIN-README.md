@@ -24,7 +24,7 @@ Integra-se seamlessly com seu workflow Claude Code, oferecendo:
 ### Via Claude Code
 
 ```bash
-/plugin install ai-engineering-os-engines
+/plugin install engine@engine-marketplace
 ```
 
 ### Manual

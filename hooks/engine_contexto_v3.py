@@ -99,7 +99,7 @@ def _ler_resumo_volume(raiz: Path, volume: str) -> Optional[str]:
     """Lê resumo do volume de seu README ou _VOLUME.yml."""
     volume_path = raiz / "volumes" / "prontos" / volume
     if not volume_path.exists():
-        volume_path = Path.home() / "projetos" / "AI_ENGINEERING_OS" / volume
+        volume_path = Path.home() / "projetos" / "acervo" / volume
 
     if not volume_path.exists():
         return None

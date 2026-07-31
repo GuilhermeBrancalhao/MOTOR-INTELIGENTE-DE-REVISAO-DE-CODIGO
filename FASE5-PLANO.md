@@ -61,8 +61,8 @@ com `hooks/hooks.json`; foi removido):
 
 ```json
 {
-  "name": "ai-engineering-os-engines",
-  "displayName": "AI Engineering Motor (ENGINE)",
+  "name": "engine",
+  "displayName": "ENGINE — Motor de Engenharia",
   "version": "4.0.0",
   "description": "Intelligent motor...",
   "author": { "name": "...", "url": "..." },
@@ -157,7 +157,7 @@ v1.0.0 (2026-07-31) - Base
 
 ### Automático
 ```bash
-/plugin install ai-engineering-os-engines
+/plugin install engine@engine-marketplace
 ```
 
 ### Manual
@@ -279,6 +279,6 @@ Fase 5 conclui o desenvolvimento de ENGINE como plugin completo e pronto para pr
 **Desenvolvido com ❤️ para Claude Code Engineers**
 
 ```
-AI-ENGINEERING-OS Engines v4.0.0
+ENGINE v4.0.0
 Status: ✅ PRONTO PARA PUBLICAÇÃO
 ```
