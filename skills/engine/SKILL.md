@@ -16,6 +16,9 @@ quando o ciclo termina. Instrução direta do usuário sempre vence o motor.
 | `/engine <pedido>` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" ligar "<objetivo em uma frase>"` e entre em DESCOBERTA |
 | `/engine off` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" desligar` e apresente o resumo do ciclo |
 | `/engine status` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" status` e apresente a saída |
+| `/engine <pedido> --dry` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" ligar "<objetivo em uma frase>" --dry` — use para um ciclo que só planeja e relata, sem escrever |
+| `/engine retomar` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" retomar` e apresente o resumo de reentrada — use quando a sessão é nova mas o ciclo já existe |
+| `/engine relatorio` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" relatorio ciclo` (ou `relatorio fase <FASE>`) e apresente a saída |
 
 Essa é a forma que funciona **de qualquer diretório**, e é a única que se deve usar. O
 diretório corrente é o do projeto do usuário, não o do plugin: ali `python -m

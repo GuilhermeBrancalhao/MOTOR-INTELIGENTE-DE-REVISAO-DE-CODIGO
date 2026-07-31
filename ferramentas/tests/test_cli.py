@@ -1,4 +1,5 @@
 """Testes da CLI usada pela skill /engine."""
+import json
 import os
 import subprocess
 import sys
@@ -176,4 +177,120 @@ def test_fase_com_estado_corrompido_reporta_erro_sem_estourar(tmp_path):
     _corromper_estado(tmp_path)
     saida = _cli(tmp_path, "fase", "ANALISE")
     assert saida.returncode == 1
+    assert "Traceback" not in saida.stderr
+
+
+# --- F2-T5: ligar --dry ------------------------------------------------------------
+
+
+def test_ligar_com_dry_grava_modo_dry(tmp_path):
+    saida = _cli(tmp_path, "ligar", "planejar sem escrever", "--dry")
+    assert saida.returncode == 0
+    conteudo = (tmp_path / ".engine" / "estado.json").read_text(encoding="utf-8")
+    assert '"modo": "dry"' in conteudo
+    assert "dry" in saida.stdout.lower()
+
+
+def test_ligar_com_dry_e_forcar_coexistem(tmp_path):
+    _cli(tmp_path, "ligar", "primeiro")
+    saida = _cli(tmp_path, "ligar", "segundo", "--dry", "--forcar")
+    assert saida.returncode == 0
+    assert "segundo" in saida.stdout
+    conteudo = (tmp_path / ".engine" / "estado.json").read_text(encoding="utf-8")
+    assert '"modo": "dry"' in conteudo
+
+
+def test_ligar_sem_dry_grava_modo_normal(tmp_path):
+    _cli(tmp_path, "ligar", "objetivo normal")
+    conteudo = (tmp_path / ".engine" / "estado.json").read_text(encoding="utf-8")
+    assert '"modo": "normal"' in conteudo
+
+
+# --- F2-T5: ligar detecta cartões ---------------------------------------------------
+
+
+def test_ligar_detecta_cartoes_do_projeto(tmp_path):
+    (tmp_path / "pyproject.toml").write_text("[project]\nname = 'x'\n", encoding="utf-8")
+    saida = _cli(tmp_path, "ligar", "detectar stack")
+    assert saida.returncode == 0
+    conteudo = (tmp_path / ".engine" / "estado.json").read_text(encoding="utf-8")
+    assert "python" in conteudo
+    assert "python" in saida.stdout
+
+
+def test_ligar_sem_nenhuma_tecnologia_grava_cartoes_vazio(tmp_path):
+    saida = _cli(tmp_path, "ligar", "projeto vazio")
+    assert saida.returncode == 0
+    conteudo = (tmp_path / ".engine" / "estado.json").read_text(encoding="utf-8")
+    assert '"cartoes": []' in conteudo
+
+
+# --- F2-T5: retomar ------------------------------------------------------------------
+
+
+def test_retomar_sem_estado_sai_1_com_mensagem(tmp_path):
+    saida = _cli(tmp_path, "retomar")
+    assert saida.returncode == 1
+    assert "Traceback" not in saida.stderr
+    assert saida.stdout.strip() != ""
+
+
+def test_retomar_com_estado_corrompido_sai_1_sem_tocar_no_arquivo(tmp_path):
+    _corromper_estado(tmp_path)
+    caminho_estado = tmp_path / ".engine" / "estado.json"
+    conteudo_antes = caminho_estado.read_text(encoding="utf-8")
+    saida = _cli(tmp_path, "retomar")
+    assert saida.returncode == 1
+    assert "Traceback" not in saida.stderr
+    assert caminho_estado.read_text(encoding="utf-8") == conteudo_antes
+
+
+def test_retomar_com_estado_e_trilha_imprime_fase_objetivo_e_ultima_acao(tmp_path):
+    _cli(tmp_path, "ligar", "concluir a tarefa F2-T5")
+    trilha_path = tmp_path / ".engine" / "trilha.jsonl"
+    entradas = [
+        {"quando": "1", "fase": "DESCOBERTA", "ferramenta": "Read", "alvo": "a.py",
+         "risco": "livre", "regra": ""},
+        {"quando": "2", "fase": "DESCOBERTA", "ferramenta": "Write", "alvo": "b.py",
+         "risco": "rastreado", "regra": ""},
+    ]
+    with trilha_path.open("a", encoding="utf-8") as arquivo:
+        for entrada in entradas:
+            arquivo.write(json.dumps(entrada) + "\n")
+
+    saida = _cli(tmp_path, "retomar")
+    assert saida.returncode == 0
+    assert "DESCOBERTA" in saida.stdout
+    assert "concluir a tarefa F2-T5" in saida.stdout
+    assert "b.py" in saida.stdout
+
+
+# --- F2-T5: relatorio ----------------------------------------------------------------
+
+
+def test_relatorio_ciclo_imprime_o_objetivo(tmp_path):
+    _cli(tmp_path, "ligar", "objetivo do relatorio de ciclo")
+    saida = _cli(tmp_path, "relatorio", "ciclo")
+    assert saida.returncode == 0
+    assert "objetivo do relatorio de ciclo" in saida.stdout
+
+
+def test_relatorio_sem_argumento_usa_ciclo_por_padrao(tmp_path):
+    _cli(tmp_path, "ligar", "objetivo padrao")
+    saida = _cli(tmp_path, "relatorio")
+    assert saida.returncode == 0
+    assert "objetivo padrao" in saida.stdout
+
+
+def test_relatorio_fase_build_roda_com_saida_0(tmp_path):
+    _cli(tmp_path, "ligar", "objetivo qualquer")
+    saida = _cli(tmp_path, "relatorio", "fase", "BUILD")
+    assert saida.returncode == 0
+    assert "Traceback" not in saida.stderr
+
+
+def test_relatorio_fase_inexistente_nao_estoura(tmp_path):
+    _cli(tmp_path, "ligar", "objetivo qualquer")
+    saida = _cli(tmp_path, "relatorio", "fase", "NAO_EXISTE")
+    assert saida.returncode == 0
     assert "Traceback" not in saida.stderr
