@@ -1,8 +1,102 @@
 {
-  "name": "engine",
-  "version": "0.1.0",
-  "description": "Motor de engenharia persistente: ciclo em fases, papéis por etapa e portas de segurança graduadas por risco.",
+  "name": "ai-engineering-os-engines",
+  "displayName": "AI Engineering Motor (ENGINE)",
+  "version": "4.0.0",
+  "description": "Intelligent motor for Claude Code with automated code review, optimization suggestions, architecture decisions, and dynamic volume discovery.",
   "author": {
-    "name": "AlphaContabilidade"
+    "name": "Claude Engineering",
+    "url": "https://github.com/anthropics/claude-code"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/AlphaContabilidade/planejamento-do-motor-de-revisao-de-codigo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AlphaContabilidade/planejamento-do-motor-de-revisao-de-codigo.git"
+  },
+  "keywords": [
+    "code-review",
+    "optimization",
+    "architecture",
+    "automation",
+    "engine",
+    "ai-engineering"
+  ],
+  "capabilities": {
+    "hooks": [
+      {
+        "id": "engine_contexto_v4",
+        "name": "ENGINE Context Hook",
+        "description": "Injects ENGINE context with motores, volumes, and automatic suggestions into cartão",
+        "event": "UserPromptSubmit",
+        "script": "hooks/engine_contexto_v4.py"
+      }
+    ],
+    "skills": [
+      {
+        "id": "revisar-codigo",
+        "name": "Revisar Código",
+        "description": "Code review motor - identifies security, reliability, and best practice issues",
+        "path": "motores/revisar-codigo"
+      },
+      {
+        "id": "otimizar-performance",
+        "name": "Otimizar Performance",
+        "description": "Performance optimization motor - finds bottlenecks and suggests improvements",
+        "path": "motores/otimizar-performance"
+      },
+      {
+        "id": "arquitetar-sistema",
+        "name": "Arquitetar Sistema",
+        "description": "System architecture motor - decides design patterns and system boundaries",
+        "path": "motores/arquitetar-sistema"
+      },
+      {
+        "id": "materializar-ideia",
+        "name": "Materializar Ideia",
+        "description": "Idea materialization motor - transforms concepts into running implementations",
+        "path": "motores/materializar-ideia"
+      },
+      {
+        "id": "diagramar",
+        "name": "Diagramar",
+        "description": "Diagramming motor - creates C4, ER, sequence, and other architecture diagrams",
+        "path": "motores/diagramar"
+      }
+    ],
+    "volumes": [
+      {
+        "id": "07-prompt-engine",
+        "name": "ENGINE Prompts",
+        "description": "Curated prompts for AI engineering workflows",
+        "path": "volumes/prontos/07-PROMPT-ENGINE"
+      },
+      {
+        "id": "12-memory",
+        "name": "Memory & State",
+        "description": "Documentation on memory systems, state persistence, and context management",
+        "path": "volumes/prontos/12-MEMORY"
+      },
+      {
+        "id": "31-testing",
+        "name": "Testing Strategy",
+        "description": "Comprehensive testing frameworks, patterns, and best practices",
+        "path": "volumes/prontos/31-TESTING"
+      }
+    ]
+  },
+  "dependencies": {
+    "python": ">=3.8"
+  },
+  "metadata": {
+    "category": "code-engineering",
+    "tags": [
+      "review",
+      "optimization",
+      "architecture",
+      "automation",
+      "ai",
+      "engineering"
+    ],
+    "minClaudeCodeVersion": "1.0.0"
   }
 }
