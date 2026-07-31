@@ -71,6 +71,37 @@ def test_todos_os_cartoes_reais_sao_lidos_sem_erro():
         assert esperada in tecnologias, f"cartão {esperada!r} não encontrado/lido"
 
 
+def test_os_doze_cartoes_do_elenco_completo_sao_validos():
+    """Elenco completo da Fase 2: os 3 cartões da Fase 1 + os 9 novos, todos com
+    `detectar` e `papeis` não vazios. É esse teste que impede um cartão malformado
+    (ou um cartão esquecido) entrar no acervo sem ser percebido."""
+    diretorio = RAIZ_PLUGIN / "cartoes"
+    cartoes = [c for c in diretorio.glob("*.md") if not c.name.startswith("_")]
+
+    esperados = {
+        "python", "pytest", "ui-ux",
+        "fastapi", "excel-vba", "office-scripts", "power-query", "react",
+        "typescript", "postgresql", "sqlite", "mermaid",
+    }
+    assert len(cartoes) == 12, (
+        f"esperava 12 cartões em cartoes/, achou {len(cartoes)}: "
+        f"{sorted(c.name for c in cartoes)}"
+    )
+
+    tecnologias = set()
+    for caminho in cartoes:
+        cartao = detectar.ler_cartao(caminho)
+        assert cartao["tecnologia"], f"{caminho.name}: 'tecnologia' vazia"
+        assert cartao["detectar"], f"{caminho.name}: 'detectar' vazio"
+        assert cartao["papeis"], f"{caminho.name}: 'papeis' vazio"
+        tecnologias.add(cartao["tecnologia"])
+
+    assert tecnologias == esperados, (
+        f"tecnologias lidas != esperadas. faltando={esperados - tecnologias} "
+        f"sobrando={tecnologias - esperados}"
+    )
+
+
 # --- cartoes_do_projeto --------------------------------------------------
 
 
