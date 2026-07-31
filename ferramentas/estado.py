@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -117,8 +118,19 @@ def novo_ciclo(
     O `id` do ciclo é `<dia>-<n>`, onde `n` conta quantos ciclos já existiram nesse
     dia segundo `historico` — a lista (preservada entre ciclos) de todos os ids já
     usados. Isso evita colisão de id quando dois ciclos abrem no mesmo dia.
+
+    Estado corrompido NUNCA é sobrescrito em silêncio: `carregar_estrito` (não o
+    `carregar` tolerante, que devolve `None` tanto para "não existe" quanto para
+    "quebrado") distingue os dois casos, e o arquivo ilegível é preservado com o
+    mesmo mecanismo de renomeação do `desligar` (`estado.corrompido-<carimbo>.json`)
+    ANTES de o ciclo novo ser gravado. O `historico` dentro dele estava ilegível de
+    qualquer forma — mas continua recuperável no arquivo preservado.
     """
-    existente = carregar(raiz)
+    try:
+        existente = carregar_estrito(raiz)
+    except EstadoCorrompido:
+        _preservar_estado_corrompido(raiz, agora)
+        existente = None
     historico: list[str] = []
     if existente is not None:
         if existente.get("ativo") and not forcar:
@@ -191,6 +203,9 @@ def desligar(raiz: Path, agora: str | None = None) -> dict:
 
 def _preservar_estado_corrompido(raiz: Path, agora: str | None) -> None:
     carimbo = agora if agora is not None else datetime.now().strftime("%Y%m%d%H%M%S")
+    # `agora` pode ser um instante ISO (`2026-07-31T10:00:00`), e `:` é inválido em
+    # nome de arquivo no Windows — o carimbo é saneado para caracteres seguros.
+    carimbo = re.sub(r"[^0-9A-Za-z._-]", "-", carimbo)
     alvo = caminho(raiz)
     destino = alvo.parent / f"estado.corrompido-{carimbo}.json"
     os.replace(alvo, destino)

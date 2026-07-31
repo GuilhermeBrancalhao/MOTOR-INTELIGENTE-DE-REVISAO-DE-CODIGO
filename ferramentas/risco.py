@@ -13,7 +13,12 @@ reescreve história · **R3** deleção · **R4** alteração destrutiva de banc
 segredo (caminho **e** conteúdo com padrão de credencial) · **R6** deploy ou
 infraestrutura · **R7** instalação global · **R8** execução indireta, cano para
 interpretador e substituição de comando · **R9** escrita no painel de controle do
-motor (qualquer alvo sob um diretório `.engine/`). `R0` é a falha segura do próprio
+motor (qualquer alvo sob um diretório `.engine/`) · **R10** escrita em caminho de
+execução persistente (hook de git, `.claude/`/`.vscode/`/`.idea/`, init de shell, perfil
+do PowerShell, `Startup`, `crontab`, `.gitconfig`, `authorized_keys`) · **R11**
+destruição de dados ou de infraestrutura (`truncate`, `dd`, `robocopy /MIR`, `format`,
+`wsl --unregister`, `reg delete /f`, `pip uninstall`, truncamento por `>`) · **R12**
+comando grande demais para classificar com segurança. `R0` é a falha segura do próprio
 classificador.
 
 **R9 protege o painel de controle.** `.engine/estado.json` guarda `"ativo"`, o
@@ -85,15 +90,23 @@ _GIT_GLOBAL = (
     r"|--exec-path=\S+|--no-pager|-p|-P)\s+)*"
 )
 
+#: Todo quantificador ilimitado (`.*`, `[^\n]*`, `[^...]*`) que varre o comando cru vira
+#: um `{0,N}` limitado. `[^\n]*` era O(n²) no classificador: `\bcurl\b[^\n]*\s-X…`
+#: sobre `'curl '*6400` levava segundos porque o motor tentava casar o sufixo a partir
+#: de cada `curl`. Um teto no comprimento do trecho varrido corta o retrocesso pela raiz
+#: sem cegar nenhum caso real — comando útil não tem 200+ caracteres entre um verbo e a
+#: sua flag perigosa.
+_JANELA = "{0,200}"
+
 FAMILIAS: tuple[tuple[str, str, str], ...] = (
     (
         "R1",
         "escrita de rede",
-        r"\bcurl\b[^\n]*\s-X\s*(POST|PUT|PATCH|DELETE)\b"
-        r"|\bcurl\b[^\n]*\s--request\s+(POST|PUT|PATCH|DELETE)\b"
-        r"|\bcurl\b[^\n]*\s(-d|--data|--data-raw|--data-binary)\b"
-        r"|\bcurl\b[^\n]*\s(--upload-file|-T)\b"
-        r"|\bwget\b[^\n]*--post",
+        r"\bcurl\b[^\n]" + _JANELA + r"\s-X\s*(POST|PUT|PATCH|DELETE)\b"
+        r"|\bcurl\b[^\n]" + _JANELA + r"\s--request\s+(POST|PUT|PATCH|DELETE)\b"
+        r"|\bcurl\b[^\n]" + _JANELA + r"\s(-d|--data|--data-raw|--data-binary)\b"
+        r"|\bcurl\b[^\n]" + _JANELA + r"\s(--upload-file|-T)\b"
+        r"|\bwget\b[^\n]" + _JANELA + r"--post",
     ),
     (
         "R2",
@@ -101,26 +114,45 @@ FAMILIAS: tuple[tuple[str, str, str], ...] = (
         r"\bgit\s+" + _GIT_GLOBAL + r"(push|rebase)\b"
         r"|\bgit\s+" + _GIT_GLOBAL + r"reset\s+--hard\b"
         r"|\bgit\s+" + _GIT_GLOBAL + r"clean\s+-[a-zA-Z]*f"
-        r"|\bgit\s+" + _GIT_GLOBAL + r"checkout\s+--\s",
+        r"|\bgit\s+" + _GIT_GLOBAL + r"checkout\s+--\s"
+        # Reescrita/descarte de história e de árvore de trabalho: apagam trabalho local
+        # sem passar pela rede, mas sem volta. `git restore .`/`git checkout .` jogam
+        # fora mudanças não commitadas; `reflog expire`/`gc --prune`/`stash clear`
+        # descartam o histórico de recuperação; `worktree remove`/`update-ref -d`
+        # removem referências.
+        r"|\bgit\s+" + _GIT_GLOBAL + r"restore\b"
+        r"|\bgit\s+" + _GIT_GLOBAL + r"checkout\s+\.(?:\s|$)"
+        r"|\bgit\s+" + _GIT_GLOBAL + r"stash\s+clear\b"
+        r"|\bgit\s+" + _GIT_GLOBAL + r"reflog\s+expire\b"
+        r"|\bgit\s+" + _GIT_GLOBAL + r"gc\b[^\n]" + _JANELA + r"--prune"
+        r"|\bgit\s+" + _GIT_GLOBAL + r"worktree\s+remove\b"
+        r"|\bgit\s+" + _GIT_GLOBAL + r"update-ref\s+-d\b",
     ),
     (
         "R3",
         "deleção",
-        r"(^|[\s;|&])(rm|rmdir|del|erase)\s|\bRemove-Item\b",
+        r"(^|[\s;|&])(rm|rmdir|del|erase)\s"
+        r"|\bRemove-Item\b"
+        r"|\bClear-Content\b"
+        r"|\bshred\b"
+        r"|\bfind\b[^\n]" + _JANELA + r"\s-delete\b"
+        r"|\bxargs\b[^\n]" + _JANELA + r"\brm\b"
+        r"|(^|[\s;|&])/(?:usr/)?bin/rm\b",
     ),
     (
         "R4",
         "alteração destrutiva de banco",
         r"\b(DROP|TRUNCATE)\s+(TABLE|DATABASE|SCHEMA)\b"
         r"|\bALTER\s+TABLE\b"
-        r"|\bDELETE\s+FROM\b(?![^;\"']*\bWHERE\b)"
-        r"|\b(alembic|flyway|liquibase)\b[^\n]*\b(upgrade|migrate)\b"
+        r"|\bDELETE\s+FROM\b(?![^;\"']" + _JANELA + r"\bWHERE\b)"
+        r"|\b(alembic|flyway|liquibase)\b[^\n]" + _JANELA + r"\b(upgrade|migrate)\b"
         r"|\bmanage\.py\s+migrate\b",
     ),
     (
         "R6",
         "deploy ou infraestrutura",
         r"\bdocker\s+push\b"
+        r"|\bdocker\s+(?:system\s+)?prune\b"
         r"|\bkubectl\s+apply\b"
         r"|\bterraform\s+apply\b"
         r"|\bgh\s+workflow\s+run\b"
@@ -130,49 +162,110 @@ FAMILIAS: tuple[tuple[str, str, str], ...] = (
     (
         "R7",
         "instalação global",
-        r"\bnpm\s+(i|install)\b[^\n]*\s-g\b"
-        r"|\bpip[0-9.]*\s+install\b"
+        # `pip install` de PACOTE AVULSO é global; `pip install -r`, `-e` e `.` instalam
+        # a dependência declarada DO PROJETO — rotina, não pode travar. A distinção
+        # entra por um lookahead negativo: só trava se NÃO houver `-r`/`-e`/`.` logo em
+        # seguida.
+        r"\bnpm\s+(i|install)\b[^\n]" + _JANELA + r"\s-g\b"
+        r"|\bpip[0-9.]*\s+install\b(?![^\n]" + _JANELA
+        + r"(?:\s-r\b|\s--requirement\b|\s-e\b|\s--editable\b|\s\.(?:\s|$)))"
         r"|\bwinget\s+install\b"
         r"|\bchoco\s+install\b",
     ),
+    (
+        "R11",
+        "destruição de dados ou de infraestrutura",
+        # Zeram/sobrescrevem arquivo ou volume sem passar por `rm`, e desregistram
+        # infraestrutura inteira. `> arquivo` (só o redirecionamento, sem comando à
+        # esquerda) trunca o arquivo a zero — `echo x > arquivo`, que TEM comando à
+        # esquerda, não casa este padrão.
+        r"\btruncate\s+-s\b"
+        r"|\bdd\s+[^\n]" + _JANELA + r"\bof="
+        r"|\brobocopy\b[^\n]" + _JANELA + r"/MIR\b"
+        r"|\bcipher\s+/w"
+        r"|\bformat\s+[A-Za-z]:"
+        r"|\bwsl\b[^\n]" + _JANELA + r"--unregister\b"
+        r"|\breg\s+delete\b[^\n]" + _JANELA + r"/f\b"
+        r"|\bpip[0-9.]*\s+uninstall\b"
+        r"|^\s*:?\s*>\s*[^\s;|&>]",
+    ),
 )
 
+#: Ferramentas de busca de texto. Quando o PRIMEIRO token do segmento é uma delas, o SQL
+#: que aparece é ARGUMENTO de busca (`grep 'DELETE FROM' log.txt`), não uma execução —
+#: a família de banco (R4) não se aplica.
+_FERRAMENTAS_BUSCA = {
+    "grep", "egrep", "fgrep", "rg", "findstr", "ag", "ack", "sift",
+}
+
 _MSG_GIT = re.compile(r"(-m|--message)\s+('[^']*'|\"[^\"]*\")")
-#: Formas que EXECUTAM um comando escondido dentro do argumento de outro. Checadas
-#: sobre o segmento inteiro, não só dentro de `echo`/`-m`: `ls $(rm -rf /dados)` e
-#: ``ls `rm -rf /dados` `` escapavam justamente porque a checagem era local.
-_EXECUCAO_ESCONDIDA = re.compile(r"\$\(|`|<\(|>\(")
-_REDIRECT = re.compile(r">>?\s*([^\s;|&]+)")
+_REDIRECT = re.compile(r"(?:&>|>\||>>?)\s*([^\s;|&]+)")
 #: Disparadores de execução indireta. Inclui os interpretadores do Windows — o projeto
 #: roda em Windows e `cmd /c "del /s /q C:\dados"` precisa ter o payload inspecionado.
+#: Aceita flags ARBITRÁRIAS entre o interpretador e o `-c`/`-Command`/`-EncodedCommand`
+#: (`bash --norc -c`, `powershell -NoProfile -EncodedCommand`) e as formas combinadas do
+#: shell (`-lc`, `-ic`, `-lic`): sem isso, uma única flag desarmava a inspeção do payload.
 _EXEC_INDIRETA = re.compile(
-    r"\b(bash|sh|zsh|ksh|dash)\s+-c\s"
-    r"|\b(pwsh|powershell)(\.exe)?\s+"
-    r"(-Command|-c|-EncodedCommand|-enc|-ec|-e|-File|-f)\b"
-    r"|\bcmd(\.exe)?\s+/[ck]\b"
+    r"\b(?:bash|sh|zsh|ksh|dash)(?:\s+-{1,2}[\w-]+)*\s+-\w*c\b"
+    r"|\b(?:pwsh|powershell)(?:\.exe)?(?:\s+-{1,2}[\w-]+)*\s+"
+    r"(?:-Command|-c|-EncodedCommand|-enc|-ec|-e|-File|-f)\b"
+    r"|\bcmd(?:\.exe)?\s+/[ck]\b"
     r"|\beval\s",
     re.I,
 )
+#: Baixar-e-executar: só é `cano para interpretador` quando a ORIGEM do cano é uma busca
+#: de rede (`curl`/`wget`/`iwr`/`Invoke-WebRequest`). `cat dados.json | python -m
+#: json.tool` cana para um interpretador, mas a origem é um arquivo local — não é o
+#: idioma de baixar e executar, e travá-lo é falso positivo.
 _CANO_INTERPRETE = re.compile(
-    r"\|\s*(sudo\s+)?"
-    r"(bash|sh|zsh|ksh|python[0-9.]*|perl|ruby|node"
-    r"|powershell(\.exe)?|pwsh|cmd(\.exe)?|iex|invoke-expression)\b",
+    r"\b(?:curl|wget|iwr|invoke-webrequest|invoke-restmethod|irm)\b[^\n]{0,500}"
+    r"\|\s*(?:sudo\s+)?"
+    r"(?:bash|sh|zsh|ksh|python[0-9.]*|perl|ruby|node"
+    r"|powershell(?:\.exe)?|pwsh|cmd(?:\.exe)?|iex|invoke-expression)\b",
     re.I,
 )
-_PY_INLINE = re.compile(r"\bpython[0-9.]*\s+-c\s", re.I)
-#: Chamadas perigosas dentro de um `python -c`.
+
+#: Interpretadores com código embutido na linha. Cada um recebe uma família de flags
+#: entre o nome e o `-c`/`-e` (inclusive a forma colada `-Bc`) e um conjunto próprio de
+#: chamadas perigosas. `py` é *o* launcher do Windows e precisava estar aqui tanto quanto
+#: `python`; `node`/`perl`/`ruby` executam deleção e processo como qualquer outro.
+_PY_INLINE = re.compile(
+    r"\b(?:python[0-9.]*|py)(?:\.exe)?(?:\s+-{1,2}[\w-]+(?:\s+\S+)?)*\s+-\w*c\b",
+    re.I,
+)
+_NODE_INLINE = re.compile(
+    r"\bnode(?:\.exe)?(?:\s+-{1,2}[\w-]+(?:\s+\S+)?)*\s+-\w*e\b", re.I
+)
+_PERL_INLINE = re.compile(r"\bperl(?:\s+-{1,2}[\w-]+(?:\s+\S+)?)*\s+-\w*e\b", re.I)
+_RUBY_INLINE = re.compile(r"\bruby(?:\s+-{1,2}[\w-]+(?:\s+\S+)?)*\s+-\w*e\b", re.I)
+
+#: Chamadas perigosas dentro de um interpretador embutido.
 #:
-#: SEM `re.I`, de propósito. Estes são identificadores Python, e identificador Python é
-#: sensível a maiúsculas: `SHUTIL.RMTREE` não é chamada nenhuma, é texto. Casar sem
-#: distinguir caixa produzia falso positivo em prosa e em literal de string — o caso real
-#: que expôs isso foi a string `'EXEC(ruim)'` dentro de um comando de diagnóstico
-#: inofensivo, travado por `\beval\(|\bexec\(`. Falso positivo frequente é o que leva o
-#: humano a aprovar no automático, e aprovação automática anula a proteção inteira.
+#: SEM `re.I`, de propósito. Estes são identificadores, e identificador é sensível a
+#: maiúsculas: `SHUTIL.RMTREE` não é chamada nenhuma, é texto. Casar sem distinguir caixa
+#: produzia falso positivo em prosa e em literal de string — o caso real que expôs isso
+#: foi a string `'EXEC(ruim)'` dentro de um comando de diagnóstico inofensivo, travado
+#: por `\beval\(|\bexec\(`. Falso positivo frequente é o que leva o humano a aprovar no
+#: automático, e aprovação automática anula a proteção inteira.
 _PY_PERIGO = re.compile(
     r"shutil\.rmtree|shutil\.move|os\.remove|os\.unlink|os\.rmdir|subprocess"
     r"|requests\.(post|put|delete|patch)|urlopen"
     r"|os\.system|os\.popen|os\.exec\w*|os\.spawn\w*"
-    r"|\beval\(|\bexec\(|Path\(.*\)\.unlink"
+    r"|\beval\(|\bexec\(|Path\(.{0,200}\)\.unlink"
+)
+_NODE_PERIGO = re.compile(
+    r"rmSync|unlinkSync|rmdirSync|child_process|execSync|spawnSync"
+)
+_PERL_PERIGO = re.compile(r"\bunlink\b|\bsystem\s*\(|\bexec\s*\(")
+_RUBY_PERIGO = re.compile(
+    r"FileUtils|File\.delete|File\.unlink|\bsystem\s*\(|\bexec\s*\(|%x"
+)
+#: Ordem de inspeção dos interpretadores embutidos: (reconhecedor, perigo, nome).
+_INTERPRETES_INLINE = (
+    (_PY_INLINE, _PY_PERIGO, "python -c"),
+    (_NODE_INLINE, _NODE_PERIGO, "node -e"),
+    (_PERL_INLINE, _PERL_PERIGO, "perl -e"),
+    (_RUBY_INLINE, _RUBY_PERIGO, "ruby -e"),
 )
 
 #: Nome do diretório do painel de controle do motor. Estado e configuração vivem
@@ -235,8 +328,25 @@ def _e_segredo(alvo: str, config: dict) -> bool:
     nome = caminho.name
     inteiro = caminho.as_posix()
     for padrao in config.get("padroes_segredo", []):
+        if padrao == "*token*":
+            # `*token*` casava nome de arquivo de código comum (`token_store.py`,
+            # `tokenizer.py`) e até o argumento `token` de `pytest -k token`. Estreita
+            # para o que é de fato um arquivo de token: extensão `.token`, ou o nome
+            # traz `token` JUNTO de `secret`/`credential`.
+            if _nome_e_arquivo_de_token(nome):
+                return True
+            continue
         if fnmatch(nome, padrao) or fnmatch(inteiro, f"*{padrao}"):
             return True
+    return False
+
+
+def _nome_e_arquivo_de_token(nome: str) -> bool:
+    baixo = nome.lower()
+    if baixo.endswith(".token"):
+        return True
+    if "token" in baixo and ("secret" in baixo or "credential" in baixo):
+        return True
     return False
 
 
@@ -245,12 +355,18 @@ def _sob_painel(alvo: str) -> bool:
 
     Olha os componentes do caminho, não o prefixo textual: `.engine/estado.json`,
     `C:/proj/.engine/config.json` e `sub/.engine/x` casam todos, enquanto um arquivo
-    chamado `.engineering` não casa. Normaliza a barra invertida do Windows antes,
-    porque o alvo de um redirecionamento de shell chega como texto cru.
+    chamado `.engineering` não casa. A comparação IGNORA A CAIXA: no Windows o
+    filesystem não distingue maiúsculas, então `.ENGINE/estado.json` atinge o mesmo
+    arquivo real — e sem ignorar a caixa a família R9 inteira era contornável só
+    trocando a caixa do nome. Continua sendo por componente EXATO (ignorando caixa),
+    nunca por prefixo, para que `.engineering` siga de fora. Normaliza a barra invertida
+    do Windows antes, porque o alvo de um redirecionamento de shell chega como texto cru.
     """
     if not alvo:
         return False
-    return _PAINEL in Path(alvo.replace("\\", "/")).parts
+    return any(
+        parte.lower() == _PAINEL for parte in Path(alvo.replace("\\", "/")).parts
+    )
 
 
 def _resolver_alvo(alvo: str, raiz: Path) -> Path:
@@ -292,12 +408,30 @@ def _classificar_escrita(entrada: dict, raiz: Path, config: dict) -> Classificac
         return Classificacao(TRAVADO, "R5", f"arquivo de segredo: {caminho.name}")
     if _conteudo_com_credencial(entrada):
         return Classificacao(TRAVADO, "R5", "conteúdo com padrão de credencial")
+    if _e_execucao_persistente(caminho):
+        # R10: caminho que instala execução de código para rodar depois, sozinho
+        # (hook do git, config do editor, arquivo de inicialização de shell, perfil do
+        # PowerShell, pasta Startup, crontab, chave autorizada). Trava dentro OU fora da
+        # raiz — sem isso, `Write .git/hooks/pre-commit` instalava um `rm -rf` que rodava
+        # a cada commit sem nunca aparecer no relatório.
+        return Classificacao(
+            TRAVADO, "R10", "escrita em caminho de execução persistente"
+        )
+    if _e_unc(alvo):
+        # Caminho de rede (`//servidor/...`): nunca livre, e sem chamar `exists()` nele
+        # — a consulta a um compartilhamento remoto custa segundos de I/O.
+        return Classificacao(RASTREADO, "", "escrita em caminho de rede (UNC)")
     if caminho.exists():
         # Ordem invertida de propósito: a checagem de `tests/` ficava ACIMA desta e
         # liberava a sobrescrita de teste existente. Existir em disco decide primeiro.
         if _e_teste(caminho):
             return Classificacao(RASTREADO, "", "teste que já existe em disco")
         return Classificacao(RASTREADO, "", "arquivo já existe em disco")
+    if _fora_da_raiz(caminho, raiz):
+        # Arquivo NOVO fora da raiz do projeto: nunca livre. Escrever `../../.bashrc` ou
+        # `C:/Windows/Temp/x.ps1` sai do território do trabalho e, no mínimo, tem de
+        # aparecer no relatório.
+        return Classificacao(RASTREADO, "", "escrita fora da raiz do projeto")
     if _e_teste(caminho):
         return Classificacao(LIVRE, "", "arquivo de teste novo")
     return Classificacao(LIVRE, "", "arquivo novo")
@@ -305,6 +439,61 @@ def _classificar_escrita(entrada: dict, raiz: Path, config: dict) -> Classificac
 
 def _e_teste(caminho: Path) -> bool:
     return "tests" in caminho.parts or caminho.name.startswith("test_")
+
+
+#: Diretórios cuja escrita instala execução persistente (rodam código depois, sozinhos).
+_DIRS_EXEC_PERSISTENTE = {".claude", ".vscode", ".idea"}
+#: Nomes de arquivo que instalam execução persistente (init de shell, agendador, chave).
+_NOMES_EXEC_PERSISTENTE = {
+    ".bashrc",
+    ".bash_profile",
+    ".bash_login",
+    ".zshrc",
+    ".zprofile",
+    ".profile",
+    "crontab",
+    ".gitconfig",
+    "authorized_keys",
+}
+
+
+def _e_execucao_persistente(caminho: Path) -> bool:
+    """Diz se escrever neste caminho instala execução de código para rodar depois.
+
+    Cobre `.git/hooks/`, `.claude/`, `.vscode/`, `.idea/`, a pasta `Startup` do Windows,
+    os arquivos de inicialização de shell, o perfil do PowerShell (`*profile.ps1`),
+    `crontab`, `.gitconfig` e `authorized_keys`. Comparação por componente, ignorando a
+    caixa (o filesystem do Windows não distingue).
+    """
+    partes = [parte.lower() for parte in caminho.parts]
+    nome = caminho.name.lower()
+    if ".git" in partes:
+        i = partes.index(".git")
+        if i + 1 < len(partes) and partes[i + 1] == "hooks":
+            return True
+    if _DIRS_EXEC_PERSISTENTE.intersection(partes):
+        return True
+    if "startup" in partes:
+        return True
+    if nome in _NOMES_EXEC_PERSISTENTE:
+        return True
+    if nome.endswith("profile.ps1"):
+        return True
+    return False
+
+
+def _e_unc(alvo: str) -> bool:
+    """Caminho UNC (`//servidor/share` ou `\\\\servidor\\share`)."""
+    return alvo.replace("\\", "/").startswith("//")
+
+
+def _fora_da_raiz(caminho: Path, raiz: Path) -> bool:
+    """Diz se `caminho` (já resolvido `..` e absolutos) cai FORA da raiz do projeto."""
+    try:
+        caminho.resolve().relative_to(raiz.resolve())
+        return False
+    except (ValueError, OSError):
+        return True
 
 
 def _conteudo_com_credencial(entrada: dict) -> bool:
@@ -375,8 +564,21 @@ def _dividir_segmentos(comando: str) -> list[str]:
 
 _LIMITE_PROFUNDIDADE_INDIRETA = 3
 
+#: Teto de tamanho do comando. Acima disto, o comando NÃO é analisado padrão a padrão:
+#: ele é anormal por definição (comando útil não tem dezenas de milhares de caracteres) e
+#: varrer cada família sobre ele é justamente o vetor de ReDoS. Travar é o lado certo do
+#: erro — o humano confirma um comando gigante em vez de a sessão congelar analisando-o.
+_TETO_COMANDO = 20000
+
 
 def _classificar_comando(comando: str, config: dict, profundidade: int = 0) -> Classificacao:
+    if len(comando) > _TETO_COMANDO:
+        return Classificacao(
+            TRAVADO,
+            "R12",
+            f"comando grande demais para classificar com segurança "
+            f"({len(comando)} caracteres, teto {_TETO_COMANDO})",
+        )
     if not comando.strip():
         return Classificacao(RASTREADO, "", "comando vazio: nada a inspecionar")
     if _CANO_INTERPRETE.search(comando):
@@ -407,54 +609,150 @@ def _classificar_segmento(
     produz LIVRE aqui — foi exatamente a tentativa de produzir LIVRE que sete rodadas
     de revisão furaram, uma vez por rodada.
     """
+    tokens = _tokens(segmento)
+
+    for token in tokens:
+        # R9 abrangente: QUALQUER token de qualquer comando que aponte para dentro de
+        # `.engine/` desliga ou desarma o motor. `tee`, `cp`, `mv`, `sed -i`, `install`,
+        # `Set-Content` — cobrir só o redirecionamento `>` deixava todos esses de fora.
+        if _sob_painel(token):
+            return Classificacao(
+                TRAVADO, "R9", "escrita no painel de controle do motor"
+            )
+
     for alvo_cru in _REDIRECT.findall(segmento):
         # O alvo pode vir entre aspas (`> ".env"`): tira as aspas antes de comparar
         # com os padrões de segredo, senão o fnmatch nunca casa.
         alvo = alvo_cru.strip("'\"")
         if _sob_painel(alvo):
-            # `echo '{"ativo": false}' > .engine/estado.json` desliga o motor pelo
-            # shell. A porta de R9 tem de cobrir os dois transportes de escrita.
             return Classificacao(
                 TRAVADO, "R9", "escrita no painel de controle do motor"
             )
         if _e_segredo(alvo, config):
             return Classificacao(TRAVADO, "R5", f"redirecionamento para segredo: {alvo}")
 
-    if _EXECUCAO_ESCONDIDA.search(segmento):
+    e_git = bool(re.match(r"\s*git\b", segmento))
+    if e_git:
+        # O texto de `-m` é literal: apagá-lo evita que a mensagem do commit case uma
+        # família por engano. Mas a limpeza precisa vir ANTES da checagem de substituição
+        # de comando, senão `git commit -m "usa $(date)"` travava por um `$(...)`
+        # inofensivo no corpo da mensagem. O que executa de verdade dentro do `-m` é
+        # reclassificado à parte, logo abaixo.
+        limpo = _MSG_GIT.sub(" ", segmento)
+        perigo_msg = _substituicao_perigosa_na_mensagem(segmento, config, profundidade)
+        if perigo_msg is not None:
+            return perigo_msg
+    else:
+        limpo = segmento
+
+    if _tem_execucao_escondida(limpo):
         # `$(...)`, crase e substituição de processo executam um comando escondido
-        # dentro do argumento de outro, seja qual for o comando de fora.
+        # dentro do argumento de outro. Fora de aspas simples — `awk '{print $(NF)}'`
+        # tem `$(` LITERAL (aspas simples não expandem no shell) e não é substituição.
         return Classificacao(
             TRAVADO, "R8", "substituição de comando dentro do argumento"
         )
 
-    if re.match(r"\s*git\b", segmento):
-        # O texto de `-m` é literal (a substituição de comando já foi travada acima):
-        # apagá-lo evita que a mensagem do commit case uma família por engano.
-        limpo = _MSG_GIT.sub(" ", segmento)
-    else:
-        limpo = segmento
-
+    primeiro = tokens[0].lower() if tokens else ""
+    primeiro_e_busca = Path(primeiro).name in _FERRAMENTAS_BUSCA
     for regra, motivo, padrao in _familias(config):
+        if regra == "R4" and primeiro_e_busca:
+            # `grep 'DELETE FROM' log.txt`: o SQL é o alvo da busca, não uma execução.
+            continue
         if re.search(padrao, limpo, re.I):
             return Classificacao(TRAVADO, regra, motivo)
 
-    for token in _tokens(limpo)[1:]:
+    for token in tokens[1:]:
         # `cat .env` não é leitura inócua: sem isto, só a ferramenta `Read` travaria
         # segredo, e qualquer leitura pelo shell escaparia.
         if _e_segredo(token, config):
             return Classificacao(TRAVADO, "R5", f"argumento aponta para segredo: {token}")
 
-    if _PY_INLINE.search(segmento):
-        if _PY_PERIGO.search(segmento):
-            return Classificacao(TRAVADO, "R8", "python -c com chamada perigosa")
-        return Classificacao(
-            RASTREADO, "R8", "python -c: conteúdo não inspecionável a fundo"
-        )
+    for reconhecedor, perigo, nome in _INTERPRETES_INLINE:
+        if reconhecedor.search(segmento):
+            if perigo.search(segmento):
+                return Classificacao(TRAVADO, "R8", f"{nome} com chamada perigosa")
+            return Classificacao(
+                RASTREADO, "R8", f"{nome}: conteúdo não inspecionável a fundo"
+            )
 
     if _EXEC_INDIRETA.search(segmento):
         return _classificar_execucao_indireta(segmento, config, profundidade)
 
     return Classificacao(RASTREADO, "", _MOTIVO_COMANDO)
+
+
+def _tem_execucao_escondida(segmento: str) -> bool:
+    """Diz se há substituição de comando ativa (`$(...)`, crase, `<(`/`>(`).
+
+    Ignora o que está dentro de ASPAS SIMPLES: no shell, aspas simples não expandem, então
+    o `$(` de `awk '{print $(NF)}'` é texto literal, não uma substituição. Dentro de aspas
+    duplas, `$(...)` e crase EXPANDEM — continuam contando.
+    """
+    aspas: str | None = None
+    i = 0
+    n = len(segmento)
+    while i < n:
+        ch = segmento[i]
+        prox = segmento[i + 1] if i + 1 < n else ""
+        if aspas == "'":
+            if ch == "'":
+                aspas = None
+            i += 1
+            continue
+        if aspas == '"':
+            if ch == '"':
+                aspas = None
+            elif ch == "$" and prox == "(":
+                return True
+            elif ch == "`":
+                return True
+            i += 1
+            continue
+        if ch == "'":
+            aspas = "'"
+            i += 1
+            continue
+        if ch == '"':
+            aspas = '"'
+            i += 1
+            continue
+        if ch == "$" and prox == "(":
+            return True
+        if ch == "`":
+            return True
+        if ch in "<>" and prox == "(":
+            return True
+        i += 1
+    return False
+
+
+def _substituicao_perigosa_na_mensagem(
+    segmento: str, config: dict, profundidade: int
+) -> Classificacao | None:
+    """Classifica a substituição de comando embutida no texto de `-m`/`--message`.
+
+    `git commit -m "$(date)"` é inofensivo; `git commit -m "$(rm -rf /dados)"` executa
+    uma deleção escondida na mensagem. A distinção é o CONTEÚDO da substituição: extrai o
+    comando interno e reclassifica; se ele trava, a mensagem trava por R8, senão é
+    ignorada e o commit segue.
+    """
+    for _flag, aspado in _MSG_GIT.findall(segmento):
+        interior = aspado[1:-1] if len(aspado) >= 2 else aspado
+        for interno in _substituicoes_de(interior):
+            resultado = _classificar_comando(interno, config, profundidade + 1)
+            if resultado.nivel == TRAVADO:
+                return Classificacao(
+                    TRAVADO, "R8", "substituição de comando dentro da mensagem do git"
+                )
+    return None
+
+
+def _substituicoes_de(texto: str) -> list[str]:
+    """Comandos internos de cada `$(...)` e crase no texto (sem aninhar)."""
+    achados = [m.group(1) for m in re.finditer(r"\$\(([^()]{0,500})\)", texto)]
+    achados += [m.group(1) for m in re.finditer(r"`([^`]{0,500})`", texto)]
+    return achados
 
 
 def _tokens(segmento: str) -> list[str]:

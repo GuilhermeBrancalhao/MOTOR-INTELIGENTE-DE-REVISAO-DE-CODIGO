@@ -784,3 +784,122 @@ def test_gate_nao_cobra_quando_ha_acao_de_verdade_alem_da_cli_do_motor(tmp_path)
     saida = _rodar(HOOK_GATE, {"cwd": str(tmp_path), "stop_hook_active": False}, tmp_path)
     assert saida.returncode == 0
     assert estado.carregar(tmp_path).get("cobrancas_por_fase", {}).get("BUILD", 0) == 0
+
+
+# --- Revisão adversarial, CRÍTICO 1: `_com_avisos` lia o teto cru ----------------
+#
+# `int(cfg.get("teto_cartao_linhas", 40))` direto, sem o saneamento de
+# `_teto_bruto`/`_teto_efetivo` — e só no caminho com `_avisos` não vazio (é a
+# condição que dispara o corte de `_com_avisos`). Três falhas provadas:
+# teto 0 → `linhas[:0]` → cartão com 0 bytes; teto -3 → `linhas[:-3]` → some o
+# rodapé (invariantes 4 e 5) e o próprio aviso; teto "abc" → `int("abc")` →
+# ValueError subia até `principal()`, que devolve 0 sem imprimir nada.
+
+
+def _dados_minimos() -> dict:
+    return {
+        "ativo": True,
+        "fase": "DESCOBERTA",
+        "ciclo": {"objetivo": "objetivo do ciclo", "modo": "normal"},
+        "cartoes": [],
+        "decisoes": [],
+        "diffs_pendentes": [],
+        "pendencias": [],
+    }
+
+
+def test_com_avisos_teto_zero_nao_apaga_o_cartao():
+    contexto = _importar_contexto()
+    cfg = {"teto_cartao_linhas": 0, "_avisos": ["aviso de teste"]}
+    cartao = contexto._com_avisos(contexto.montar_cartao(_dados_minimos(), cfg), cfg)
+    assert cartao.strip() != "", "teto 0 apagava o cartão inteiro (0 bytes)"
+    for invariante in contexto.INVARIANTES:
+        assert invariante in cartao
+    assert "aviso de teste" in cartao
+
+
+def test_com_avisos_teto_negativo_nao_corta_o_rodape_nem_o_aviso():
+    contexto = _importar_contexto()
+    cfg = {"teto_cartao_linhas": -3, "_avisos": ["aviso de teste"]}
+    cartao = contexto._com_avisos(contexto.montar_cartao(_dados_minimos(), cfg), cfg)
+    # `linhas[:-3]` removia exatamente as três últimas: invariantes 4, 5 e o aviso.
+    assert contexto.INVARIANTES[3] in cartao
+    assert contexto.INVARIANTES[4] in cartao
+    assert "aviso de teste" in cartao
+
+
+def test_com_avisos_teto_nao_numerico_nao_levanta_e_mantem_o_cartao():
+    contexto = _importar_contexto()
+    cfg = {"teto_cartao_linhas": "abc", "_avisos": ["aviso de teste"]}
+    cartao = contexto._com_avisos(contexto.montar_cartao(_dados_minimos(), cfg), cfg)
+    for invariante in contexto.INVARIANTES:
+        assert invariante in cartao
+    assert "aviso de teste" in cartao
+
+
+def test_hook_contexto_config_com_teto_texto_e_aviso_ainda_imprime_o_cartao(tmp_path):
+    """O cenário de ponta a ponta da falha: config do projeto com teto de tipo
+    errado E um aviso presente. Antes, o ValueError dentro de `_com_avisos` subia
+    até o try/except de `principal()` e o hook saía 0 SEM imprimir nada — o cartão
+    inteiro desaparecia por um erro de digitação na configuração."""
+    _ligar(tmp_path)
+    pasta = tmp_path / ".engine"
+    (pasta / "config.json").write_text(
+        json.dumps({"teto_cartao_linhas": "abc", "chave_estranha": 1}),
+        encoding="utf-8",
+    )
+    saida = _rodar(HOOK_CONTEXTO, {"cwd": str(tmp_path)}, tmp_path)
+    assert saida.returncode == 0
+    assert saida.stdout.strip() != "", "o cartão não pode sumir por config quebrada"
+    assert "DESCOBERTA" in saida.stdout
+    assert "ENGINE aviso" in saida.stdout
+
+
+# --- Revisão adversarial, CRÍTICO 2: o cartão não redigia credencial -------------
+#
+# Objetivo, decisões, diffs e pendências saíam CRUS no cartão — que volta ao
+# contexto do modelo a cada turno (pior que a trilha, lida sob demanda). A redação
+# é a MESMA da trilha (`trilha.redigir`, fonte única de padrões), por referência e
+# não por cópia. Os tokens abaixo seguem as formas de `risco._PADROES_CREDENCIAL`
+# (`sk-`/`ghp_` + 16 alfanuméricos, `AKIA` + 16, `xox…`).
+
+_TOKEN_SK = "sk-projABCDEF1234567890"
+_TOKEN_GHP = "ghp_ABCDEFGHIJKLMNOP"
+_TOKEN_AKIA = "AKIAABCDEFGHIJKLMNOP"
+_TOKEN_XOX = "xoxb-1234567890-ABCDE"
+
+
+def test_cartao_redige_credencial_de_todos_os_campos():
+    contexto = _importar_contexto()
+    from ferramentas import config as config_mod
+
+    cfg = dict(config_mod.PADRAO)
+    dados = {
+        "ativo": True,
+        "fase": "BUILD",
+        "ciclo": {"objetivo": f"migrar api com chave {_TOKEN_SK} vazada", "modo": "normal"},
+        "cartoes": [],
+        "decisoes": [
+            {"o_que": f"usar {_TOKEN_GHP}", "porque": f"conta {_TOKEN_AKIA} antiga"}
+        ],
+        "diffs_pendentes": [f"src/{_TOKEN_AKIA}_config.py"],
+        "pendencias": [f"remover {_TOKEN_XOX} do código"],
+    }
+    cartao = contexto.montar_cartao(dados, cfg)
+    for token in (_TOKEN_SK, _TOKEN_GHP, _TOKEN_AKIA, _TOKEN_XOX):
+        assert token not in cartao, f"credencial {token!r} saiu crua no cartão"
+    assert trilha.MARCA_REDIGIDO in cartao
+    # Mesma redação da trilha, provada pelo mesmo texto nos dois caminhos:
+    assert trilha.redigir(_TOKEN_SK) == trilha.MARCA_REDIGIDO
+
+
+def test_hook_contexto_nao_vaza_credencial_do_objetivo_no_stdout(tmp_path):
+    estado.novo_ciclo(
+        tmp_path, f"trocar a chave {_TOKEN_SK} do serviço", "2026-07-31T00:00:00"
+    )
+    saida = _rodar(HOOK_CONTEXTO, {"cwd": str(tmp_path)}, tmp_path)
+    assert saida.returncode == 0
+    assert _TOKEN_SK not in saida.stdout
+    # a marca visível fica no lugar (só a parte ASCII: o decode do subprocess no
+    # Windows pode não ser UTF-8, e as aspas angulares virariam mojibake)
+    assert "redigido" in saida.stdout

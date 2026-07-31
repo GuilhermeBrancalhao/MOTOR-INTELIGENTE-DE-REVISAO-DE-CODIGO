@@ -36,11 +36,29 @@ _CHAVES_OBRIGATORIAS = ("tecnologia", "detectar", "papeis", "versao")
 #: Chaves cujo valor é sempre lista (`[...]`), nunca string solta.
 _CHAVES_LISTA = ("detectar", "papeis")
 
-#: Diretórios em que a varredura nunca entra, custe o que custar.
-_DIRETORIOS_IGNORADOS = {".git", "node_modules", "__pycache__", ".venv", ".engine"}
+#: Diretórios em que a varredura nunca entra, custe o que custar. Além dos cinco
+#: originais, os diretórios de artefato/saída/cache das stacks comuns: nada ali é
+#: âncora de detecção, e são exatamente as pastas que acumulam dezenas de milhares
+#: de arquivos — varrê-las era o que deixava o `ligar` lento.
+_DIRETORIOS_IGNORADOS = {
+    ".git", "node_modules", "__pycache__", ".venv", ".engine",
+    "dist", "build", "target", "venv", "env",
+    ".next", ".nuxt", ".svelte-kit",
+    "coverage", "htmlcov", ".tox",
+    ".mypy_cache", ".pytest_cache", ".ruff_cache",
+    "vendor", "Pods", ".gradle", ".idea", ".vscode",
+    "bin", "obj",
+}
 
 #: Quantos níveis de subdiretório a varredura desce a partir da raiz do projeto.
 _PROFUNDIDADE_MAXIMA = 6
+
+#: Teto de arquivos varridos numa detecção. Ao atingi-lo, a varredura PARA e a
+#: detecção segue só com o que já foi visto. Degradação aceitável de propósito:
+#: um cartão que deixou de ser detectado é perda pequena (dá para carregar à mão);
+#: o `ligar` travando por segundos num projeto com dezenas de milhares de arquivos
+#: é perda grande — o usuário espera por essa varredura.
+_TETO_ARQUIVOS_VARRIDOS = 20000
 
 
 class CartaoInvalido(Exception):
@@ -169,7 +187,10 @@ def cartoes_do_projeto(raiz_projeto: Path, raiz_plugin: Path) -> list[str]:
 
 def _caminhos_relativos(raiz_projeto: Path):
     """Gera o caminho relativo de todo arquivo sob `raiz_projeto`, respeitando o
-    limite de profundidade e os diretórios ignorados."""
+    limite de profundidade, os diretórios ignorados e o teto de arquivos
+    (`_TETO_ARQUIVOS_VARRIDOS` — ver o comentário da constante: parar cedo é
+    degradação aceitável, travar o `ligar` não é)."""
+    varridos = 0
     for atual, subdiretorios, arquivos in os.walk(raiz_projeto):
         atual_path = Path(atual)
         profundidade = len(atual_path.relative_to(raiz_projeto).parts)
@@ -179,6 +200,9 @@ def _caminhos_relativos(raiz_projeto: Path):
             if nome not in _DIRETORIOS_IGNORADOS and profundidade < _PROFUNDIDADE_MAXIMA
         ]
         for nome_arquivo in arquivos:
+            if varridos >= _TETO_ARQUIVOS_VARRIDOS:
+                return
+            varridos += 1
             yield (atual_path / nome_arquivo).relative_to(raiz_projeto)
 
 

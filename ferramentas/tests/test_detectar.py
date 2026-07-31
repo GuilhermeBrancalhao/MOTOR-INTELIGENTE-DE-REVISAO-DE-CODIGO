@@ -197,6 +197,58 @@ def test_ancoras_fortes_ainda_detectam_as_tres_tecnologias(tmp_path):
     assert "sqlite" in resultado
 
 
+# --- Revisão adversarial, IMPORTANTE 5: varredura lenta e sem teto ---------------
+#
+# Medido: 30 mil arquivos numa pasta não ignorada levaram 7,2 s — dentro do
+# `ligar`, com o usuário esperando. Duas defesas: a lista de diretórios ignorados
+# ampliada (artefato/saída/cache das stacks comuns) e um teto de arquivos varridos
+# (`_TETO_ARQUIVOS_VARRIDOS`) que interrompe a varredura e segue com o que já foi
+# detectado — degradação aceitável de propósito.
+
+
+def test_diretorios_de_artefato_sao_ignorados(tmp_path):
+    plugin = tmp_path / "plugin"
+    (plugin / "cartoes").mkdir(parents=True)
+    _escrever_cartao(plugin / "cartoes", "python_sintetico.md", "python-sintetico", ["**/*.py"])
+
+    projeto = tmp_path / "projeto"
+    for nome in ("dist", "build", "target", ".next", ".mypy_cache", "vendor", "bin", "obj"):
+        pasta = projeto / nome / "sub"
+        pasta.mkdir(parents=True)
+        (pasta / "arquivo.py").write_text("x = 1\n", encoding="utf-8")
+
+    assert detectar.cartoes_do_projeto(projeto, plugin) == []
+
+
+def test_teto_default_de_arquivos_varridos_e_20000():
+    assert detectar._TETO_ARQUIVOS_VARRIDOS == 20000
+
+
+def test_teto_de_arquivos_interrompe_a_varredura(tmp_path, monkeypatch):
+    for indice in range(10):
+        (tmp_path / f"arquivo_{indice}.txt").write_text("x\n", encoding="utf-8")
+    monkeypatch.setattr(detectar, "_TETO_ARQUIVOS_VARRIDOS", 5)
+    caminhos = list(detectar._caminhos_relativos(tmp_path))
+    assert len(caminhos) == 5, "ao atingir o teto a varredura tem de PARAR"
+
+
+def test_com_teto_atingido_a_deteccao_segue_com_o_que_ja_viu(tmp_path, monkeypatch):
+    plugin = tmp_path / "plugin"
+    (plugin / "cartoes").mkdir(parents=True)
+    _escrever_cartao(plugin / "cartoes", "alvo_sintetico.md", "alvo-sintetico", ["*.alvo"])
+
+    projeto = tmp_path / "projeto"
+    projeto.mkdir()
+    for indice in range(8):
+        (projeto / f"arquivo_{indice}.alvo").write_text("x\n", encoding="utf-8")
+
+    monkeypatch.setattr(detectar, "_TETO_ARQUIVOS_VARRIDOS", 3)
+    resultado = detectar.cartoes_do_projeto(projeto, plugin)
+    assert resultado == ["alvo-sintetico"], (
+        "parar no teto não pode virar 'não detecta nada': o que já foi visto vale"
+    )
+
+
 def test_padrao_invalido_e_ignorado_com_seguranca(tmp_path):
     plugin = tmp_path / "plugin"
     (plugin / "cartoes").mkdir(parents=True)

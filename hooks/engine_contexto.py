@@ -39,7 +39,7 @@ forcar_utf8()
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ferramentas import config, estado  # noqa: E402
+from ferramentas import config, estado, trilha  # noqa: E402
 
 INVARIANTES = (
     "1. Nunca afirmar sucesso sem ter olhado. Rodou, cola a saída; não rodou, diz que não rodou.",
@@ -55,21 +55,33 @@ INVARIANTES = (
 # vira piso, não é obedecido ao pé da letra.
 MINIMO_CARTAO = 9
 
+#: Default do teto quando a configuração não traz um valor utilizável.
+_TETO_DEFAULT = 40
+
+
+def _teto_bruto(cfg: dict) -> int:
+    """Lê `cfg['teto_cartao_linhas']` e normaliza pra inteiro com segurança.
+
+    Valor não numérico (ex.: `"abc"`) cai no default — NUNCA deixa o
+    `ValueError`/`TypeError` subir, porque no hook isso viraria "cartão inteiro
+    some por um erro de digitação na configuração". Todo leitor do teto neste
+    arquivo passa por aqui; ninguém faz `int(cfg.get(...))` direto.
+    """
+    bruto = cfg.get("teto_cartao_linhas", _TETO_DEFAULT)
+    try:
+        return int(bruto)
+    except (TypeError, ValueError):
+        return _TETO_DEFAULT
+
 
 def _teto_efetivo(cfg: dict) -> int:
-    """Lê `cfg['teto_cartao_linhas']`, normaliza pra inteiro com segurança (valor
-    não numérico cai no default 40) e aplica o piso `MINIMO_CARTAO`.
+    """Teto normalizado (`_teto_bruto`) com o piso `MINIMO_CARTAO` aplicado.
 
     Sem isso, `linhas[:teto]` com `teto` negativo vira "remova as últimas N
     linhas" em vez de "limite a N" — e um teto positivo mas menor que o piso
     corta cabeçalho e/ou rodapé, que são inegociáveis.
     """
-    bruto = cfg.get("teto_cartao_linhas", 40)
-    try:
-        teto = int(bruto)
-    except (TypeError, ValueError):
-        teto = 40
-    return max(teto, MINIMO_CARTAO)
+    return max(_teto_bruto(cfg), MINIMO_CARTAO)
 
 
 def _cortar(texto: str, limite: int) -> str:
@@ -77,6 +89,21 @@ def _cortar(texto: str, limite: int) -> str:
     único campo gigante (ex.: objetivo de 400 caracteres) virando várias linhas."""
     texto = " ".join(str(texto).split())
     return texto if len(texto) <= limite else texto[: limite - 1] + "…"
+
+
+def _campo(texto, limite: int) -> str:
+    """Redige credenciais e corta no limite — todo texto vindo do estado passa aqui.
+
+    A redação é `trilha.redigir`, de propósito por referência e não por cópia: a
+    trilha é a fonte única do que conta como credencial, e duas listas de padrões
+    em dois arquivos divergem na primeira vez que uma delas ganha um padrão novo.
+    O cartão precisa da MESMA proteção da trilha — pior, até: a trilha é lida sob
+    demanda, o cartão volta ao contexto do modelo a cada turno.
+
+    Redigir ANTES de cortar: um token truncado pelo corte ainda seria
+    reconhecível; redigido primeiro, o que sobra é só a marca.
+    """
+    return _cortar(trilha.redigir(str(texto)), limite)
 
 
 def montar_cartao(dados: dict, cfg: dict) -> str:
@@ -94,7 +121,7 @@ def montar_cartao(dados: dict, cfg: dict) -> str:
     cabecalho = [
         "== ENGINE ativo ==",
         f"Fase: {dados.get('fase', '?')}   Modo: {ciclo.get('modo', 'normal')}",
-        f"Objetivo do ciclo: {_cortar(ciclo.get('objetivo', ''), 160)}",
+        f"Objetivo do ciclo: {_campo(ciclo.get('objetivo', ''), 160)}",
     ]
     rodape = ["Invariantes:", *INVARIANTES]
 
@@ -107,23 +134,27 @@ def montar_cartao(dados: dict, cfg: dict) -> str:
 
     cartoes = dados.get("cartoes") or []
     if cartoes:
-        acrescentar(f"Cartões: {_cortar(', '.join(cartoes), 120)}")
+        acrescentar(f"Cartões: {_campo(', '.join(map(str, cartoes)), 120)}")
 
     decisoes = dados.get("decisoes") or []
     if decisoes:
         acrescentar("Decisões fechadas:")
         for item in decisoes:
             acrescentar(
-                f"  - {_cortar(item.get('o_que', ''), 70)}: {_cortar(item.get('porque', ''), 70)}"
+                f"  - {_campo(item.get('o_que', ''), 70)}: {_campo(item.get('porque', ''), 70)}"
             )
 
     diffs = dados.get("diffs_pendentes") or []
     if diffs:
-        acrescentar(f"Diffs por apresentar ({len(diffs)}): {_cortar(', '.join(diffs), 120)}")
+        acrescentar(
+            f"Diffs por apresentar ({len(diffs)}): {_campo(', '.join(map(str, diffs)), 120)}"
+        )
 
     pendencias = dados.get("pendencias") or []
     if pendencias:
-        acrescentar(f"Pendências ({len(pendencias)}): {_cortar('; '.join(pendencias), 120)}")
+        acrescentar(
+            f"Pendências ({len(pendencias)}): {_campo('; '.join(map(str, pendencias)), 120)}"
+        )
 
     linhas = cabecalho + corpo[:orcamento] + rodape
     return "\n".join(linhas[:teto])
@@ -131,14 +162,28 @@ def montar_cartao(dados: dict, cfg: dict) -> str:
 
 def _com_avisos(cartao: str, cfg: dict) -> str:
     """Acrescenta os avisos de configuração (`cfg['_avisos']`) ao cartão, sem nunca
-    furar o teto de linhas — os avisos entram no mesmo orçamento, não por fora dele."""
+    furar o teto de linhas — os avisos entram no mesmo orçamento, não por fora dele.
+
+    O teto passa por `_teto_bruto` (nunca por `int(cfg.get(...))` direto): um valor
+    não numérico aqui derrubava o cartão inteiro — o `ValueError` subia até o
+    `try/except` de `principal()`, que devolve 0 sem imprimir nada. E teto zero ou
+    negativo não é "limite apertado", é erro de configuração: `linhas[:0]` apagava
+    o cartão por completo e `linhas[:-n]` removia as últimas linhas — os
+    invariantes do rodapé e o próprio aviso que deveria aparecer. Nesses casos o
+    teto cai no default, o mesmo destino do valor não numérico. Teto positivo
+    continua sendo obedecido à risca, como sempre foi.
+    """
     avisos = cfg.get("_avisos") or []
     if not avisos:
         return cartao
-    teto = int(cfg.get("teto_cartao_linhas", 40))
+    teto = _teto_bruto(cfg)
+    if teto < 1:
+        teto = _TETO_DEFAULT
     linhas = cartao.splitlines()
     for aviso in avisos:
-        linhas.append(f"ENGINE aviso: {aviso}")
+        # Aviso também é texto que veio de fora (nome de chave, item de config do
+        # projeto): recebe a mesma redação do resto do cartão.
+        linhas.append(f"ENGINE aviso: {trilha.redigir(str(aviso))}")
     return "\n".join(linhas[:teto])
 
 

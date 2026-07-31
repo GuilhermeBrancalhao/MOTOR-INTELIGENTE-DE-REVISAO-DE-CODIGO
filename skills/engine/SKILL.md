@@ -13,19 +13,25 @@ quando o ciclo termina. Instrução direta do usuário sempre vence o motor.
 
 | Pedido do usuário | O que fazer |
 |---|---|
-| `/engine <pedido>` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" ligar "<objetivo em uma frase>"` e entre em DESCOBERTA |
-| `/engine off` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" desligar` e apresente o resumo do ciclo |
-| `/engine status` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" status` e apresente a saída |
-| `/engine <pedido> --dry` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" ligar "<objetivo em uma frase>" --dry` — use para um ciclo que só planeja e relata, sem escrever |
-| `/engine retomar` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" retomar` e apresente o resumo de reentrada — use quando a sessão é nova mas o ciclo já existe |
-| `/engine relatorio` | rode `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" relatorio ciclo` (ou `relatorio fase <FASE>`) e apresente a saída |
+| `/engine <pedido>` | rode `ENGINE_RAIZ="$(pwd)" bash "${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh" "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" ligar "<objetivo em uma frase>"` e entre em DESCOBERTA |
+| `/engine off` | rode `ENGINE_RAIZ="$(pwd)" bash "${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh" "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" desligar` e apresente o resumo do ciclo |
+| `/engine status` | rode `ENGINE_RAIZ="$(pwd)" bash "${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh" "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" status` e apresente a saída |
+| `/engine <pedido> --dry` | rode `ENGINE_RAIZ="$(pwd)" bash "${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh" "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" ligar "<objetivo em uma frase>" --dry` — use para um ciclo que só planeja e relata, sem escrever |
+| `/engine retomar` | rode `ENGINE_RAIZ="$(pwd)" bash "${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh" "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" retomar` e apresente o resumo de reentrada — use quando a sessão é nova mas o ciclo já existe |
+| `/engine relatorio` | rode `ENGINE_RAIZ="$(pwd)" bash "${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh" "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" relatorio ciclo` (ou `relatorio fase <FASE>`) e apresente a saída |
 
-Essa é a forma que funciona **de qualquer diretório**, e é a única que se deve usar. O
-diretório corrente é o do projeto do usuário, não o do plugin: ali `python -m
-ferramentas.cli` falha com `ModuleNotFoundError: No module named 'ferramentas'`, porque o
-pacote do plugin não está no `sys.path`. `${CLAUDE_PLUGIN_ROOT}` é expandido pelo Claude
-Code para a raiz do plugin instalado, e `ENGINE_RAIZ` diz à CLI qual é o projeto
-hospedeiro — o diretório corrente. Nunca troque de diretório para rodar a CLI.
+Essa é a forma que funciona **de qualquer diretório e em qualquer plataforma**, e é a
+única que se deve usar. O diretório corrente é o do projeto do usuário, não o do plugin:
+ali `python -m ferramentas.cli` falha com `ModuleNotFoundError: No module named
+'ferramentas'`, porque o pacote do plugin não está no `sys.path`. E o interpretador nunca
+é invocado por nome fixo: `hooks/engine.sh` — o mesmo lançador dos cinco hooks — detecta
+em runtime `py` (Windows), `python3` ou `python`, o que existir no PATH; chamar `py`
+direto quebraria em macOS/Linux, onde o Python Launcher não existe. (Não passe
+`--travar-sem-python` aqui: essa flag é exclusiva do hook `PreToolUse`; para a CLI, o
+lançador sem Python sai 0 em silêncio, que é o certo.) `${CLAUDE_PLUGIN_ROOT}` é
+expandido pelo Claude Code para a raiz do plugin instalado, e `ENGINE_RAIZ` diz à CLI
+qual é o projeto hospedeiro — o diretório corrente. Nunca troque de diretório para rodar
+a CLI.
 
 Se `ligar` recusar porque já existe um ciclo ativo, apresente o objetivo do ciclo em
 andamento ao usuário e pergunte se quer retomá-lo ou recomeçar. Só acrescente `--forcar`
@@ -37,7 +43,7 @@ ciclo em andamento.
 `DESCOBERTA → ANALISE → [EVOLUCAO, se o projeto já existe] → PLANO → ⟨porta⟩ → BUILD ⇄
 TESTE → REVISAO → DOC → ENTREGA`
 
-Avance de fase com `ENGINE_RAIZ="$(pwd)" py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" fase
+Avance de fase com `ENGINE_RAIZ="$(pwd)" bash "${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh" "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" fase
 <DESTINO>`. A CLI recusa transição fora do grafo — se ela recusar, a fase pretendida está
 errada, não a máquina.
 

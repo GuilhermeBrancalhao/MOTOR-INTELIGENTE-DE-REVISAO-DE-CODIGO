@@ -1,6 +1,8 @@
 """Testes de ferramentas/config.py."""
 import json
 
+import pytest
+
 from ferramentas import config
 
 
@@ -86,6 +88,88 @@ def test_padroes_de_segredo_que_nao_e_lista_avisa_e_mantem_o_default(tmp_path):
     cfg = config.carregar(tmp_path)
     assert cfg["padroes_segredo"] == config.PADRAO["padroes_segredo"]
     assert any("padroes_segredo" in aviso for aviso in cfg["_avisos"])
+
+
+# --- Revisão adversarial, IMPORTANTE 4: validar o que vem do projeto -------------
+#
+# `teto_cartao_linhas` aceitava qualquer coisa (string, objeto, booleano) e
+# `travado_extra` não tinha validação de forma — uma regex inválida chegava até
+# `re.search` e o classificador falhava fechado, travando a sessão inteira a
+# partir do `.engine/config.json` do projeto, sem nenhum aviso.
+
+
+@pytest.mark.parametrize("valor", ["abc", 12.5, {"x": 1}, [40], True, None])
+def test_teto_de_tipo_errado_e_descartado_com_aviso(tmp_path, valor):
+    _escrever_config(tmp_path, {"teto_cartao_linhas": valor})
+    cfg = config.carregar(tmp_path)
+    assert cfg["teto_cartao_linhas"] == 40, "tipo errado tem de cair no default"
+    assert any("teto_cartao_linhas" in aviso for aviso in cfg["_avisos"])
+
+
+def test_teto_inteiro_legitimo_continua_valendo(tmp_path):
+    _escrever_config(tmp_path, {"teto_cartao_linhas": 25})
+    cfg = config.carregar(tmp_path)
+    assert cfg["teto_cartao_linhas"] == 25
+    assert cfg["_avisos"] == []
+
+
+def test_travado_extra_que_nao_e_lista_e_descartado_com_aviso(tmp_path):
+    _escrever_config(tmp_path, {"travado_extra": "não sou lista"})
+    cfg = config.carregar(tmp_path)
+    assert cfg["travado_extra"] == []
+    assert any("travado_extra" in aviso for aviso in cfg["_avisos"])
+
+
+def test_travado_extra_item_malformado_e_descartado_sem_derrubar_os_demais(tmp_path):
+    _escrever_config(
+        tmp_path,
+        {
+            "travado_extra": [
+                {"regra": "RX", "motivo": "regex quebrada", "padrao": "[abertura"},
+                "nem é objeto",
+                {"regra": "RY", "motivo": "falta o padrao"},
+                {"regra": "RZ", "motivo": "proibido no projeto", "padrao": r"\bcomando_proibido\b"},
+            ]
+        },
+    )
+    cfg = config.carregar(tmp_path)
+    assert cfg["travado_extra"] == [
+        {"regra": "RZ", "motivo": "proibido no projeto", "padrao": r"\bcomando_proibido\b"}
+    ], "só o item bem formado sobrevive"
+    assert sum("travado_extra" in aviso for aviso in cfg["_avisos"]) == 3, (
+        "um aviso por item descartado, dizendo o que foi ignorado"
+    )
+
+
+def test_travado_extra_com_regex_invalida_nao_derruba_o_classificador(tmp_path):
+    """Antes da validação, a regex inválida chegava a `re.search` dentro do
+    classificador, que falha fechado: TUDO travava por R0. Com o item descartado
+    na fusão, o comando inofensivo segue rastreado e o item válido segue ativo."""
+    from ferramentas import risco
+
+    _escrever_config(
+        tmp_path,
+        {
+            "travado_extra": [
+                {"regra": "RX", "motivo": "regex quebrada", "padrao": "[abertura"},
+                {"regra": "RZ", "motivo": "proibido no projeto", "padrao": r"\bcomando_proibido\b"},
+            ]
+        },
+    )
+    cfg = config.carregar(tmp_path)
+
+    inofensivo = risco.classificar(
+        "Bash", {"command": "pytest -q"}, raiz=tmp_path, config=cfg
+    )
+    assert inofensivo.nivel == risco.RASTREADO, (
+        f"classificador tinha de seguir funcional, saiu {inofensivo}"
+    )
+
+    proibido = risco.classificar(
+        "Bash", {"command": "comando_proibido agora"}, raiz=tmp_path, config=cfg
+    )
+    assert proibido.nivel == risco.TRAVADO
+    assert proibido.regra == "RZ", "o item válido da lista continua armado"
 
 
 def test_carregar_nao_compartilha_listas_com_o_padrao(tmp_path):

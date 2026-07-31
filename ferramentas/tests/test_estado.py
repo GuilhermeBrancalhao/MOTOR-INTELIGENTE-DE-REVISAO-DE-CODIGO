@@ -131,6 +131,33 @@ def test_novo_ciclo_com_forcar_sobrescreve_ciclo_ativo(tmp_path):
     assert dados["ativo"] is True
 
 
+# --- Revisão adversarial, CRÍTICO 3: `novo_ciclo` sobre estado corrompido -------
+#
+# `novo_ciclo` usava `carregar()` (tolerante: `None` tanto para "não existe" quanto
+# para "corrompido"), então `ligar` sobre um estado.json quebrado sobrescrevia em
+# silêncio — sem `forcar=True`, sem preservar o arquivo, zerando `historico`.
+# Agora usa `carregar_estrito()` e preserva o original com o mesmo mecanismo do
+# `desligar` (`estado.corrompido-<carimbo>.json`) ANTES de gravar o ciclo novo.
+
+
+def test_novo_ciclo_sobre_estado_corrompido_preserva_o_original(tmp_path):
+    pasta = tmp_path / ".engine"
+    pasta.mkdir()
+    conteudo_quebrado = "{isso nao e json valido"
+    estado.caminho(tmp_path).write_text(conteudo_quebrado, encoding="utf-8")
+
+    dados = estado.novo_ciclo(tmp_path, "objetivo novo", AGORA)
+
+    preservados = list(pasta.glob("estado.corrompido-*.json"))
+    assert len(preservados) == 1, "o estado corrompido tinha de ser preservado"
+    assert preservados[0].read_text(encoding="utf-8") == conteudo_quebrado
+    assert ":" not in preservados[0].name, "carimbo ISO cru quebraria em Windows"
+
+    assert dados["ativo"] is True
+    gravado = json.loads(estado.caminho(tmp_path).read_text(encoding="utf-8"))
+    assert gravado["ciclo"]["objetivo"] == "objetivo novo"
+
+
 def test_novo_ciclo_dois_no_mesmo_dia_recebem_ids_diferentes(tmp_path):
     primeiro = estado.novo_ciclo(tmp_path, "primeiro objetivo", AGORA)
     estado.desligar(tmp_path)

@@ -123,3 +123,88 @@ def test_descarta_stub_windowsapps_e_usa_o_python_de_verdade(tmp_path):
     resultado = _rodar([str(alvo)], "passou pelo stub? nao.\n", path_env)
     assert resultado.returncode == 17
     assert resultado.stdout == "passou pelo stub? nao.\n"
+
+
+def test_descarta_stub_windowsapps_com_caixa_diferente(tmp_path):
+    """O filtro do stub não pode depender da caixa do caminho.
+
+    Caminho no Windows não distingue maiúsculas, e o PATH pode chegar
+    normalizado por outra ferramenta. Com a comparação sensível a caixa, uma
+    pasta `windowsapps` minúscula passava pelo filtro, o stub era executado e
+    devolvia um código arbitrário — que, não sendo 2, LIBERA a ação no hook de
+    risco. É a pior falha possível aqui: o gate acha que rodou.
+    """
+    pasta_stub = tmp_path / "local" / "microsoft" / "windowsapps"
+    pasta_stub.mkdir(parents=True)
+    stub = pasta_stub / "py"
+    stub.write_text("#!/usr/bin/env bash\nexit 9009\n", encoding="utf-8")
+    stub.chmod(0o755)
+
+    alvo = _script_eco_e_sai(tmp_path, "alvo.py", 0)
+    resultado = _rodar(["--travar-sem-python", str(alvo)], "", str(pasta_stub))
+    assert resultado.returncode == 2, resultado
+    assert "python" in resultado.stderr.lower()
+
+
+# --- O modo de falha que importa -------------------------------------------
+#
+# No Claude Code, SÓ `exit 2` bloqueia uma ação; qualquer outro código é erro
+# não-bloqueante e a ação acontece assim mesmo. Para o hook de risco isso
+# inverte a intuição: um erro qualquer não é "proteção ausente", é "proteção
+# que deixa passar". Por isso o lançador traduz todo código inesperado para 2
+# quando roda com `--travar-sem-python`.
+
+CODIGOS_INESPERADOS = [1, 7, 66, 127, 9009]
+
+
+@pytest.mark.parametrize("codigo", CODIGOS_INESPERADOS)
+def test_codigo_inesperado_do_classificador_vira_2(tmp_path, codigo):
+    alvo = _script_eco_e_sai(tmp_path, "alvo.py", codigo)
+    resultado = _rodar(
+        ["--travar-sem-python", str(alvo)], "", _diretorio_do_interpretador()
+    )
+    assert resultado.returncode == 2, f"codigo {codigo} deveria virar 2: {resultado}"
+
+
+@pytest.mark.parametrize("codigo", [0, 2])
+def test_codigo_legitimo_do_classificador_e_preservado(tmp_path, codigo):
+    """A tradução não pode engolir os dois códigos que o contrato define."""
+    alvo = _script_eco_e_sai(tmp_path, "alvo.py", codigo)
+    resultado = _rodar(
+        ["--travar-sem-python", str(alvo)], "", _diretorio_do_interpretador()
+    )
+    assert resultado.returncode == codigo, resultado
+
+
+def test_script_quebrado_trava_em_vez_de_liberar(tmp_path):
+    """Erro de sintaxe faz o Python sair 1 — que liberaria a ação."""
+    alvo = tmp_path / "quebrado.py"
+    alvo.write_text("isto nao e python valido (((\n", encoding="utf-8")
+    resultado = _rodar(
+        ["--travar-sem-python", str(alvo)], "", _diretorio_do_interpretador()
+    )
+    assert resultado.returncode == 2, resultado
+
+
+def test_script_inexistente_trava_no_modo_de_risco(tmp_path):
+    ausente = tmp_path / "nao_existe.py"
+    resultado = _rodar(
+        ["--travar-sem-python", str(ausente)], "", _diretorio_do_interpretador()
+    )
+    assert resultado.returncode == 2, resultado
+    assert "nao encontrado" in resultado.stderr.lower()
+
+
+def test_script_inexistente_nao_atrapalha_os_outros_hooks(tmp_path):
+    """Os outros quatro hooks nunca podem bloquear o turno do usuário."""
+    ausente = tmp_path / "nao_existe.py"
+    resultado = _rodar([str(ausente)], "", _diretorio_do_interpretador())
+    assert resultado.returncode == 0, resultado
+    assert resultado.stdout == ""
+
+
+def test_sem_alvo_nenhum_nao_estoura(tmp_path):
+    com_flag = _rodar(["--travar-sem-python"], "", _diretorio_do_interpretador())
+    assert com_flag.returncode == 2, com_flag
+    sem_flag = _rodar([], "", _diretorio_do_interpretador())
+    assert sem_flag.returncode == 0, sem_flag

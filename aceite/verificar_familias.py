@@ -1,4 +1,4 @@
-"""Verificação de aceite: as sete famílias travadas travam pelo hook de verdade.
+"""Verificação de aceite: as famílias travadas travam pelo hook de verdade.
 
 Diferente de um teste de unidade que chama `risco.classificar` direto, este script
 dispara `hooks/engine_risco.py` como SUBPROCESSO — o mesmo processo que o Claude Code
@@ -10,7 +10,7 @@ a política do classificador mudou depois que o brief foi escrito. Antes, comand
 shell podia sair `livre` por prova positiva (lista de comandos permitidos); agora
 `risco.py` proíbe explicitamente esse resultado para qualquer ferramenta de comando —
 "comando de shell nunca é livre" (ver o docstring de `ferramentas/risco.py`). Ou o
-comando casa uma das famílias R1-R8 e trava, ou sai RASTREADO (executa e é
+comando casa uma das famílias travadas e trava, ou sai RASTREADO (executa e é
 registrado no relatório da fase). Não existe mais uma lista de comandos "seguros"
 para testar como contraprova de shell.
 
@@ -34,11 +34,14 @@ from ferramentas import estado  # noqa: E402
 
 HOOK = Path(__file__).resolve().parent.parent / "hooks" / "engine_risco.py"
 
-#: As sete famílias travadas. R5 (segredo) não é uma regra de comando em
-#: `risco.FAMILIAS` — é decidida pelo lado de arquivo (`_classificar_escrita`), por
-#: isso entra como ferramenta `Write` sobre um caminho que casa `padroes_segredo`,
-#: não como comando `Bash`. As outras seis são comandos de shell que casam uma das
-#: famílias R1-R8 descritas em `ferramentas/risco.py`.
+#: As famílias travadas. R5 (segredo), R9 (painel de controle) e R10 (execução
+#: persistente) não são regras de comando em `risco.FAMILIAS` — são decididas pelo lado
+#: de arquivo (`_classificar_escrita`), por isso entram como ferramenta `Write` (as duas
+#: primeiras dependem da raiz e são acrescentadas em `main()`). As demais são comandos
+#: de shell que casam uma das famílias descritas em `ferramentas/risco.py`: R11
+#: (destruição de dados/infraestrutura) zera um arquivo sem passar por `rm`, e R12 é o
+#: teto de tamanho — comando acima de `risco._TETO_COMANDO` caracteres trava sem ser
+#: analisado padrão a padrão.
 CASOS_TRAVADOS = [
     ("R1", "rede: POST para fora", "Bash", {"command": "curl -X POST https://exemplo/x"}),
     ("R2", "git que sai da máquina", "Bash", {"command": "git push origin main"}),
@@ -46,6 +49,8 @@ CASOS_TRAVADOS = [
     ("R4", "alteração destrutiva de banco", "Bash", {"command": 'psql -c "DROP TABLE x"'}),
     ("R6", "deploy/infraestrutura", "Bash", {"command": "terraform apply"}),
     ("R7", "instalação global", "Bash", {"command": "npm install -g pnpm"}),
+    ("R11", "destruição de dados (truncar arquivo a zero)", "Bash", {"command": "truncate -s 0 dados.db"}),
+    ("R12", "comando acima do teto de tamanho", "Bash", {"command": "echo " + "a" * 20001}),
 ]
 
 
@@ -59,6 +64,15 @@ def _rodar_hook(ferramenta: str, entrada: dict, cwd: Path) -> subprocess.Complet
     )
 
 
+def _resumir(entrada: dict, teto: int = 120) -> str:
+    """Representação curta da entrada para o print — o caso de R12 tem 20 mil
+    caracteres de comando e imprimi-lo inteiro afogaria a saída do aceite."""
+    texto = repr(entrada)
+    if len(texto) <= teto:
+        return texto
+    return f"{texto[:teto]}… ({len(texto)} caracteres no total)"
+
+
 def main() -> int:
     raiz = Path(tempfile.mkdtemp(prefix="engine-aceite-"))
     estado.novo_ciclo(raiz, "aceite da fase 1", "2026-07-30T00:00:00")
@@ -70,13 +84,16 @@ def main() -> int:
     casos_travados.append(
         ("R9", "escrita no painel de controle do motor (.engine/)", "Write", {"file_path": str(raiz / ".engine" / "estado.json")})
     )
+    casos_travados.append(
+        ("R10", "escrita em caminho de execução persistente (hook de git)", "Write", {"file_path": str(raiz / ".git" / "hooks" / "pre-commit")})
+    )
 
     falhas: list[str] = []
 
     for regra, descricao, ferramenta, entrada in casos_travados:
         saida = _rodar_hook(ferramenta, entrada, raiz)
         travou = saida.returncode == 2
-        print(f"{regra} ({descricao}): {'TRAVOU' if travou else 'PASSOU'}  <- {entrada}")
+        print(f"{regra} ({descricao}): {'TRAVOU' if travou else 'PASSOU'}  <- {_resumir(entrada)}")
         if not travou:
             falhas.append(regra)
             if saida.stderr:

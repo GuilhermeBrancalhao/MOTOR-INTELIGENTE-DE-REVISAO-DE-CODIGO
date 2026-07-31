@@ -64,7 +64,14 @@ acidental.
 
 O mesmo raciocínio produziu a família **R9**: escrita em `.engine/` é travada, porque sem ela
 gravar `{"ativo": false}` no estado desligava os dois hooks — o motor não protegia o próprio
-painel de controle.
+painel de controle. Uma auditoria adversarial posterior acrescentou mais três famílias pelo
+mesmo caminho: **R10** (escrita em caminho de execução persistente — `.git/hooks/`,
+`.claude/`, init de shell — que a política de "arquivo novo é livre" deixava invisível),
+**R11** (destruição de dados sem verbo de apagar: `truncate`, `dd of=`, `robocopy /MIR`,
+`format`) e **R12** (comando acima do teto de 20.000 caracteres **trava** em vez de ser
+analisado — travar é o lado certo do erro, porque varrer as famílias sobre um comando
+gigante era um vetor de negação de serviço por regex). A lista fechada hoje vai de R1 a R12;
+a seção 5 da especificação documenta cada uma com o vetor que a motivou.
 
 ## Requisitos
 
@@ -121,9 +128,14 @@ O motor entra em DESCOBERTA, e a partir daí o cartão de estado aparece a cada 
 | Comando | Efeito |
 |---|---|
 | `/engine:engine <pedido>` | liga o motor e cria o ciclo |
+| `/engine:engine <pedido> --dry` | ciclo em modo seco: planeja e relata, **não escreve nada** |
 | `/engine:engine status` | fase, ciclo, decisões, arquivos tocados, pendências |
-| `/engine:engine off` | desliga e gera o relatório do ciclo |
+| `/engine:engine relatorio` | relatório do ciclo (ou de uma fase) a partir da trilha |
 | `/engine:engine retomar` | reconstrói o estado numa sessão nova |
+| `/engine:engine off` | desliga e gera o relatório do ciclo |
+
+O modo seco é o jeito de conhecer o motor sem risco: ele percorre as fases, apresenta o
+plano e relata, mas o classificador de risco rebaixa toda escrita para travada.
 
 ## Testes
 
@@ -131,7 +143,7 @@ O motor entra em DESCOBERTA, e a partir daí o cartão de estado aparece a cada 
 python -m pytest ferramentas/tests -v
 ```
 
-280 testes, apenas biblioteca padrão do Python — nenhuma dependência de runtime.
+388 testes, apenas biblioteca padrão do Python — nenhuma dependência de runtime.
 
 Além deles, dois scripts de aceite disparam os hooks de verdade como subprocesso:
 
@@ -147,11 +159,20 @@ python aceite/simular_turnos.py
 trilha, relatório e a CLI), os cinco hooks (`PreToolUse`, `UserPromptSubmit`, `PostToolUse`,
 `PreCompact`, `Stop`), a skill, os nove papéis, os doze cartões e o empacotamento como plugin.
 
-**O que ainda não foi provado.** O motor nunca rodou dentro de uma sessão real do Claude Code
-por tempo suficiente para provar a tese central. `aceite/simular_turnos.py` simula vinte turnos
-e uma compactação chamando os hooks reais, o que demonstra a **mecânica** — mas simulação não é
-sessão. Até que isso seja verificado, trate "sobrevive à compactação" como projeto, não como
-fato observado.
+**O que já foi observado em sessão real.** Em 2026-07-31 o plugin foi instalado e rodou
+dentro de uma sessão real do Claude Code, e três coisas foram observadas — não simuladas:
+o hook `UserPromptSubmit` injetou o cartão `== ENGINE ativo ==` no contexto do turno; o
+hook `PreToolUse` travou um `git push` pela família R2 (inclusive o push do próprio
+código-fonte deste projeto); e o mesmo hook travou um `python -c` pela família R8 — um
+falso positivo, corrigido depois: a string `'EXEC(ruim)'` casava `\bexec\(` porque o
+padrão era compilado sem distinguir maiúsculas. Isso prova que o **mecanismo** funciona
+numa sessão real; não é uma declaração de vitória.
+
+**O que ainda não foi provado.** A **durabilidade**: o motor nunca atravessou uma sessão
+longa com compactação de verdade. `aceite/simular_turnos.py` simula vinte turnos e uma
+compactação chamando os hooks reais, o que demonstra a mecânica — mas simulação não é
+sessão. Até que isso seja verificado, trate "sobrevive à compactação" como projeto, não
+como fato observado.
 
 Também pendente: os quatro cenários de aceite com projetos-cobaia. O lançador
 (`hooks/engine.sh`) tem suíte automatizada (`ferramentas/tests/test_lancador.py`) cobrindo os
