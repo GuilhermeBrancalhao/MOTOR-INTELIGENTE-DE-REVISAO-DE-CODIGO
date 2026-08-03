@@ -1,4 +1,6 @@
-﻿# Referencias-Cruzadas
+# Referências
 
-[Conteúdo de Referencias-Cruzadas]
-
+- Volumes que dependem deste: downstream
+- Volumes dos quais depende: upstream
+- Documentação ENGINE
+- ADRs de decisões críticas

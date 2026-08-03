@@ -1,4 +1,6 @@
-﻿# Anti-Patterns
+# Anti-Patterns
 
-[Anti-Patterns]
-
+- Validação incompleta
+- Falha silenciosa
+- Auditoria retrospectiva
+- Observabilidade genérica

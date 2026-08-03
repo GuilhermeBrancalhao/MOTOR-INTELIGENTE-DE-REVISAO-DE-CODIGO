@@ -1,4 +1,12 @@
-﻿# Escopo
+# Escopo
 
-[Conteúdo de Escopo]
+## Entra
 
+- Coordenação entre agentes
+- Integração com adjacentes
+- Observabilidade
+
+## Não entra
+
+- Features fora do escopo
+- Otimizações prematuras

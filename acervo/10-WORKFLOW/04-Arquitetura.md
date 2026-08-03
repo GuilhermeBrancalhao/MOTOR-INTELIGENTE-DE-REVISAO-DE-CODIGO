@@ -1,4 +1,9 @@
-﻿# Arquitetura
+# Arquitetura
 
-[Conteúdo de Arquitetura]
-
+```
+WORKFLOW
+├── Input: Contrato versionado
+├── Processamento: Lógica
+├── Output: Artefato
+└── Auditoria: Trilha
+```

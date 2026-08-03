@@ -1,4 +1,9 @@
-﻿# Arquitetura
+# Arquitetura
 
-[Conteúdo de Arquitetura]
-
+```
+TEMPLATES
+├── Input: Contrato versionado
+├── Processamento: Lógica
+├── Output: Artefato
+└── Auditoria: Trilha
+```

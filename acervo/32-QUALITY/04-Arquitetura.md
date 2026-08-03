@@ -1,4 +1,9 @@
-﻿# Arquitetura
+# Arquitetura
 
-[Conteúdo de Arquitetura]
-
+```
+QUALITY
+├── Input: Contrato versionado
+├── Processamento: Lógica
+├── Output: Artefato
+└── Auditoria: Trilha
+```
