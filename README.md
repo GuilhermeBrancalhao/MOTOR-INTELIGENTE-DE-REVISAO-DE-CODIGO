@@ -38,6 +38,28 @@ não recebe ferramenta de execução), não uma instrução que ele possa contra
 **Doze cartões de tecnologia**, carregados sob demanda conforme a stack detectada no projeto.
 Tecnologia nova custa um arquivo de ~60 linhas, não um agente novo.
 
+**Cinco motores de critério** em `motores/` — `revisar-codigo`, `otimizar-performance`,
+`arquitetar-sistema`, `materializar-ideia`, `diagramar`. O cartão de cada turno lista os
+motores consultáveis da fase atual (nome + `description` do `SKILL.md` de cada um):
+
+| Fase | Motores consultáveis |
+|---|---|
+| PLANO | `arquitetar-sistema`, `materializar-ideia` |
+| EVOLUÇÃO | `arquitetar-sistema` |
+| BUILD | `materializar-ideia`, `revisar-codigo` |
+| REVISÃO | `revisar-codigo`, `otimizar-performance` |
+| DOC | `diagramar` |
+
+Fora de DESCOBERTA e ANÁLISE, o hook também analisa o `git diff` local e, quando o padrão do
+código pede um motor específico, acrescenta a sugestão ao cartão.
+
+**Volumes de conhecimento PRONTO**, detectados dinamicamente — nenhuma lista hardcoded no
+código. Todo diretório em `volumes/prontos/<NOME>/` entra no cartão como consultável se o seu
+`_VOLUME.yml` declara `status: PRONTO` (qualquer outro status fica de fora; sem `_VOLUME.yml`,
+vale o fallback: basta ter `README.md` ou capítulos `.md`). O resumo mostrado vem do campo
+`escopo:` do `_VOLUME.yml`, senão da primeira linha não-vazia do `README.md`. Criar um volume
+novo não exige mudar código nenhum — a descoberta usa cache com TTL de 300 s.
+
 **Um classificador de risco** que roda antes de cada ação:
 
 | Nível | O que acontece |
@@ -115,7 +137,7 @@ Confirme com:
 claude plugin details engine
 ```
 
-Você deve ver `Skills (1)`, `Agents (9)` e `Hooks (5)`.
+Você deve ver `Skills (2)`, `Agents (9)` e `Hooks (5)`.
 
 ## Uso
 
@@ -143,7 +165,7 @@ plano e relata, mas o classificador de risco rebaixa toda escrita para travada.
 python -m pytest ferramentas/tests -v
 ```
 
-388 testes, apenas biblioteca padrão do Python — nenhuma dependência de runtime.
+436 testes, apenas biblioteca padrão do Python — nenhuma dependência de runtime.
 
 Além deles, dois scripts de aceite disparam os hooks de verdade como subprocesso:
 

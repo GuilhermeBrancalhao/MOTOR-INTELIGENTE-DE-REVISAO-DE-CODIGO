@@ -3,3 +3,12 @@ __pycache__/
 .pytest_cache/
 .engine/
 *.backup-*
+
+# Artefatos de sessão de trabalho — notas de etapa, cópias de versão e
+# projetos fake de aceite não são produto e não voltam ao versionamento.
+engine-test/
+scratch_test_dir*/
+FASE[0-9]-*
+STATUS.md
+*_v[0-9].py
+engine-phase*/

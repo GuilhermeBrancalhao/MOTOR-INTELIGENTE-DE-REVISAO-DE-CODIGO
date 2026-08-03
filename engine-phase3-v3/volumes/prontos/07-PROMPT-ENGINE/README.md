@@ -1,3 +1,0 @@
-# 07-PROMPT-ENGINE
-
-Descrição

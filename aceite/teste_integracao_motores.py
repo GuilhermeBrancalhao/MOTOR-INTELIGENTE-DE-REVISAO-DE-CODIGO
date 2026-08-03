@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Teste real: Simula ciclo ENGINE com motores + volumes injetados.
 
-Testa o hook engine_contexto_v2.py com estado fake em diferentes fases.
+Testa o hook VIVO hooks/engine_contexto.py com estado fake em diferentes fases.
+Os volumes são detectados dinamicamente de volumes/prontos/ do projeto de teste
+(nada de lista hardcoded), por isso o projeto fake também recebe essa estrutura.
 """
 import json
 import subprocess
@@ -18,7 +20,10 @@ if sys.platform == "win32":
 
 # Setup
 PROJETO_ENGINE = Path(__file__).resolve().parent.parent
-HOOK_V2 = PROJETO_ENGINE / "hooks" / "engine_contexto_v2.py"
+HOOK_CONTEXTO = PROJETO_ENGINE / "hooks" / "engine_contexto.py"
+
+# Volumes PRONTO do projeto fake — o hook vivo os descobre dinamicamente
+VOLUMES_FAKE = ["07-PROMPT-ENGINE", "12-MEMORY", "31-TESTING"]
 
 # Estado fake para cada fase
 ESTADOS = {
@@ -138,7 +143,7 @@ CONFIG = {
 
 
 def rodar_hook(fase: str, cwd: str) -> str:
-    """Roda hook engine_contexto_v2.py com estado fake."""
+    """Roda o hook vivo hooks/engine_contexto.py com estado fake."""
     if fase not in ESTADOS:
         raise ValueError(f"Fase desconhecida: {fase}")
 
@@ -150,7 +155,7 @@ def rodar_hook(fase: str, cwd: str) -> str:
 
     try:
         result = subprocess.run(
-            [sys.executable, str(HOOK_V2)],
+            [sys.executable, str(HOOK_CONTEXTO)],
             input=json.dumps(evento),
             capture_output=True,
             text=True,
@@ -178,10 +183,19 @@ def testar_fase(fase: str, projeto_root: Path):
     config_path = engine_dir / "config.json"
     config_path.write_text(json.dumps(CONFIG, indent=2), encoding="utf-8")
 
+    # Volumes PRONTO fake: o hook vivo detecta dinamicamente em volumes/prontos/
+    for vol_nome in VOLUMES_FAKE:
+        vol_dir = projeto_root / "volumes" / "prontos" / vol_nome
+        vol_dir.mkdir(parents=True, exist_ok=True)
+        (vol_dir / "_VOLUME.yml").write_text(
+            f'status: PRONTO\nescopo: "Volume fake {vol_nome} para o aceite"\n',
+            encoding="utf-8",
+        )
+
     print(f"✓ Estado criado em {estado_path}")
 
     # Rodar hook
-    print(f"\nRodando hook engine_contexto_v2.py...")
+    print(f"\nRodando hook engine_contexto.py...")
     saida = rodar_hook(fase, str(projeto_root))
 
     if not saida.strip():
@@ -247,7 +261,7 @@ def main():
     print("\n" + "=" * 80)
     print("TESTE DE INTEGRAÇÃO: Motores + Agentes + Volumes")
     print("=" * 80)
-    print(f"Hook testado: {HOOK_V2}")
+    print(f"Hook testado: {HOOK_CONTEXTO}")
     print(f"Data: {datetime.now().isoformat()}")
 
     # Criar diretório de teste
