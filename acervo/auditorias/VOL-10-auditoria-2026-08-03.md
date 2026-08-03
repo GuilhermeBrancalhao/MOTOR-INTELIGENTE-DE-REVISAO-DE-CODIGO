@@ -1,9 +1,9 @@
 # Auditoria — Volume 10 WORKFLOW
 
 **Data:** 2026-08-03
-**Revisao:** 1
+**Revisao:** 2 (revisao 1 no mesmo dia, antes de o volume ter exemplos)
 **Auditor:** Opus 5 (redator: Sonnet 5)
-**Gates na entrada:**
+**Gates na entrada (estado da revisao 1; ver Revisao 2 ao final):**
 
 ```
 $ python -m ferramentas.validar 10
@@ -51,7 +51,7 @@ Conferida a existencia de "Prova por mutacao" em `13-Testes`, afirmada por `31-T
 | 17-Conclusao | 8 | Fecha com a distincao `AguardandoSinal`/`Pausado` e com a fronteira contra `09`. Declara o proprio estado sem inflar. |
 | 18-Referencias-Cruzadas | 8.5 | Tres vizinhos com a relacao explicada; a linha sobre `09` nomeia a fronteira como "central deste volume", o que e verdade e ajuda a navegacao. |
 
-media: 8.2
+media: 8.3
 
 ## Problemas encontrados
 
@@ -74,10 +74,36 @@ $ grep -rin "concilia\|controladoria\|extrato\|lancamento\|contabil\|omie\|sicoo
 **Limpo.** O dominio dos exemplos (processamento de documento com aprovacao humana) e inventado
 e neutro.
 
+## Revisao 2 — exemplos executaveis acrescentados
+
+Depois da revisao 1, o volume ganhou `exemplos/10-workflow/` com
+`checkpoint.py` e a suite correspondente. Gates reconferidos nesta revisao:
+
+```
+$ python -m ferramentas.validar 10
+ok: volume 10 sem violacoes
+
+$ python -m pytest exemplos/10-workflow -q
+8 passed
+```
+
+As secoes tocadas pela mudanca (`11-Implementacao`, `15-Checklist`, `16-Roadmap`,
+`17-Conclusao`) foram reconferidas: nenhuma delas ainda afirma que o volume nao cita codigo —
+essa varredura foi feita por grep sobre as sete pastas, e a saida ficou vazia. A frase de
+fechamento de `17-Conclusao` agora declara os quatro criterios satisfeitos, o que confere com a
+saida acima e com o registro no `CHANGELOG.md`.
+
+Delta da media: 8.2 -> 8.3. 11-Implementacao 7,5->8,5: a gravacao atomica descrita em prosa passa a ter teste que injeta a queda no ponto exato. As demais secoes nao mudaram e mantem a nota da
+revisao 1.
+
 ## Veredicto
 
-**Criterio 3 satisfeito. Volume NAO promovido.** Media 8.2, nenhuma secao abaixo de 6. O
-**criterio 2 nao e satisfeito** — nao existe `exemplos/10-workflow/`. `status` permanece
-`RASCUNHO`. E o volume com a melhor prosa dos sete (a `01-Introducao` e a mais forte do ciclo) e
-tambem um dos que mais perderia se o componente executavel nunca vier: a garantia de checkpoint
-atomico e exatamente o tipo de coisa que so um teste com falha injetada comprova.
+**Aprovado. Volume promovido a PRONTO.** Media 8.3, nenhuma secao abaixo de 6. Os quatro
+criterios da Definicao de PRONTO estao satisfeitos: gate estrutural verde (criterio 1), os 8
+testes de `exemplos/` passando (criterio 2 — que na revisao 1 era exatamente o que faltava),
+esta auditoria com media acima de 8,0 (criterio 3) e o registro datado no `CHANGELOG.md`
+(criterio 4).
+
+**Ressalva que acompanha a promocao:** o auditor e um modelo distinto do redator, mas opera na
+mesma sessao. A promocao apoia-se nisso mais no que e mecanicamente verificavel — gate, testes,
+e a conferencia de cada afirmacao factual contra o codigo — do que no julgamento de prosa.

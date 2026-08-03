@@ -1,9 +1,9 @@
 # Auditoria — Volume 17 SECURITY
 
 **Data:** 2026-08-03
-**Revisao:** 1
+**Revisao:** 2 (revisao 1 no mesmo dia, antes de o volume ter exemplos)
 **Auditor:** Opus 5 (redator: Sonnet 5)
-**Gates na entrada:**
+**Gates na entrada (estado da revisao 1; ver Revisao 2 ao final):**
 
 ```
 $ python -m ferramentas.validar 17
@@ -69,7 +69,7 @@ linha depois de `echo`, `cmd /c del`, `git -c core.fsmonitor=./script status`, `
 | 17-Conclusao | 8.5 | Fecha com a licao estrutural correta — doze contornos nao significam que a lista estava quase completa, significam que listas fechadas nao convergem contra esse risco. |
 | 18-Referencias-Cruzadas | 8 | Tres vizinhos com a fronteira dita, incluindo o link para o `README.md` do motor, que e a fonte real deste volume e resolve (gate 1). |
 
-media: 8.4
+media: 8.5
 
 ## Problemas encontrados
 
@@ -98,11 +98,36 @@ $ grep -rin "concilia\|controladoria\|extrato\|lancamento\|contabil\|omie\|sicoo
 **Limpo.** As referencias sao ao motor `ENGINE` deste mesmo repositorio — procedencia legitima,
 nao dominio externo.
 
+## Revisao 2 — exemplos executaveis acrescentados
+
+Depois da revisao 1, o volume ganhou `exemplos/17-security/` com
+`classificador.py` e a suite correspondente. Gates reconferidos nesta revisao:
+
+```
+$ python -m ferramentas.validar 17
+ok: volume 17 sem violacoes
+
+$ python -m pytest exemplos/17-security -q
+21 passed
+```
+
+As secoes tocadas pela mudanca (`11-Implementacao`, `15-Checklist`, `16-Roadmap`,
+`17-Conclusao`) foram reconferidas: nenhuma delas ainda afirma que o volume nao cita codigo —
+essa varredura foi feita por grep sobre as sete pastas, e a saida ficou vazia. A frase de
+fechamento de `17-Conclusao` agora declara os quatro criterios satisfeitos, o que confere com a
+saida acima e com o registro no `CHANGELOG.md`.
+
+Delta da media: 8.4 -> 8.5. 11-Implementacao 8,5->9,0: o volume passa a ter implementacao de referencia E implementacao real em producao. As demais secoes nao mudaram e mantem a nota da
+revisao 1.
+
 ## Veredicto
 
-**Criterio 3 satisfeito. Volume NAO promovido.** Media 8.4 — a mais alta dos sete volumes deste
-ciclo, e a razao e direta: e o unico cujo conteudo descreve um sistema que existe, com historico
-verificavel. O **criterio 2 nao e satisfeito** — o classificador real vive em `ferramentas/` do
-motor, nao em `exemplos/17-security/` no formato que o criterio exige. `status` permanece
-`RASCUNHO`. Este e o volume onde fechar o criterio 2 e mais barato de todos: o codigo existe e
-esta testado; falta extrai-lo como modulo citavel.
+**Aprovado. Volume promovido a PRONTO.** Media 8.5, nenhuma secao abaixo de 6. Os quatro
+criterios da Definicao de PRONTO estao satisfeitos: gate estrutural verde (criterio 1), os 21
+testes de `exemplos/` passando (criterio 2 — que na revisao 1 era exatamente o que faltava),
+esta auditoria com media acima de 8,0 (criterio 3) e o registro datado no `CHANGELOG.md`
+(criterio 4).
+
+**Ressalva que acompanha a promocao:** o auditor e um modelo distinto do redator, mas opera na
+mesma sessao. A promocao apoia-se nisso mais no que e mecanicamente verificavel — gate, testes,
+e a conferencia de cada afirmacao factual contra o codigo — do que no julgamento de prosa.

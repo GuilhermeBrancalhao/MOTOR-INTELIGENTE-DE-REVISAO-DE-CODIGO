@@ -192,12 +192,19 @@ acervo. O preço é que a pasta do exemplo deixa de entrar no caminho de import 
 volume está selado, e unificar convenção mexendo em volume selado troca uma dívida registrada por
 uma alteração não auditada.
 
-**O que falta.** Unificar a convenção nos dois volumes e escrevê-la em
-[00-INTRODUCAO/Convencoes.md](00-INTRODUCAO/Convencoes.md) **antes do próximo volume com
-exemplos** — a partir do terceiro, o custo de corrigir cresce e a chance de alguém copiar o padrão
-errado é alta. O gate estrutural não detecta a colisão hoje; se a convenção virar regra escrita,
-vale considerar uma verificação que reprove `__init__.py` dentro de `exemplos/*/tests/`, e vale
-considerar rodar o gate 2 uma vez sobre `exemplos` inteiro justamente para que a colisão apareça.
+**Estado em 2026-08-03.** O acervo passou de 2 para 9 pastas de exemplo, e as sete novas
+(`01`, `08`, `09`, `10`, `17`, `21`, `31`) seguiram a convenção do `12-memory`: `tests/` sem
+`__init__.py`, mais um `conftest.py` de três linhas por exemplo. **`07-prompt-engine` é agora o
+único fora do padrão** — ainda tem `__init__.py` em `tests/`. Como só ele reivindica o nome de
+pacote `tests`, a colisão não se manifesta, e `python -m pytest exemplos -q` roda inteiro:
+**238 testes, todos verdes**.
+
+**O que falta.** Remover o `__init__.py` de `exemplos/07-prompt-engine/tests/` e dar-lhe o mesmo
+`conftest.py` dos outros oito — mexer em volume selado exige reauditoria do `07`, que é o motivo
+de não ter sido feito ainda. E escrever a convenção em
+[00-INTRODUCAO/Convencoes.md](00-INTRODUCAO/Convencoes.md), com uma verificação no gate que
+reprove `__init__.py` dentro de `exemplos/*/tests/` — hoje nada impede o padrão errado de voltar,
+e a prova disso é que a suíte só passa por sorte de haver um único infrator.
 
 ## Fora de escopo neste ciclo
 

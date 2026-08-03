@@ -1,9 +1,9 @@
 # Auditoria — Volume 09 ORCHESTRATOR
 
 **Data:** 2026-08-03
-**Revisao:** 1
+**Revisao:** 2 (revisao 1 no mesmo dia, antes de o volume ter exemplos)
 **Auditor:** Opus 5 (redator: Sonnet 5)
-**Gates na entrada:**
+**Gates na entrada (estado da revisao 1; ver Revisao 2 ao final):**
 
 ```
 $ python -m ferramentas.validar 09
@@ -53,7 +53,7 @@ Conferida a existencia de "Prova por mutacao" em `13-Testes`, afirmada por `31-T
 | 17-Conclusao | 8 | Fecha com a distincao que mais importa (abortar contra pular dependentes) e declara o proprio estado. |
 | 18-Referencias-Cruzadas | 8 | Quatro vizinhos, incluindo a ligacao com `01-FUNDACAO/11` pelo algoritmo compartilhado — referencia util e verificada. |
 
-media: 8.1
+media: 8.2
 
 ## Problemas encontrados
 
@@ -78,9 +78,36 @@ $ grep -rin "concilia\|controladoria\|extrato\|lancamento\|contabil\|omie\|sicoo
 
 **Limpo.** O dominio dos exemplos (tres buscas paralelas com agregacao) e inventado e neutro.
 
+## Revisao 2 — exemplos executaveis acrescentados
+
+Depois da revisao 1, o volume ganhou `exemplos/09-orchestrator/` com
+`grafo.py` e a suite correspondente. Gates reconferidos nesta revisao:
+
+```
+$ python -m ferramentas.validar 09
+ok: volume 09 sem violacoes
+
+$ python -m pytest exemplos/09-orchestrator -q
+10 passed
+```
+
+As secoes tocadas pela mudanca (`11-Implementacao`, `15-Checklist`, `16-Roadmap`,
+`17-Conclusao`) foram reconferidas: nenhuma delas ainda afirma que o volume nao cita codigo —
+essa varredura foi feita por grep sobre as sete pastas, e a saida ficou vazia. A frase de
+fechamento de `17-Conclusao` agora declara os quatro criterios satisfeitos, o que confere com a
+saida acima e com o registro no `CHANGELOG.md`.
+
+Delta da media: 8.1 -> 8.2. 11-Implementacao 7,5->8,5: a analogia com validar --cross-refs agora vem acompanhada do algoritmo implementado e testado. As demais secoes nao mudaram e mantem a nota da
+revisao 1.
+
 ## Veredicto
 
-**Criterio 3 satisfeito. Volume NAO promovido.** Media 8.1, nenhuma secao abaixo de 6. O
-**criterio 2 nao e satisfeito** — nao existe `exemplos/09-orchestrator/`. `status` permanece
-`RASCUNHO`. O achado da palavra corrompida e o mais instrutivo desta auditoria: mostra que gate
-verde nao e prova de texto correto, so de texto estruturalmente valido.
+**Aprovado. Volume promovido a PRONTO.** Media 8.2, nenhuma secao abaixo de 6. Os quatro
+criterios da Definicao de PRONTO estao satisfeitos: gate estrutural verde (criterio 1), os 10
+testes de `exemplos/` passando (criterio 2 — que na revisao 1 era exatamente o que faltava),
+esta auditoria com media acima de 8,0 (criterio 3) e o registro datado no `CHANGELOG.md`
+(criterio 4).
+
+**Ressalva que acompanha a promocao:** o auditor e um modelo distinto do redator, mas opera na
+mesma sessao. A promocao apoia-se nisso mais no que e mecanicamente verificavel — gate, testes,
+e a conferencia de cada afirmacao factual contra o codigo — do que no julgamento de prosa.

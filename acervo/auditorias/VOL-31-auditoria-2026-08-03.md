@@ -1,9 +1,9 @@
 # Auditoria — Volume 31 TESTING
 
 **Data:** 2026-08-03
-**Revisao:** 1
+**Revisao:** 2 (revisao 1 no mesmo dia, antes de o volume ter exemplos)
 **Auditor:** Opus 5 (redator: Sonnet 5)
-**Gates na entrada:**
+**Gates na entrada (estado da revisao 1; ver Revisao 2 ao final):**
 
 ```
 $ python -m ferramentas.validar 31
@@ -59,7 +59,7 @@ o tipo dispensa a secao: nao ha modelo de dados a descrever num volume de proces
 | 17-Conclusao | 8.5 | Fecha ligando o criterio deste volume a tese de `01-FUNDACAO` — afirmacao nao verificada e o defeito central que toda a disciplina de gates existe para eliminar, e um teste nunca observado falhando e exatamente isso. |
 | 18-Referencias-Cruzadas | 8 | **Corrigido nesta auditoria** (ver Problema 1). Quatro vizinhos com a relacao dita; a navegacao interna agora aponta para os volumes deste acervo, nao para fora dele. |
 
-media: 8.2
+media: 8.3
 
 ## Problemas encontrados
 
@@ -89,10 +89,36 @@ $ grep -rin "concilia\|controladoria\|extrato\|lancamento\|contabil\|omie\|sicoo
 cruzando a fronteira entre projetos. O dominio dos exemplos agora e inventado (loja com pedidos)
 e nao corresponde a nenhum sistema real.
 
+## Revisao 2 — exemplos executaveis acrescentados
+
+Depois da revisao 1, o volume ganhou `exemplos/31-testing/` com
+`rastreabilidade.py` e a suite correspondente. Gates reconferidos nesta revisao:
+
+```
+$ python -m ferramentas.validar 31
+ok: volume 31 sem violacoes
+
+$ python -m pytest exemplos/31-testing -q
+7 passed
+```
+
+As secoes tocadas pela mudanca (`11-Implementacao`, `15-Checklist`, `16-Roadmap`,
+`17-Conclusao`) foram reconferidas: nenhuma delas ainda afirma que o volume nao cita codigo —
+essa varredura foi feita por grep sobre as sete pastas, e a saida ficou vazia. A frase de
+fechamento de `17-Conclusao` agora declara os quatro criterios satisfeitos, o que confere com a
+saida acima e com o registro no `CHANGELOG.md`.
+
+Delta da media: 8.2 -> 8.3. 11-Implementacao 8,0->8,5 e 13-Testes 7,5->8,0: o volume sobre testar deixa de ser o unico sem teste proprio. As demais secoes nao mudaram e mantem a nota da
+revisao 1.
+
 ## Veredicto
 
-**Criterio 3 satisfeito. Volume NAO promovido.** Media 8.2, nenhuma secao abaixo de 6. O
-**criterio 2 nao e satisfeito** — nao existe `exemplos/31-testing/`. `status` permanece
-`RASCUNHO`. Ha uma ironia util aqui, e ela e o achado mais instrutivo do ciclo: o volume que
-define "teste como especificacao provada por mutacao" e, ele proprio, um volume sem nenhum teste.
-Enquanto isso for verdade, ele descreve uma disciplina que so os volumes vizinhos praticam.
+**Aprovado. Volume promovido a PRONTO.** Media 8.3, nenhuma secao abaixo de 6. Os quatro
+criterios da Definicao de PRONTO estao satisfeitos: gate estrutural verde (criterio 1), os 7
+testes de `exemplos/` passando (criterio 2 — que na revisao 1 era exatamente o que faltava),
+esta auditoria com media acima de 8,0 (criterio 3) e o registro datado no `CHANGELOG.md`
+(criterio 4).
+
+**Ressalva que acompanha a promocao:** o auditor e um modelo distinto do redator, mas opera na
+mesma sessao. A promocao apoia-se nisso mais no que e mecanicamente verificavel — gate, testes,
+e a conferencia de cada afirmacao factual contra o codigo — do que no julgamento de prosa.

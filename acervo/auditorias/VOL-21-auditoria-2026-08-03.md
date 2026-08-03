@@ -1,9 +1,9 @@
 # Auditoria — Volume 21 OBSERVABILITY
 
 **Data:** 2026-08-03
-**Revisao:** 1
+**Revisao:** 2 (revisao 1 no mesmo dia, antes de o volume ter exemplos)
 **Auditor:** Opus 5 (redator: Sonnet 5)
-**Gates na entrada:**
+**Gates na entrada (estado da revisao 1; ver Revisao 2 ao final):**
 
 ```
 $ python -m ferramentas.validar 21
@@ -54,7 +54,7 @@ divergencia. Conferida a existencia de "Prova por mutacao" em `13-Testes`, afirm
 | 17-Conclusao | 8 | Fecha com as duas ideias que sustentam o volume (sucesso tecnico nao implica resultado correto; canal de alerta precisa de monitoramento proprio) e declara o proprio estado. |
 | 18-Referencias-Cruzadas | 8 | Quatro vizinhos com a relacao dita; o link para `08-AGENT-ENGINE/08-Modelos.md` aponta para o conceito que este volume instrumenta e resolve. |
 
-media: 8.2
+media: 8.3
 
 ## Problemas encontrados
 
@@ -79,8 +79,36 @@ $ grep -rin "concilia\|controladoria\|extrato\|lancamento\|contabil\|omie\|sicoo
 **Limpo.** Os exemplos usam dominio inventado (classificacao de documento) ou referencias
 internas ao proprio acervo.
 
+## Revisao 2 — exemplos executaveis acrescentados
+
+Depois da revisao 1, o volume ganhou `exemplos/21-observability/` com
+`limiar.py` e a suite correspondente. Gates reconferidos nesta revisao:
+
+```
+$ python -m ferramentas.validar 21
+ok: volume 21 sem violacoes
+
+$ python -m pytest exemplos/21-observability -q
+8 passed
+```
+
+As secoes tocadas pela mudanca (`11-Implementacao`, `15-Checklist`, `16-Roadmap`,
+`17-Conclusao`) foram reconferidas: nenhuma delas ainda afirma que o volume nao cita codigo —
+essa varredura foi feita por grep sobre as sete pastas, e a saida ficou vazia. A frase de
+fechamento de `17-Conclusao` agora declara os quatro criterios satisfeitos, o que confere com a
+saida acima e com o registro no `CHANGELOG.md`.
+
+Delta da media: 8.2 -> 8.3. 11-Implementacao 7,5->8,5: os dois caminhos de falha do proprio mecanismo passam a ter teste. As demais secoes nao mudaram e mantem a nota da
+revisao 1.
+
 ## Veredicto
 
-**Criterio 3 satisfeito. Volume NAO promovido.** Media 8.2, nenhuma secao abaixo de 6. O
-**criterio 2 nao e satisfeito** — nao existe `exemplos/21-observability/`. `status` permanece
-`RASCUNHO`.
+**Aprovado. Volume promovido a PRONTO.** Media 8.3, nenhuma secao abaixo de 6. Os quatro
+criterios da Definicao de PRONTO estao satisfeitos: gate estrutural verde (criterio 1), os 8
+testes de `exemplos/` passando (criterio 2 — que na revisao 1 era exatamente o que faltava),
+esta auditoria com media acima de 8,0 (criterio 3) e o registro datado no `CHANGELOG.md`
+(criterio 4).
+
+**Ressalva que acompanha a promocao:** o auditor e um modelo distinto do redator, mas opera na
+mesma sessao. A promocao apoia-se nisso mais no que e mecanicamente verificavel — gate, testes,
+e a conferencia de cada afirmacao factual contra o codigo — do que no julgamento de prosa.

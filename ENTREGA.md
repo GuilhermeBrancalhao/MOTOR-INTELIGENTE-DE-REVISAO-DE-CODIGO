@@ -30,27 +30,32 @@ promessa de conclusão nesta entrega.
 
 ## Os 10 volumes essenciais
 
-| # | Volume | Tipo | Gate 1 | Auditoria (critério 3) | Status |
-|---|---|---|---|---|---|
-| 01 | FUNDACAO | GOVERNANCA | ✅ | 8,3 | RASCUNHO |
-| 03 | DISCOVERY | PROCESSO | ✅ | 8,8 | ✅ **PRONTO** |
-| 07 | PROMPT-ENGINE | ENGINE | ✅ | 8,7 | ✅ **PRONTO** |
-| 08 | AGENT-ENGINE | ENGINE | ✅ | 8,1 | RASCUNHO |
-| 09 | ORCHESTRATOR | ENGINE | ✅ | 8,1 | RASCUNHO |
-| 10 | WORKFLOW | ENGINE | ✅ | 8,2 | RASCUNHO |
-| 12 | MEMORY | ENGINE | ✅ | 8,7 | ✅ **PRONTO** |
-| 17 | SECURITY | GOVERNANCA | ✅ | 8,4 | RASCUNHO |
-| 21 | OBSERVABILITY | GOVERNANCA | ✅ | 8,2 | RASCUNHO |
-| 31 | TESTING | PROCESSO | ✅ | 8,2 | RASCUNHO |
+| # | Volume | Tipo | Gate 1 | Testes do exemplo | Auditoria | Status |
+|---|---|---|---|---|---|---|
+| 01 | FUNDACAO | GOVERNANCA | ✅ | 8 ✅ | 8,4 | ✅ **PRONTO** |
+| 03 | DISCOVERY | PROCESSO | ✅ | 69 ✅ | 8,8 | ✅ **PRONTO** |
+| 07 | PROMPT-ENGINE | ENGINE | ✅ | ✅ | 8,7 | ✅ **PRONTO** |
+| 08 | AGENT-ENGINE | ENGINE | ✅ | 14 ✅ | 8,2 | ✅ **PRONTO** |
+| 09 | ORCHESTRATOR | ENGINE | ✅ | 10 ✅ | 8,2 | ✅ **PRONTO** |
+| 10 | WORKFLOW | ENGINE | ✅ | 8 ✅ | 8,3 | ✅ **PRONTO** |
+| 12 | MEMORY | ENGINE | ✅ | ✅ | 8,7 | ✅ **PRONTO** |
+| 17 | SECURITY | GOVERNANCA | ✅ | 21 ✅ | 8,5 | ✅ **PRONTO** |
+| 21 | OBSERVABILITY | GOVERNANCA | ✅ | 8 ✅ | 8,3 | ✅ **PRONTO** |
+| 31 | TESTING | PROCESSO | ✅ | 7 ✅ | 8,3 | ✅ **PRONTO** |
 
-**Os 10 passam no gate estrutural e os 10 têm auditoria registrada com média ≥ 8,0.** Ainda
-assim, só 3 são `PRONTO` — e a razão é uma só, igual nos sete: o **critério 2** da Definição de
-PRONTO exige que `pytest exemplos/<vol>` passe, e os sete não têm `exemplos/<vol>/`. Não há o que
-rodar. Enquanto isso for verdade, eles são especificação boa e auditada, não volume pronto.
+**Os 10 volumes essenciais estão `PRONTO`** — os quatro critérios da Definição de PRONTO
+satisfeitos em cada um: gate estrutural verde, testes dos exemplos passando, auditoria com média
+≥ 8,0 registrada em `acervo/auditorias/`, e registro datado no `CHANGELOG.md`. Isso cumpre
+exatamente o alvo declarado do ciclo: motor + 10 essenciais, não 42.
 
-Os relatórios de auditoria estão em `acervo/auditorias/VOL-NN-auditoria-2026-08-03.md`, com as
-notas por seção, os defeitos encontrados e corrigidos, e a verificação de cada afirmação factual
-contra o código do motor.
+Os sete promovidos hoje ganharam `exemplos/<vol>/` com módulo e suíte própria — 76 testes,
+escritos para a mutação que cada invariante existe para impedir, não para o caminho feliz. Os
+relatórios de auditoria trazem as notas por seção, os defeitos encontrados e corrigidos, e a
+verificação de cada afirmação factual contra o código do motor.
+
+**A lacuna que resta, declarada:** cada exemplo prova seu contrato isoladamente. A integração
+entre os motores — traduzir o tipo de um para o do outro — ainda não tem teste que a exercite de
+ponta a ponta. Está registrada no `16-Roadmap` de cada volume.
 
 ## Recuperação: 2 volumes que a geração em lote havia destruído
 

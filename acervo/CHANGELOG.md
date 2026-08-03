@@ -4,6 +4,53 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-03 (fim do dia)
+
+### Os 7 volumes essenciais ganham exemplo executavel e sao promovidos a `PRONTO`
+
+O criterio 2 era o unico que faltava aos sete auditados mais cedo hoje. Cada um passou a ter
+`exemplos/<vol>/` com modulo e suite propria — **76 testes, todos verdes**:
+
+| Volume | Modulo | Testes | O que a suite prova |
+|---|---|---|---|
+| 01-FUNDACAO | `definicao_de_pronto.py` | 8 | Os quatro criterios como regra de decisao; que nao citar exemplo **nao** e caso vacuo que passa |
+| 08-AGENT-ENGINE | `orcamento.py`, `laco_agente.py` | 14 | Que as tres dimensoes sao independentes; que o modelo nao e chamado com orcamento zerado (contagem = 0) |
+| 09-ORCHESTRATOR | `grafo.py` | 10 | Ciclo direto e indireto rejeitados antes de executar; fan-in com uma dependencia falha nunca libera |
+| 10-WORKFLOW | `checkpoint.py` | 8 | Falha injetada entre gravar e confirmar leva a reexecucao conservadora |
+| 17-SECURITY | `classificador.py` | 21 | Os doze contornos reais parametrizados: nenhum comando de shell e `LIVRE`, `ls` e `echo` inclusive |
+| 21-OBSERVABILITY | `limiar.py` | 8 | Canal indisponivel nao passa por notificado; `tokens: None` nunca vira zero |
+| 31-TESTING | `rastreabilidade.py` | 7 | Regra sem teste aparece como lacuna; regressao sem mutacao registrada e hipotese |
+
+Os testes foram escritos para a mutacao que cada invariante existe para impedir, nao para o
+caminho feliz — e dois deles ja pagaram: `test_orcamento_zerado_impede_a_chamada_ao_modelo` falha
+se alguem inverter a ordem guardiao/modelo, e `test_fan_in_com_uma_dependencia_falha_nunca_libera`
+falha se o `all` virar `any`.
+
+**Auditorias revisadas para revisao 2.** Cada relatorio em `auditorias/` ganhou a secao
+"Revisao 2", com os gates reconferidos e o delta de media explicado por secao. As medias subiram
+porque `11-Implementacao` deixou de ser uma secao sem implementacao:
+
+| Vol | r1 | r2 | Vol | r1 | r2 |
+|---|---|---|---|---|---|
+| 01 | 8.3 | **8.4** | 17 | 8.4 | **8.5** |
+| 08 | 8.1 | **8.2** | 21 | 8.2 | **8.3** |
+| 09 | 8.1 | **8.2** | 31 | 8.2 | **8.3** |
+| 10 | 8.2 | **8.3** | | | |
+
+**Promocao.** Com os quatro criterios satisfeitos, os sete passaram a `PRONTO` — no `_VOLUME.yml`
+e nas 125 secoes, alinhando o front-matter a convencao dos volumes ja prontos. O acervo vai de
+**3 para 10 volumes `PRONTO`**, que era exatamente o alvo declarado do ciclo.
+
+`volumes/prontos/` foi regenerado por `ferramentas.sincronizar`: os sete novos entraram na copia
+do plugin e o `_catalogo.md` foi refeito.
+
+**Consistencia varrida.** Toda frase que dizia "este volume nao cita codigo executavel" — em
+`11-Implementacao`, `15-Checklist`, `16-Roadmap` e `17-Conclusao` dos sete — ficou falsa com a
+chegada dos exemplos e foi reescrita. A varredura final por grep sobre as sete pastas devolve
+vazio. O que sobrou nos roadmaps e a lacuna real e nova: **integracao entre os motores**. Cada
+exemplo prova seu contrato isoladamente; a ponte entre eles (traduzir o tipo de um para o do
+outro) ainda nao tem teste.
+
 ## 2026-08-03
 
 ### Auditoria dos 7 volumes essenciais + recuperacao de 2 volumes destruidos
