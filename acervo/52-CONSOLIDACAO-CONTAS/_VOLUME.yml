@@ -1,0 +1,7 @@
+volume: "52"
+nome: CONSOLIDACAO-CONTAS
+tipo: PROCESSO
+status: RASCUNHO
+perecivel: false
+depende_de: []
+escopo: Consolidação grupos, eliminações, moeda

@@ -1,0 +1,7 @@
+volume: "49"
+nome: ANALISE-FINANCEIRA
+tipo: PROCESSO
+status: RASCUNHO
+perecivel: false
+depende_de: []
+escopo: P&L, DRE, análise de tendências, ratios

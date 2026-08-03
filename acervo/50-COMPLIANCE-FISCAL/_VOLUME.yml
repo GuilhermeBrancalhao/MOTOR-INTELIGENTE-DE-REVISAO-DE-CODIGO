@@ -1,0 +1,7 @@
+volume: "50"
+nome: COMPLIANCE-FISCAL
+tipo: PROCESSO
+status: RASCUNHO
+perecivel: false
+depende_de: []
+escopo: SPED, ICMS, PIS-COFINS, retornos obrigatórios
