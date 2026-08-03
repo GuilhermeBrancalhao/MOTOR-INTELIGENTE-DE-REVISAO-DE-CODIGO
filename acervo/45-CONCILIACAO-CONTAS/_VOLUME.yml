@@ -1,7 +1,0 @@
-volume: "45"
-nome: CONCILIACAO-CONTAS
-tipo: PROCESSO
-status: RASCUNHO
-perecivel: false
-depende_de: []
-escopo: Reconciliação contábil, extratos, trilha auditoria

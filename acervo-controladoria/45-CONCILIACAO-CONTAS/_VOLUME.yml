@@ -1,0 +1,21 @@
+# Metadados do volume 45. Lido por ferramentas/validar.py e ferramentas/status.py
+# (rodados de dentro de acervo/ com --raiz ../acervo-controladoria).
+# depende_de esta vazio de proposito, pelo mesmo motivo do volume 03 no acervo
+# irmao: os vizinhos naturais deste volume -- 43-CONTABILIDADE-BASICA (fornece
+# o plano de contas que a categoria do titulo referencia), 53-AUDITORIA-TRILHA
+# (generaliza o padrao que trilha.py implementa aqui) e 54-INTEGRACAO-ERP (onde
+# mora a extracao real de extrato/API que este volume assume como dado de
+# entrada) -- ainda tem conteudo herdado de uma geracao em lote que nao passa
+# no gate estrutural. Apontar depende_de para eles hoje passaria o gate de
+# existencia (estao registrados em contrato.json) mas produziria um
+# pre-requisito de leitura que decepciona: quem seguir o link encontra prosa
+# generica, nao o volume real. A relacao com os tres esta descrita em prosa em
+# 18-Referencias-Cruzadas.md, fora do grafo de pre-requisitos, e o campo passa
+# a ser preenchido a medida que cada vizinho for reescrito com o mesmo rigor.
+volume: "45"
+nome: CONCILIACAO-CONTAS
+tipo: ENGINE
+status: RASCUNHO
+perecivel: false
+depende_de: []
+escopo: Motor de reconciliacao entre extrato bancario e sistema contabil -- ancora de saldo, casamento de movimento contra titulo aberto, classificacao de confianca, guarda contra escrita duplicada e trilha de auditoria.

@@ -1,0 +1,67 @@
+{
+  "versao": "1.0.0",
+  "atualizado_em": "2026-08-03",
+  "min_palavras": 200,
+  "min_palavras_por_secao": {
+    "15-Checklist": 120,
+    "16-Roadmap": 120,
+    "17-Conclusao": 150,
+    "18-Referencias-Cruzadas": 80
+  },
+  "status_validos": ["RASCUNHO", "REQUER_REVISAO", "PRONTO"],
+  "campos_frontmatter": ["volume", "volume_nome", "tipo", "secao", "status", "atualizado_em"],
+  "marcadores_proibidos": ["TBD", "TODO", "PENDENTE", "FIXME", "XXX", "preencher aqui"],
+  "secoes_base": [
+    "01-Introducao", "02-Objetivos", "03-Escopo", "04-Arquitetura",
+    "05-Diagramas", "06-Fluxogramas", "07-Regras", "08-Modelos",
+    "09-Boas-Praticas", "10-Anti-Patterns", "11-Implementacao", "12-Exemplos",
+    "13-Testes", "14-Metricas", "15-Checklist", "16-Roadmap",
+    "17-Conclusao", "18-Referencias-Cruzadas"
+  ],
+  "tipos": {
+    "ENGINE": {
+      "descricao": "Motor com contratos, estado e codigo executavel.",
+      "opcionais": [],
+      "extras": [],
+      "diagramas_obrigatorios": ["C4Context", "sequenceDiagram", "stateDiagram-v2"]
+    },
+    "ARQUITETURA": {
+      "descricao": "Camada arquitetural; nem sempre tem ciclo de vida proprio.",
+      "opcionais": [],
+      "extras": [],
+      "diagramas_obrigatorios": ["C4Context", "sequenceDiagram"]
+    },
+    "PROCESSO": {
+      "descricao": "Processo de trabalho; o fluxo importa mais que o modelo de dados.",
+      "opcionais": ["08-Modelos"],
+      "extras": [],
+      "diagramas_obrigatorios": ["flowchart"]
+    },
+    "BIBLIOTECA": {
+      "descricao": "Acervo catalogado; nao tem arquitetura propria.",
+      "opcionais": ["04-Arquitetura", "05-Diagramas"],
+      "extras": ["04-Catalogo"],
+      "diagramas_obrigatorios": []
+    },
+    "GOVERNANCA": {
+      "descricao": "Politica e controle; exige matriz de controles.",
+      "opcionais": [],
+      "extras": [],
+      "diagramas_obrigatorios": ["flowchart"]
+    }
+  },
+  "volumes": {
+    "43": {"nome": "CONTABILIDADE-BASICA", "tipo": "ENGINE", "perecivel": false},
+    "44": {"nome": "INDICADORES-KPI", "tipo": "PROCESSO", "perecivel": false},
+    "45": {"nome": "CONCILIACAO-CONTAS", "tipo": "ENGINE", "perecivel": false},
+    "46": {"nome": "ORCAMENTO-FORECAST", "tipo": "PROCESSO", "perecivel": false},
+    "47": {"nome": "FLUXO-CAIXA", "tipo": "PROCESSO", "perecivel": false},
+    "48": {"nome": "CUSTOS-ABC", "tipo": "ENGINE", "perecivel": false},
+    "49": {"nome": "ANALISE-FINANCEIRA", "tipo": "PROCESSO", "perecivel": false},
+    "50": {"nome": "COMPLIANCE-FISCAL", "tipo": "GOVERNANCA", "perecivel": false},
+    "51": {"nome": "RELATORIOS-GERENCIAIS", "tipo": "PROCESSO", "perecivel": false},
+    "52": {"nome": "CONSOLIDACAO-CONTAS", "tipo": "ENGINE", "perecivel": false},
+    "53": {"nome": "AUDITORIA-TRILHA", "tipo": "GOVERNANCA", "perecivel": false},
+    "54": {"nome": "INTEGRACAO-ERP", "tipo": "ARQUITETURA", "perecivel": false}
+  }
+}
