@@ -1,7 +1,7 @@
-volume: "24"
+﻿volume: "24"
 nome: DATABASE-ARCHITECT
 tipo: ARQUITETURA
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo:
+escopo: Schema design

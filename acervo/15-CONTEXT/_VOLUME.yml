@@ -1,7 +1,7 @@
-volume: "15"
+﻿volume: "15"
 nome: CONTEXT
-tipo: ENGINE
+tipo: BIBLIOTECA
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo:
+escopo: Management de contexto

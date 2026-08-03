@@ -1,7 +1,7 @@
-volume: "28"
+﻿volume: "28"
 nome: PROMPT-COMPILER
-tipo: ENGINE
+tipo: PROCESSO
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo:
+escopo: Compilação de prompts

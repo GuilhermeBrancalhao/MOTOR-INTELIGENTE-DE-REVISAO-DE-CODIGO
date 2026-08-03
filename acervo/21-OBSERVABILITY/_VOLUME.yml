@@ -1,7 +1,7 @@
-volume: "21"
+﻿volume: "21"
 nome: OBSERVABILITY
-tipo: GOVERNANCA
+tipo: PROCESSO
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo:
+escopo: Logs, traces, métricas

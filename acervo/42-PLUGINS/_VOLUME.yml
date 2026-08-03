@@ -1,7 +1,7 @@
-volume: "42"
+﻿volume: "42"
 nome: PLUGINS
-tipo: ENGINE
+tipo: BIBLIOTECA
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo:
+escopo: Ecossistema de plugins

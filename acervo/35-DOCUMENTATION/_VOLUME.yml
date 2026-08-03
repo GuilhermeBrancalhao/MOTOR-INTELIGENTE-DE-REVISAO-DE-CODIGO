@@ -1,7 +1,7 @@
-volume: "35"
+﻿volume: "35"
 nome: DOCUMENTATION
-tipo: GOVERNANCA
+tipo: PROCESSO
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo:
+escopo: Documentação e ADRs

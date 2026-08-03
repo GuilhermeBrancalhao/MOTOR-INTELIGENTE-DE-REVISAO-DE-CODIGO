@@ -1,7 +1,7 @@
-volume: "41"
+﻿volume: "41"
 nome: SDK
-tipo: ENGINE
+tipo: BIBLIOTECA
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo:
+escopo: SDKs reutilizáveis

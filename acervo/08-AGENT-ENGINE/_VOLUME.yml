@@ -1,7 +1,7 @@
-volume: "08"
+﻿volume: "08"
 nome: AGENT-ENGINE
-tipo: ENGINE
+tipo: ARQUITETURA
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo:
+escopo: Orquestração de agentes

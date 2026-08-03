@@ -1,7 +1,7 @@
-volume: "36"
+﻿volume: "36"
 nome: DIAGRAMS
-tipo: BIBLIOTECA
+tipo: PROCESSO
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo:
+escopo: Visualizações

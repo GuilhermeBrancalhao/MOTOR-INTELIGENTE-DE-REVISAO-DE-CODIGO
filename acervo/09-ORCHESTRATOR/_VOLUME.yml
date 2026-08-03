@@ -1,7 +1,7 @@
-volume: "09"
+﻿volume: "09"
 nome: ORCHESTRATOR
-tipo: ENGINE
+tipo: ARQUITETURA
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo:
+escopo: Coordenação entre agentes
