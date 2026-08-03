@@ -4,6 +4,68 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-03
+
+### Auditoria dos 7 volumes essenciais + recuperacao de 2 volumes destruidos
+
+**Auditoria (criterio 3).** Os sete volumes reescritos neste ciclo foram auditados por Opus 5
+(redator: Sonnet 5), com relatorio por volume em `auditorias/VOL-NN-auditoria-2026-08-03.md`:
+
+| Vol | Media | Vol | Media |
+|---|---|---|---|
+| 01-FUNDACAO | 8.3 | 17-SECURITY | 8.4 |
+| 08-AGENT-ENGINE | 8.1 | 21-OBSERVABILITY | 8.2 |
+| 09-ORCHESTRATOR | 8.1 | 31-TESTING | 8.2 |
+| 10-WORKFLOW | 8.2 | | |
+
+Todos com media >= 8,0 e nenhuma secao abaixo de 6 — **criterio 3 satisfeito nos sete**. Nenhum
+foi promovido: o **criterio 2 nao se satisfaz** porque nenhum tem `exemplos/<vol>/`, entao nao ha
+suite a rodar. Os sete permanecem `RASCUNHO`, e a lacuna que bloqueia a promocao e a mesma em
+todos — falta o componente executavel.
+
+**Defeitos encontrados e corrigidos na auditoria:**
+
+1. **(alto) Fronteira entre projetos violada.** `31-TESTING` e `01-FUNDACAO` nomeavam outro
+   acervo e o dominio dele em oito passagens. A regra e que documentacao de um projeto nunca
+   nomeia nem descreve outro, nem como exemplo ilustrativo — extrair o padrao e legitimo, nomear
+   o sistema de origem nao. `31-TESTING/12-Exemplos` foi reescrito num dominio inventado e
+   neutro; as demais referencias foram generalizadas.
+2. **(medio) 50 itens de checklist vinham marcados `[x]`** nos sete volumes, afirmando
+   verificacao feita — sete deles afirmando testes que nao existem. A convencao dos volumes
+   PRONTO (`03`, `12`) e deixar o checklist desmarcado para quem verifica marcar com evidencia.
+   Todos desmarcados e o enquadramento corrigido.
+3. **(medio) `01-FUNDACAO/12-Exemplos` se contradizia**: afirmava "gates 1, 2 e 3 verdes" e na
+   mesma frase que a auditoria (que e o gate 3) nunca acontecera.
+4. **(medio) `09-ORCHESTRATOR/07-Regras` tinha uma palavra corrompida** numa das invariantes
+   ("sucesfrom"). Passou pelo gate porque nenhuma regra do validador checa ortografia.
+5. **(menor) 11 ocorrencias de "excepcao"** (pt-PT) uniformizadas para "excecao", a grafia usada
+   no resto do acervo.
+6. **(menor) `17-SECURITY/11` descrevia a familia R8 mais estreita do que ela e** no `risco.py`.
+
+Toda afirmacao factual sobre o motor foi conferida contra o codigo: os metodos de `contrato.py`,
+as funcoes de `validar.py`, os seis nomes de regra citados, `test_convencoes_nao_derivou`,
+`test_os_42_volumes_estao_declarados`, `test_nenhum_comando_de_shell_e_livre`, as familias R8/R9/
+R12 e os doze vetores de contorno do `README.md` — todos conferem.
+
+### Volumes `02-CORE` e `04-REQUIREMENTS` recuperados do historico
+
+A auditoria descobriu que a geracao de volumes em lote de 2026-08-02 **sobrescreveu quatro
+volumes que ja estavam escritos** em `ecd5fdd`, reduzindo secoes de ~2 KB para 31 bytes de
+template. Dois deles (`01`, `31`) foram reescritos do zero em 2026-08-03 sem que a perda fosse
+notada. Os outros dois continuavam esqueletos:
+
+| Volume | Antes do lote | Depois do lote | Agora |
+|---|---|---|---|
+| `02-CORE` | 37.838 bytes, 18 secoes | 142 bytes | **restaurado de `ecd5fdd`** |
+| `04-REQUIREMENTS` | 33.414 bytes, 17 secoes | 122 bytes | **restaurado de `ecd5fdd`** |
+
+Os dois restaurados passam no gate estrutural sem nenhuma alteracao, nao tem BOM e estao limpos
+na verificacao de dominio neutro. Permanecem `RASCUNHO` — nunca foram auditados.
+
+**Licao:** gerar conteudo em lote sobre volumes existentes destroi trabalho sem aviso, e o gate
+estrutural nao detecta a perda — um esqueleto de template com front-matter valido passa por
+qualquer verificacao que nao meça substancia contra a versao anterior.
+
 ## 2026-07-31
 
 ### Volume `31-TESTING` escrito — 17 seções, gates verdes, **ainda `RASCUNHO`**

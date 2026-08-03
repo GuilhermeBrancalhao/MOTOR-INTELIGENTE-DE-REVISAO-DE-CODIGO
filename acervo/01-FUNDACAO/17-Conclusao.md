@@ -24,4 +24,4 @@ nenhum desses três erros se repita sem ser detectado na próxima vez.
 
 Este volume permanece `RASCUNHO` no front-matter, mesmo depois de escrito com o mesmo rigor que
 descreve, até passar pelos gates 1, 2 (se citar código, o que não faz) e pela auditoria do
-critério 3 — a mesma regra que ele mesmo define, aplicada a si mesmo sem excepção.
+critério 3 — a mesma regra que ele mesmo define, aplicada a si mesmo sem exceção.

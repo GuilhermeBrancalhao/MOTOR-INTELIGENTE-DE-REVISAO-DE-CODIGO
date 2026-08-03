@@ -12,17 +12,17 @@ atualizado_em: 2026-08-03
 Antes de considerar QUALQUER volume do acervo pronto para auditoria (não confundir com PRONTO —
 isso é o passo anterior):
 
-- [x] `_VOLUME.yml` tem os 7 campos, sem BOM, `tipo` coerente com `contrato.json`.
-- [x] As seções obrigatórias do tipo existem (conferir em `Contrato.secoes_de(tipo)`).
-- [x] Cada seção tem front-matter de 6 campos, coerente com `_VOLUME.yml`.
-- [x] Prosa de cada seção está acima do mínimo (`Contrato.minimo_de(secao)`), medida por
+- [ ] `_VOLUME.yml` tem os 7 campos, sem BOM, `tipo` coerente com `contrato.json`.
+- [ ] As seções obrigatórias do tipo existem (conferir em `Contrato.secoes_de(tipo)`).
+- [ ] Cada seção tem front-matter de 6 campos, coerente com `_VOLUME.yml`.
+- [ ] Prosa de cada seção está acima do mínimo (`Contrato.minimo_de(secao)`), medida por
       `python -m ferramentas.validar NN`, não por leitura visual.
-- [x] Nenhum marcador proibido (`TODO`, `PENDENTE`, `TBD`, `FIXME`, `XXX`, `preencher aqui`) fora
+- [ ] Nenhum marcador proibido (`TODO`, `PENDENTE`, `TBD`, `FIXME`, `XXX`, `preencher aqui`) fora
       de code span.
-- [x] Todo bloco Mermaid é seguido imediatamente de parágrafo de prosa descritivo.
-- [x] Diagramas obrigatórios do tipo estão presentes em algum lugar do volume.
-- [x] Todo exemplo de código citado existe como arquivo e tem teste correspondente.
-- [x] Todo link relativo resolve no disco.
+- [ ] Todo bloco Mermaid é seguido imediatamente de parágrafo de prosa descritivo.
+- [ ] Diagramas obrigatórios do tipo estão presentes em algum lugar do volume.
+- [ ] Todo exemplo de código citado existe como arquivo e tem teste correspondente.
+- [ ] Todo link relativo resolve no disco.
 - [ ] `python -m ferramentas.validar NN` retorna exit 0 — sem esse passo, os itens acima são
       inspeção visual, não verificação.
 

@@ -30,24 +30,42 @@ promessa de conclusão nesta entrega.
 
 ## Os 10 volumes essenciais
 
-| # | Volume | Tipo | Status |
-|---|---|---|---|
-| 01 | FUNDACAO | GOVERNANCA | a escrever |
-| 03 | DISCOVERY | PROCESSO | ✅ PRONTO (auditoria 8,9) |
-| 07 | PROMPT-ENGINE | ENGINE | ✅ PRONTO — padrão-ouro |
-| 08 | AGENT-ENGINE | ENGINE | a escrever |
-| 09 | ORCHESTRATOR | ENGINE | a escrever |
-| 10 | WORKFLOW | ENGINE | a escrever |
-| 12 | MEMORY | ENGINE | ✅ PRONTO (auditoria 8,7) |
-| 17 | SECURITY | GOVERNANCA | a escrever |
-| 21 | OBSERVABILITY | GOVERNANCA | a escrever |
-| 31 | TESTING | PROCESSO | a escrever |
+| # | Volume | Tipo | Gate 1 | Auditoria (critério 3) | Status |
+|---|---|---|---|---|---|
+| 01 | FUNDACAO | GOVERNANCA | ✅ | 8,3 | RASCUNHO |
+| 03 | DISCOVERY | PROCESSO | ✅ | 8,8 | ✅ **PRONTO** |
+| 07 | PROMPT-ENGINE | ENGINE | ✅ | 8,7 | ✅ **PRONTO** |
+| 08 | AGENT-ENGINE | ENGINE | ✅ | 8,1 | RASCUNHO |
+| 09 | ORCHESTRATOR | ENGINE | ✅ | 8,1 | RASCUNHO |
+| 10 | WORKFLOW | ENGINE | ✅ | 8,2 | RASCUNHO |
+| 12 | MEMORY | ENGINE | ✅ | 8,7 | ✅ **PRONTO** |
+| 17 | SECURITY | GOVERNANCA | ✅ | 8,4 | RASCUNHO |
+| 21 | OBSERVABILITY | GOVERNANCA | ✅ | 8,2 | RASCUNHO |
+| 31 | TESTING | PROCESSO | ✅ | 8,2 | RASCUNHO |
 
-3 já estão PRONTO. Os 7 restantes seguem o mesmo processo do `03-DISCOVERY`: front-matter
-completo, prosa real específica ao tema, diagramas Mermaid exigidos pelo tipo com descrição,
-sem marcador de trabalho inacabado, gate estrutural (`ferramentas.validar`) verde antes de
-qualquer promoção — e só passam a `PRONTO` de fato depois da auditoria por outro modelo com
-média ≥ 8,0, conforme a Definição de PRONTO em `acervo/00-INTRODUCAO/Convencoes.md`.
+**Os 10 passam no gate estrutural e os 10 têm auditoria registrada com média ≥ 8,0.** Ainda
+assim, só 3 são `PRONTO` — e a razão é uma só, igual nos sete: o **critério 2** da Definição de
+PRONTO exige que `pytest exemplos/<vol>` passe, e os sete não têm `exemplos/<vol>/`. Não há o que
+rodar. Enquanto isso for verdade, eles são especificação boa e auditada, não volume pronto.
+
+Os relatórios de auditoria estão em `acervo/auditorias/VOL-NN-auditoria-2026-08-03.md`, com as
+notas por seção, os defeitos encontrados e corrigidos, e a verificação de cada afirmação factual
+contra o código do motor.
+
+## Recuperação: 2 volumes que a geração em lote havia destruído
+
+A auditoria descobriu que a geração de volumes em lote de 2026-08-02 sobrescreveu **quatro**
+volumes já escritos, cortando seções de ~2 KB para 31 bytes de template. Dois (`01`, `31`) foram
+reescritos do zero em 2026-08-03 sem que a perda fosse notada; os outros dois continuavam
+esqueletos e foram recuperados do histórico:
+
+| Volume | Antes do lote | Depois | Agora |
+|---|---|---|---|
+| `02-CORE` | 37.838 bytes, 18 seções | 142 bytes | **restaurado** — gate 1 verde |
+| `04-REQUIREMENTS` | 33.414 bytes, 17 seções | 122 bytes | **restaurado** — gate 1 verde |
+
+Os dois passam no gate sem nenhuma alteração e estão limpos na verificação de domínio neutro.
+Permanecem `RASCUNHO` — nunca foram auditados.
 
 ## O que fica fora deste ciclo, declarado — não escondido
 

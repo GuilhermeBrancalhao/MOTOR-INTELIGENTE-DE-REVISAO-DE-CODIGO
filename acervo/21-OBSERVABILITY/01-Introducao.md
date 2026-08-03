@@ -11,7 +11,7 @@ atualizado_em: 2026-08-03
 
 Um sistema com componente de IA falha de formas que observabilidade tradicional (log de
 requisição, métrica de latência, trace de chamada) não captura por completo: o modelo pode
-responder com sucesso técnico (HTTP 200, sem excepção) e ainda produzir saída incorreta,
+responder com sucesso técnico (HTTP 200, sem exceção) e ainda produzir saída incorreta,
 incoerente, ou fora do formato esperado pelo próximo consumidor — uma classe de falha que não
 aparece em nenhuma métrica de infraestrutura convencional. Sem instrumentação desenhada
 especificamente para essa classe, uma equipe opera o sistema "às escuras" na dimensão que mais

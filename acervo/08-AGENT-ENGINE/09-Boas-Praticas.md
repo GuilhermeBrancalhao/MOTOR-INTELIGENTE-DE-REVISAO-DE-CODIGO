@@ -14,8 +14,8 @@ observar execuções reais.** Um orçamento generoso demais no início não é e
 partida seguro; o ajuste vem de medir quantos passos execuções bem-sucedidas de fato consomem
 (ver `14-Metricas.md`), não de estimar de antemão.
 
-**Tratar erro de ferramenta como observação, não como excepção do motor.** Um erro que sobe como
-excepção interrompe o loop de forma que o modelo nunca vê o que aconteceu e não tem chance de
+**Tratar erro de ferramenta como observação, não como exceção do motor.** Um erro que sobe como
+exceção interrompe o loop de forma que o modelo nunca vê o que aconteceu e não tem chance de
 tentar outra abordagem — captura e devolução como observação é o que preserva a capacidade do
 agente de se recuperar.
 

@@ -32,7 +32,7 @@ execução nomeada, pelo menos um teste que reproduz o vetor concreto documentad
 
 Um teste forte para "comando de shell nunca é livre" é um que falha se alguém adicionar uma
 exceção — por exemplo, classificar `ls` como `Livre` "porque é inócuo". O teste estrutural do
-motor `ENGINE` prova exatamente isso: qualquer comando de shell, sem excepção por conteúdo
+motor `ENGINE` prova exatamente isso: qualquer comando de shell, sem exceção por conteúdo
 específico, precisa cair em `Travado` ou `Rastreado`. Sem esse teste, uma exceção pontual
 adicionada por conveniência de desenvolvimento poderia reabrir uma classe inteira de risco.
 

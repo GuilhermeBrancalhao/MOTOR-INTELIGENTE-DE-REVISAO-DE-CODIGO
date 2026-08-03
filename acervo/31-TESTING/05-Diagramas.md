@@ -30,8 +30,8 @@ Os quatro ramos não são mutuamente exclusivos numa suíte madura — um teste 
 exemplo, também documenta caminho feliz, mas na composição inteira em vez de um componente
 isolado. A distinção importa para decidir o que falta: uma suíte só com testes de caminho feliz
 por componente, sem nenhum teste de fluxo completo, pode não detectar quebra que só aparece na
-composição — exatamente o padrão que `test_fluxo_completo.py`, presente no volume irmão
-`45-CONCILIACAO-CONTAS` do acervo-controladoria, existe para cobrir.
+composição — exatamente a lacuna que um teste de fluxo completo existe para fechar, e que o Caso
+3 de `12-Exemplos.md` mostra com um caso concreto.
 
 ## Rastreabilidade regra-teste
 

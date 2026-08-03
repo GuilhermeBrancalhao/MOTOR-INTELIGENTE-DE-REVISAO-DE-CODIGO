@@ -21,9 +21,10 @@ trabalho de um ciclo seguinte).
 O classificador de risco do motor roda como hook antes de cada ação de ferramenta (`PreToolUse`),
 aplicando exatamente o fluxo de `04-Arquitetura.md`: comprovadamente inócuo executa; qualquer
 outra coisa passa pelas famílias de risco nomeadas (R1 a R12) e recebe `Travado` ou `Rastreado`.
-A família R8, especificamente, cobre execução de código (`python -c`, `exec`) — e um caso real
-documentado em `README.md` mostra um falso positivo nessa família (a string `'EXEC(ruim)'`
-casando o padrão por case-insensitivity ausente), corrigido depois da observação. Esse falso
+A família R8, especificamente, cobre execução indireta — cano para interpretador e substituição
+de comando dentro do argumento, o que inclui o caso `python -c` — e um caso real documentado em
+`README.md` mostra um falso positivo nessa família (a string `'EXEC(ruim)'` casando o padrão por
+case-insensitivity ausente), corrigido depois da observação. Esse falso
 positivo é evidência de que o mecanismo estava de fato rodando e verificando, não decorativo —
 um classificador que nunca bloqueia nada legítimo por engano provavelmente também não está
 bloqueando o que deveria.

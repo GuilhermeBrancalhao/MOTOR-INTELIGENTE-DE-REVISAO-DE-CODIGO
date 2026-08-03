@@ -30,5 +30,6 @@ pré-requisito de leitura.
 ## Navegação interna
 
 Para entender o critério central: `01-Introducao.md` seguido de `04-Arquitetura.md` (o fluxo de
-prova por mutação) e `07-Regras.md`. Para ver o padrão em ação fora deste volume:
-`12-Exemplos.md`, que cita casos concretos de `45-CONCILIACAO-CONTAS` do acervo-controladoria.
+prova por mutação) e `07-Regras.md`. Para ver o padrão aplicado: `12-Exemplos.md`, com três casos
+num domínio neutro inventado, e depois a seção `13-Testes.md` de qualquer volume de motor deste
+ciclo, onde o mesmo padrão aparece no domínio próprio daquele volume.

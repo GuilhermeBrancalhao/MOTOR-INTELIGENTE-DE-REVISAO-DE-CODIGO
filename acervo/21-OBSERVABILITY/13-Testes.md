@@ -31,7 +31,7 @@ de notificação e verifica que essa indisponibilidade gera, ela mesma, um alert
 
 Um teste forte para "todo sinal que cruza o limiar notifica" é um que falha se alguém trocar a
 chamada de notificação por um simples registro em log — testável mockando o canal de notificação
-e verificando a chamada explícita, não inferindo sucesso pela ausência de excepção. Sem esse
+e verificando a chamada explícita, não inferindo sucesso pela ausência de exceção. Sem esse
 teste, uma refatoração que "simplificasse" o avaliador de limiar para só registrar poderia
 remover silenciosamente a garantia central deste volume.
 

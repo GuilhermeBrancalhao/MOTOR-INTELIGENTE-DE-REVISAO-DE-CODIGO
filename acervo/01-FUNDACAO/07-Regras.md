@@ -11,7 +11,7 @@ atualizado_em: 2026-08-03
 
 ## Invariantes
 
-**Gravar `PRONTO` com qualquer gate vermelho é proibido**, sem excepção de julgamento humano —
+**Gravar `PRONTO` com qualquer gate vermelho é proibido**, sem exceção de julgamento humano —
 não é uma questão de estilo, é a única coisa que impede o acervo de mentir sobre o próprio
 estado. Essa regra sozinha é o motivo de este arquivo existir: uma entrega anterior deste acervo
 declarou "PRONTO PARA AUDITORIA" com 39 volumes que não passavam nem no gate 1, e o dano não foi
@@ -29,7 +29,7 @@ o teste `depende-de-ciclo` do validador existe justamente para pegar essa confus
 
 **Auditoria não pode ser feita pela mesma entidade que redigiu.** O critério 3 da Definição de
 PRONTO exige "outro modelo" precisamente para que a verificação não compartilhe o viés de quem
-escreveu — um redator inclinado a achar o próprio texto suficiente é o padrão, não a excepção.
+escreveu — um redator inclinado a achar o próprio texto suficiente é o padrão, não a exceção.
 
 ## Matriz de controles
 

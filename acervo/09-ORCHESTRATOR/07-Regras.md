@@ -17,7 +17,7 @@ execução — o motor rejeita o grafo inteiro na submissão, nunca deixa metade
 de descobrir que o grafo era inválido.
 
 **Um nó só entra em `Pronto` quando todas as suas dependências chegam a `Sucesso`.** Não existe
-execução parcial de dependência — se um nó depende de três outros, os três precisam ter sucesfrom,
+execução parcial de dependência — se um nó depende de três outros, os três precisam ter sucesso,
 não apenas a maioria. Falha de qualquer dependência aciona a política de falha do nó dependente,
 nunca uma execução "otimista" com dependência incompleta.
 

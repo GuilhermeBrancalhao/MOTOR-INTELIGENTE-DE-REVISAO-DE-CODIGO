@@ -16,9 +16,11 @@ mínimo em todas, diagramas Mermaid dos três tipos exigidos, cada um com parág
 `python -m ferramentas.validar NN` devolve `ok: volume NN sem violacoes`. O redator ainda não
 pode gravar `status: PRONTO` — faltam o critério 2 (testes dos exemplos citados, se houver
 código citado), o critério 3 (auditoria por outro modelo, média ≥ 8,0) e o critério 4 (registro
-em `CHANGELOG.md`). Esse é exatamente o estado em que `45-CONCILIACAO-CONTAS`, no acervo irmão
-`acervo-controladoria`, ficou depois de sua reescrita: gates 1, 2 e 3 mecânicos verdes,
-`status: RASCUNHO` mantido porque a auditoria por outro modelo nunca aconteceu.
+em `CHANGELOG.md`). Esse é exatamente o estado em que os sete volumes reescritos no ciclo de
+2026-08-03 — `01`, `08`, `09`, `10`, `17`, `21` e `31` — ficaram ao fim da redação: gate
+estrutural verde em todos, `status: RASCUNHO` mantido em todos, justamente porque o critério 3
+ainda não tinha acontecido. Passar no gate que a máquina mede não compra os critérios que exigem
+julgamento independente e registro datado.
 
 ## Caso 2 — o BOM mascarando 618 violações
 
