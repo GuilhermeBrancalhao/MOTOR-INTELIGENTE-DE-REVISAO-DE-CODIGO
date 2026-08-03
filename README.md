@@ -60,6 +60,29 @@ vale o fallback: basta ter `README.md` ou capítulos `.md`). O resumo mostrado v
 `escopo:` do `_VOLUME.yml`, senão da primeira linha não-vazia do `README.md`. Criar um volume
 novo não exige mudar código nenhum — a descoberta usa cache com TTL de 300 s.
 
+**Quem escreve esses volumes mora aqui também**, em `acervo/` — a plataforma de engenharia de
+projetos de IA, com o seu contrato legível por máquina, os seus três gates e os seus 42
+volumes. `volumes/prontos/` deixou de ser cópia mantida à mão e passou a ser **artefato
+derivado**: quem gera é `ferramentas/sincronizar.py`, a partir do `status` que o acervo declara.
+
+```bash
+py -m ferramentas.sincronizar --verificar   # a cópia está em dia com o acervo?
+py -m ferramentas.sincronizar               # regenera
+```
+
+Não edite nada dentro de `volumes/prontos/`: a próxima sincronização sobrescreve, e o teste
+`test_a_copia_do_plugin_esta_em_dia` reprova a suíte se os dois lados divergirem. Foi
+exatamente essa deriva que motivou a unificação — a cópia chegou a carregar `31-TESTING`
+marcado `PRONTO` enquanto a fonte dizia `RASCUNHO`, e a nunca entregar `03-DISCOVERY`, que era
+`PRONTO` de verdade.
+
+As duas suítes rodam separadas, porque cada uma tem o seu próprio pacote `ferramentas`:
+
+```bash
+py -m pytest                  # motor  — 449 testes
+cd acervo && py -m pytest     # acervo — 455 testes
+```
+
 **Um classificador de risco** que roda antes de cada ação:
 
 | Nível | O que acontece |

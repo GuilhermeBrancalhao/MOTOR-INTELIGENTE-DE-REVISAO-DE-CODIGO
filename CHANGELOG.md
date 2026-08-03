@@ -5,6 +5,45 @@
 
 ---
 
+## 2026-08-03 — Unificação: a plataforma de acervo entra no motor
+
+O motor e a plataforma que produz os volumes de conhecimento eram dois repositórios, e o motor
+carregava uma **cópia manual** dos volumes em `volumes/prontos/`. A cópia derivou, e a medição
+foi o que motivou a unificação:
+
+| Sintoma | O que estava acontecendo |
+|---|---|
+| `31-TESTING` | na cópia com `status: PRONTO`; na fonte, `RASCUNHO` — o cartão de contexto carregava rascunho como conhecimento pronto |
+| `03-DISCOVERY` | `PRONTO` na fonte, **nunca** chegou na cópia |
+| `07-PROMPT-ENGINE` | 5 arquivos com conteúdo diferente da fonte |
+| `12-MEMORY` | 3 arquivos com conteúdo diferente da fonte |
+
+**O que mudou**
+
+- `acervo/` — a plataforma inteira (302 arquivos), importada com o histórico preservado a
+  partir do seu repositório público (`bf95c57`). Ela continua sendo a dona dos volumes.
+- `ferramentas/sincronizar.py` — gera `volumes/prontos/` a partir de `acervo/`, incluindo
+  apenas o que a fonte declara `PRONTO`. `--verificar` só compara e devolve 1 se divergiu.
+- `ferramentas/tests/test_sincronizar.py` — a porta. `test_a_copia_do_plugin_esta_em_dia` roda
+  contra o repositório real; editar um byte de `volumes/prontos/` deixa a suíte vermelha
+  (provado por mutação). As outras reproduzem de propósito cada forma de deriva já observada.
+- `volumes/_catalogo.md` passou a ser gerado, para não virar o próximo arquivo mantido à mão.
+- `pytest.ini` — a raiz coleta só a suíte do motor. Os dois pacotes `ferramentas` (o do motor e
+  o do acervo) colidem numa sessão única de pytest; o acervo roda de dentro de `acervo/`.
+
+**Correção que apareceu no caminho:** `shutil.which("bash")` devolvia, no Windows sem WSL, o
+stub da Microsoft Store — que responde a `which` mas imprime "instale uma distro" em UTF-16 e
+sai 1 sem ler o script. Os 17 testes de `test_lancador.py` falhavam por isso, e não por defeito
+do lançador. `hooks/engine.sh` já descartava esse stub para o Python; a mesma regra faltava no
+teste.
+
+**Suítes:** 449 (motor) + 455 (acervo) = 904 testes verdes.
+
+**O que a unificação NÃO fez:** não renomeou o repositório, não reapontou o plugin e não mexeu
+no manifesto — o acervo entrou dentro do motor, e não o contrário.
+
+---
+
 ## 2026-07-31 — Primeira execução em sessão real do Claude Code
 
 O plugin foi instalado e rodou dentro de uma sessão real do Claude Code — o item "instalação
