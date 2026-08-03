@@ -7,9 +7,10 @@ via `env`, os quatro cenários pedidos: repasse de stdin/código de saída com
 Python disponível, trava com `--travar-sem-python` sem Python, saída silenciosa
 sem a flag e sem Python, e um caminho de script com espaço e acentuação.
 
-Todo o módulo é pulado se `bash` não estiver no PATH desta máquina — sem
+Todo o módulo é pulado se não houver um bash utilizável nesta máquina — sem
 shell não há como exercitar o lançador, e a suíte não pode quebrar por causa
-disso em um ambiente sem Git Bash/WSL/sh.
+disso em um ambiente sem Git Bash/WSL/sh. "Utilizável" exclui o stub da
+Microsoft Store; ver `_achar_bash`.
 """
 from __future__ import annotations
 
@@ -25,10 +26,44 @@ import pytest
 RAIZ_PLUGIN = Path(__file__).resolve().parents[2]
 LANCADOR = RAIZ_PLUGIN / "hooks" / "engine.sh"
 
-_BASH = shutil.which("bash")
+def _achar_bash() -> str | None:
+    """Acha um bash que de fato executa scripts, descartando o stub da Store.
+
+    Numa máquina Windows sem WSL instalado, `shutil.which("bash")` acha o stub
+    que o sistema registra em `AppData\\Local\\Microsoft\\WindowsApps`: ele
+    existe, responde a `which` e, ao ser executado, imprime "instale uma distro"
+    em UTF-16 e sai 1 — sem jamais ler o script pedido. É exatamente o stub que
+    `hooks/engine.sh` já descarta para o Python, pelo mesmo motivo: um bash que
+    não roda bash é pior que nenhum, porque a falha não se parece com ausência
+    de shell, e sim com defeito do lançador.
+
+    A comparação ignora a caixa: caminho no Windows não distingue maiúsculas, e
+    já houve regressão neste repositório por filtro sensível a caixa.
+    """
+    candidatos: list[str] = []
+    do_path = shutil.which("bash")
+    if do_path:
+        candidatos.append(do_path)
+    # Git Bash não entra no PATH do PowerShell por padrão, mas é o shell que o
+    # próprio Claude Code usa no Windows — é ele que o lançador vai encontrar em
+    # produção, então é ele que o teste deve exercitar.
+    candidatos += [
+        r"C:\Program Files\Git\bin\bash.exe",
+        r"C:\Program Files\Git\usr\bin\bash.exe",
+    ]
+    for caminho in candidatos:
+        if "windowsapps" in caminho.lower():
+            continue
+        if Path(caminho).is_file():
+            return caminho
+    return None
+
+
+_BASH = _achar_bash()
 
 pytestmark = pytest.mark.skipif(
-    _BASH is None, reason="bash não está no PATH desta máquina"
+    _BASH is None,
+    reason="nenhum bash utilizável nesta máquina (o stub WindowsApps não conta)",
 )
 
 
