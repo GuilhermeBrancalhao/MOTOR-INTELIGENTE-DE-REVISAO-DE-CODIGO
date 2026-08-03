@@ -1,5 +1,43 @@
+---
+volume: "09"
+volume_nome: ORCHESTRATOR
+tipo: ENGINE
+secao: 16-Roadmap
+status: RASCUNHO
+atualizado_em: 2026-08-03
+---
+
 # Roadmap
 
-## 1-3 meses: Implementação conforme spec
-## 3-6 meses: Otimizações via observabilidade
-## 6+ meses: Consolidação e evolução
+## O que este volume ainda não cobre
+
+Código executável de referência — este ciclo (2026-08-03) priorizou contrato, regras e diagramas
+para os 10 volumes essenciais antes de implementação citável, decisão registrada em
+`ENTREGA.md`. Sem código, o critério 2 (testes dos exemplos) da Definição de PRONTO não se
+aplica ainda a este volume.
+
+Otimização de agendamento entre nós prontos simultaneamente (qual executar primeiro quando há
+mais nós prontos do que capacidade de concorrência disponível) — hoje o contrato não especifica
+critério de prioridade, só respeita dependência e limite de concorrência. Um critério de
+prioridade explícito (por exemplo, priorizar nós com mais dependentes transitivos) é extensão
+possível, não parte do contrato mínimo atual.
+
+Cancelamento de nós já em `Executando` quando o chamador decide abortar o grafo inteiro
+externamente (não por falha de outro nó, mas por decisão do chamador) — não especificado hoje;
+o contrato assume que uma vez que um nó começou a executar, ele é observado até seu próprio
+encerramento.
+
+## Ordem de cobertura pretendida
+
+Primeiro, código de referência mínimo (planejador topológico com detecção de ciclo, testado por
+mutação) — é o componente mais fácil de isolar e testar sem depender de nenhum outro volume.
+Depois, a integração real com `08-AGENT-ENGINE`, quando aquele volume também tiver código
+citável.
+
+## O que este volume assume que pode mudar
+
+O conjunto de três políticas de falha (`AbortarDependentes`, `PularDependentes`,
+`RetryComBackoff`) pode crescer se um caso de uso real expuser uma quarta política necessária —
+por exemplo, uma política de "substituir por valor padrão e continuar" para nós não-críticos.
+Qualquer política nova precisa manter a garantia de resultado granular por nó descrita em
+`07-Regras.md`.

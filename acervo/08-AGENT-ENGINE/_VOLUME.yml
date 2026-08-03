@@ -1,7 +1,7 @@
 volume: "08"
 nome: AGENT-ENGINE
-tipo: ARQUITETURA
+tipo: ENGINE
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo: Orquestração de agentes
+escopo: Motor que executa agentes de IA — ciclo de vida do agente, loop de tool-calling e orçamento de passos, tokens e tempo por execução.

@@ -1,7 +1,7 @@
 volume: "21"
 nome: OBSERVABILITY
-tipo: PROCESSO
+tipo: GOVERNANCA
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo: Logs, traces, métricas
+escopo: Logs estruturados, métricas e traces distribuídos para sistemas com componentes de IA — o que precisa ser instrumentado, com que granularidade, e como se decide se um sinal exige alerta.

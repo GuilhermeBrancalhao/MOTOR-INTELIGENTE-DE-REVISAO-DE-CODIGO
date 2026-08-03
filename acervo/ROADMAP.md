@@ -1,18 +1,21 @@
 # ROADMAP
 
-**Atualizado em:** 2026-07-30
+**Atualizado em:** 2026-08-03
 
-Estado hoje: a máquina de produção está completa e testada, o contrato está em v1.0.0, e **dois
-volumes** atravessaram a linha inteira — `07-PROMPT-ENGINE`, o padrão-ouro, com auditoria 8,9, e
-`12-MEMORY`, com 8,7. Os outros **40 volumes** estão declarados no contrato e materializados
-como pasta com `_VOLUME.yml`, em `RASCUNHO`, sem seções escritas.
+Estado hoje: a máquina de produção está completa e testada, o contrato está em v1.0.0, e **três
+volumes** atravessaram a linha inteira — `03-DISCOVERY`, `07-PROMPT-ENGINE` (padrão-ouro,
+auditoria 8,9) e `12-MEMORY` (8,7). Os outros **39 volumes** estão declarados no contrato e
+materializados como pasta com `_VOLUME.yml`, em `RASCUNHO` — e uma auditoria externa em
+2026-08-03 confirmou que estavam abaixo do mínimo de substância exigido pelo contrato (esqueletos
+gerados em lote, não conteúdo real), além de um bug de BOM UTF-8 nos `_VOLUME.yml` que mascarava
+a extensão real do problema (39 violações aparentes → 657 reais, após o fix).
 
-A prioridade mudou em 2026-07-30, por decisão do autor: a plataforma serve para **construir
-software**, não para acumular prosa. O item de maior valor de um volume passou a ser o
-componente executável, e o texto é o manual dele. Em consequência, a ordem de produção deixa de
-seguir o índice e passa a seguir **onde existe código real para extrair e generalizar** — o
-`12-MEMORY` é o primeiro exemplo disso, e os candidatos seguintes são `11-KNOWLEDGE`,
-`31-TESTING` e `21-OBSERVABILITY`. Cobertura dos 42 não é meta.
+**Decisão de escopo, 2026-08-03:** em vez de perseguir os 42, o ciclo atual fecha em **motor +
+10 volumes essenciais** — `01`, `03`, `07`, `08`, `09`, `10`, `12`, `17`, `21`, `31`. Os outros
+32 permanecem `RASCUNHO` declarado, biblioteca evolutiva sem prazo de conclusão nesta entrega.
+Isso substitui a lista de "candidatos seguintes" que este arquivo tinha antes — `08`, `09`, `10`,
+`17`, `21` e `31` já estavam nela; a diferença é que agora é escopo fechado do ciclo, não
+sugestão aberta. Cobertura dos 42 continua não sendo meta.
 
 A ordem de produção não é a ordem numérica. Um volume só deve ser escrito depois dos volumes
 que ele declara em `depende_de`, porque `depende_de` significa pré-requisito de leitura — e

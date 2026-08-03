@@ -1,7 +1,7 @@
 volume: "17"
 nome: SECURITY
-tipo: PROCESSO
+tipo: GOVERNANCA
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo: Segurança e controle de acesso
+escopo: Segurança de sistemas com componentes de IA — defesa contra prompt injection, prevenção de exfiltração de dados via ferramenta/saída do modelo, e sandboxing de execução de código e comando gerados por IA.

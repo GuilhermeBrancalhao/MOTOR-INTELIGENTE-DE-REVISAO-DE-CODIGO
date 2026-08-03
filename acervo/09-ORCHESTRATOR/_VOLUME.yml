@@ -1,7 +1,7 @@
 volume: "09"
 nome: ORCHESTRATOR
-tipo: ARQUITETURA
+tipo: ENGINE
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo: Coordenação entre agentes
+escopo: Motor de orquestração de múltiplos agentes e etapas como DAG de tarefas — ordenação topológica, execução paralela de nós independentes, retry com backoff, fan-out/fan-in e tratamento de falha parcial.

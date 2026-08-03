@@ -1,7 +1,7 @@
 volume: "10"
 nome: WORKFLOW
-tipo: ARQUITETURA
+tipo: ENGINE
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo: DAGs e workflows
+escopo: Motor de workflows determinísticos de longa duração que intercala passos de transformação, validação e chamada de API com passos não-determinísticos de IA, com checkpoint de estado a cada passo para retomada segura após falha.
