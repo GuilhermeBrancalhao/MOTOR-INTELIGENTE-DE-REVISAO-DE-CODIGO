@@ -1,7 +1,7 @@
 {
   "name": "engine",
   "displayName": "ENGINE — Motor de Engenharia",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "Motor de engenharia persistente para o Claude Code: ciclo em fases, papéis por etapa, cartões de tecnologia e classificador de risco com falha segura.",
   "author": {
     "name": "AlphaContabilidade",
