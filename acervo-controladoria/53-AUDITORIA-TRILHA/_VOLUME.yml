@@ -1,6 +1,6 @@
 volume: "53"
 nome: AUDITORIA-TRILHA
-tipo: PROCESSO
+tipo: GOVERNANCA
 status: RASCUNHO
 perecivel: false
 depende_de: []

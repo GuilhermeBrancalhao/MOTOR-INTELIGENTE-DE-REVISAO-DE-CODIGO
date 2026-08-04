@@ -1,11 +1,7 @@
 volume: "54"
 nome: INTEGRACAO-ERP
-tipo: PROCESSO
+tipo: ARQUITETURA
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo: >
-  Integracao SAP, Oracle, Omie, IFS (declarado, sem implementacao ainda) e
-  normalizacao de CSV de exportacao de banco/fintech sem API (implementado
-  e testado contra dado real - normalizar.py, 40+ bancos, deteccao
-  automatica de coluna critica por padrao de nome).
+escopo: Integracao com ERP (declarada, sem implementacao ainda) e normalizacao de CSV de exportacao de banco/fintech sem API (implementado e testado contra dado real - normalizar.py, 40+ bancos, deteccao automatica de coluna critica por padrao de nome).

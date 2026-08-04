@@ -5,10 +5,16 @@
 **Estado hoje: os 42 volumes do contrato estão `PRONTO`.** A cobertura integral foi alcançada em
 2026-08-04, com o último lote (`41-SDK`, `42-PLUGINS`). Cada volume atravessou os quatro
 critérios da Definição de PRONTO: gate estrutural, exemplo executável com testes, auditoria com
-média ≥8,0 registrada em `auditorias/`, e entrada no `CHANGELOG.md`. Suíte completa do
-repositório (motor + acervo + exemplos): **449 testes**. `ferramentas.validar --tudo` e
-`--cross-refs` sem violação. `volumes/prontos/` é artefato derivado, regenerado por
+média ≥8,0 registrada em `auditorias/`, e entrada no `CHANGELOG.md`. `ferramentas.validar --tudo`
+e `--cross-refs` sem violação. `volumes/prontos/` é artefato derivado, regenerado por
 `ferramentas.sincronizar` — nunca editado à mão.
+
+**Correção de 2026-08-04:** este arquivo afirmou antes que a "suíte completa do repositório
+(motor + acervo + exemplos)" era de 449 testes. **Está errado.** 449 é só a suíte do motor, a
+única que a raiz coleta — o `pytest.ini` explica por quê (dois pacotes `ferramentas`, o da raiz e
+o de `acervo/`, colidem numa sessão só de pytest). Os números reais são **449 na raiz** e **789
+rodando de dentro de `acervo/`**, e não existe comando único que rode as duas. Somar as duas ou
+citar uma como se fosse o todo é o erro que estava aqui.
 
 **Histórico da decisão de escopo (2026-08-03), mantido para contexto:** o ciclo daquele dia
 fechava em motor + 10 volumes essenciais (`01`, `03`, `07`, `08`, `09`, `10`, `12`, `17`, `21`,
@@ -40,11 +46,22 @@ não é validado por `ferramentas.validar`, não aparece na suíte, não é sinc
 `volumes/prontos/`, e não é mencionado em nenhum `CHANGELOG` ou `README`.
 
 Consequência prática: a afirmação "42/42 `PRONTO`" é verdadeira sobre `acervo/` e **não diz nada**
-sobre `acervo-controladoria/`, cujo estado real nunca foi medido. É preciso decidir — decisão do
-autor, não delegável — se esse acervo (a) entra no contrato e passa a ser gated como os outros,
-(b) vira repositório próprio, ou (c) sai. Enquanto não se decide, ele é conteúdo não verificado
-convivendo com conteúdo verificado, que é exatamente a ambiguidade que a Definição de PRONTO
-existe para eliminar.
+sobre `acervo-controladoria/`. É preciso decidir — decisão do autor, não delegável — se esse
+acervo (a) entra no contrato e passa a ser gated como os outros, (b) vira repositório próprio, ou
+(c) é reduzido ao que nele é real.
+
+**Medido em 2026-08-04, laudo completo em
+[acervo-controladoria/ESTADO.md](../acervo-controladoria/ESTADO.md):** 420 violações no total.
+Um volume conforme (`45-CONCILIACAO-CONTAS`, zero violações, 5.665 palavras, 6 módulos de
+exemplo), um parcial (`54-INTEGRACAO-ERP`) e **dez esqueletos** de ~15 palavras por seção. Os 30
+testes de `acervo-controladoria/exemplos/` passam mas **nenhuma suíte os coleta**.
+
+A medição também expôs um mascaramento: o total aparente era 186 porque seis volumes reprovavam
+por `volume-tipo` e o validador parava ali, sem examinar as 18 seções. Alinhados os tipos ao
+contrato, apareceram as 234 violações restantes. **É a mesma classe do bug de BOM UTF-8 de
+2026-08-03** (39 aparentes → 657 reais): erro que reprova cedo esconde todo o resto. Regra geral
+para este repositório — quando um gate reprovar por metadado, o total não é confiável até o
+metadado estar correto.
 
 Verificado também que `acervo-controladoria/` **não vaza o projeto vizinho**: as únicas
 ocorrências de "Omie" o citam como fornecedor de ERP genérico ao lado de SAP, Oracle e IFS, e não

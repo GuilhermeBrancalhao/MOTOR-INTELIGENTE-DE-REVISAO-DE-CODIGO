@@ -1,6 +1,6 @@
 volume: "43"
 nome: CONTABILIDADE-BASICA
-tipo: PROCESSO
+tipo: ENGINE
 status: RASCUNHO
 perecivel: false
 depende_de: []

@@ -1,6 +1,6 @@
 volume: "50"
 nome: COMPLIANCE-FISCAL
-tipo: PROCESSO
+tipo: GOVERNANCA
 status: RASCUNHO
 perecivel: false
 depende_de: []
