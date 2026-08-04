@@ -34,4 +34,5 @@ no contexto.
 - **26-AI-MODELS** — tipo ENGINE
 - **27-LLM-ROUTER** — tipo ENGINE
 - **28-PROMPT-COMPILER** — tipo ENGINE
+- **29-PROMPT-OPTIMIZER** — tipo ENGINE
 - **31-TESTING** — tipo PROCESSO

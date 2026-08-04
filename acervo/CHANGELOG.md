@@ -4,6 +4,19 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 15)
+
+### 29-PROMPT-OPTIMIZER promovido a PRONTO (30/42) — grupo 1 completo (07, 28, 29)
+
+29-PROMPT-OPTIMIZER escrito do zero (18 secoes, ENGINE, depende_de: ["07"]) — busca automatica
+de variante de prompt usando os casos de ouro do 07 como funcao objetivo: sempre a mesma
+amostra, melhoria exige margem acima de ruido, nunca promove sozinho (so propoe), orcamento de
+tentativas respeitado, toda tentativa registrada mesmo rejeitada, funcao objetivo nunca ajustada
+pela propria busca. otimizador.py (Otimizador, HistoricoDeBusca), 6 testes. Auditoria 8,1.
+
+Com este volume, o grupo 1 do ROADMAP.md (07-PROMPT-ENGINE, 28-PROMPT-COMPILER,
+29-PROMPT-OPTIMIZER) esta completo.
+
 ## 2026-08-04 (lote 14)
 
 ### 28-PROMPT-COMPILER promovido a PRONTO (29/42)
