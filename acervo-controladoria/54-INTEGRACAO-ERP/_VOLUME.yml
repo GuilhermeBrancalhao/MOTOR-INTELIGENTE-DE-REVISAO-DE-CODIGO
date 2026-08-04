@@ -4,4 +4,8 @@ tipo: PROCESSO
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo: Integração SAP, Oracle, Omie, IFS
+escopo: >
+  Integracao SAP, Oracle, Omie, IFS (declarado, sem implementacao ainda) e
+  normalizacao de CSV de exportacao de banco/fintech sem API (implementado
+  e testado contra dado real - normalizar.py, 40+ bancos, deteccao
+  automatica de coluna critica por padrao de nome).
