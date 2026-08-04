@@ -21,6 +21,7 @@ no contexto.
 - **13-RAG** — tipo ENGINE
 - **14-VECTOR** — tipo ENGINE
 - **15-CONTEXT** — tipo ENGINE
+- **16-INTEGRATION** — tipo ARQUITETURA
 - **17-SECURITY** — tipo GOVERNANCA
 - **21-OBSERVABILITY** — tipo GOVERNANCA
 - **31-TESTING** — tipo PROCESSO

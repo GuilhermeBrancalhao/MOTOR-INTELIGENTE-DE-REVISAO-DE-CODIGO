@@ -4,6 +4,17 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 4)
+
+### 16-INTEGRATION promovido a PRONTO (19/42)
+
+16-INTEGRATION escrito do zero (18 secoes, ARQUITETURA) — a fronteira do produto: contrato
+versionado, idempotencia e tolerancia a falha do outro lado, para chamada que cruza time,
+fornecedor ou ciclo de release. Fronteira com `22`-`25` (camadas do mesmo produto) decidida em
+2026-07-29 e reafirmada aqui: "o outro lado pode mudar sem que eu saiba antes?". gateway.py
+(VersaoContrato, PoliticaDeRetry, CircuitBreaker, Gateway com idempotencia via cache), 6 testes.
+Auditoria 8,1.
+
 ## 2026-08-04 (lote 3)
 
 ### 15-CONTEXT promovido a PRONTO (18/42) — grupo 2 completo
