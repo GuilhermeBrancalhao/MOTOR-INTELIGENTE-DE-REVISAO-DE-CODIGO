@@ -4,6 +4,26 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 26)
+
+### 41-SDK promovido a PRONTO (41/42)
+
+41-SDK escrito do zero (18 secoes, ENGINE, C4Context/sequenceDiagram/stateDiagram-v2) — disciplina
+de SDK exposto a desenvolvedor externo: versionamento semantico real (mudanca que quebra sempre
+exige versao maior nova, AC1), superficie publica minima e deliberada com justificativa explicita
+por elemento exposto (AC2), erro que sempre orienta correcao, nunca apenas descreve o que falhou
+(AC3), compatibilidade retroativa garantida dentro da mesma versao maior (AC4), depreciacao
+explicita com motivo antes de remocao — nenhum elemento publico pula direto de estavel para
+removido (AC5), exemplo de uso sempre verificado contra o codigo real antes de aceito (AC6).
+`SuperficieDoSDK.remover_membro` e o ponto unico onde AC1/AC4/AC5 se combinam: remocao de membro
+publico exige depreciacao previa E incremento de versao maior, as duas juntas. Fronteira explicita
+com 25-API-ARCHITECT (contrato de rede que o SDK encapsula), 40-TEMPLATES (mesmo principio de
+depreciacao, AB5/AC5) e 37-CODE-GENERATION (validacao de codigo reaproveitada para exemplo de uso,
+Y1/AC6). Exemplo `exemplos/41-sdk/sdk.py`, 13 testes (pares positivo/negativo por regra, mutacao
+nomeada em cada docstring), suite completa `exemplos` com 484 testes sem regressao nem colisao de
+nome de modulo com os 40 volumes anteriores. Auditoria 8.1, nenhuma secao abaixo de 6, dominio
+neutro sem qualquer ocorrencia.
+
 ## 2026-08-04 (lote 25)
 
 ### 40-TEMPLATES promovido a PRONTO (40/42) — segundo BIBLIOTECA
