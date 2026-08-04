@@ -1,6 +1,14 @@
-# ENTREGA — ENGINE + 10 volumes essenciais
+# ENTREGA — ENGINE + acervo em expansão (13/42 volumes PRONTO)
 
-## Status real (atualizado 2026-08-03, após auditoria externa)
+## Status real (atualizado 2026-08-04)
+
+**Escopo ampliado a pedido do autor em 2026-08-04**: além do motor + 10 essenciais, os 32 volumes
+restantes estão sendo completados em lotes, no mesmo padrão auditado (prosa real, exemplo
+executável, testes, auditoria por outro modelo). Primeiro lote: `02-CORE`, `04-REQUIREMENTS`,
+`05-BUSINESS` — **13 de 42 volumes `PRONTO`** agora. Ver `acervo/CHANGELOG.md` de 2026-08-04 para
+o detalhe do lote, e as seções abaixo para o histórico do dia anterior.
+
+## Status em 2026-08-03 (histórico — ver acima para o estado atual)
 
 **O motor está pronto. O acervo de conhecimento não está — e esta entrega redefine o escopo
 para refletir isso, em vez de declarar os 42 volumes como entregues.**

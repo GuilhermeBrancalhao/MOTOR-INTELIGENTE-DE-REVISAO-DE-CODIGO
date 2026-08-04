@@ -7,7 +7,10 @@ no contexto.
      Não edite à mão: a próxima sincronização sobrescreve. -->
 
 - **01-FUNDACAO** — tipo GOVERNANCA
+- **02-CORE** — tipo ARQUITETURA
 - **03-DISCOVERY** — tipo PROCESSO
+- **04-REQUIREMENTS** — tipo PROCESSO
+- **05-BUSINESS** — tipo PROCESSO
 - **07-PROMPT-ENGINE** — tipo ENGINE
 - **08-AGENT-ENGINE** — tipo ENGINE
 - **09-ORCHESTRATOR** — tipo ENGINE

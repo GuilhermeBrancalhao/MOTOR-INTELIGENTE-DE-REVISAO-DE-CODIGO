@@ -4,6 +4,38 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04
+
+### Lote 1 dos 32 volumes restantes: 02-CORE, 04-REQUIREMENTS, 05-BUSINESS promovidos a `PRONTO`
+
+Pedido do autor: completar os 32 volumes fora do escopo dos 10 essenciais. Dado o tamanho real
+do trabalho (~110 mil palavras + módulo de código por volume, no mesmo padrão auditado), a
+execução foi dividida em lotes ao longo de várias mensagens — este é o primeiro.
+
+**02-CORE e 04-REQUIREMENTS não foram escritos neste lote — foram recuperados.** A auditoria de
+2026-08-03 já havia restaurado a prosa de 2026-07-31 (destruída pela geração em lote de
+2026-08-02), mas os dois ficaram com `escopo:` vazio e sem exemplo executável. Corrigido:
+`fronteira.py` (8 testes, formaliza N1-N8 do volume 02 — a fronteira de saída como função única,
+validação em três camadas na ordem forma→domínio→autorização) e `requisito.py` (9 testes,
+formaliza Q1-Q8 do volume 04 — requisito falsificável, rastro para trás e para frente,
+identificador que nunca é reciclado).
+
+**05-BUSINESS foi escrito do zero** — 17 seções, tipo `PROCESSO`. Trata captura de contexto de
+negócio como processo com critério de saída objetivo: distingue autoridade de decisão (quem
+`DECIDE`) de interesse no resultado (`CONSULTADO`, `INFORMADO`), e aplica a `04-REQUIREMENTS` o
+mesmo teste de falsificabilidade que aquele volume aplica a requisito técnico, uma camada acima
+— objetivo de negócio só é objetivo se existir fato observável que o contrariaria. Exemplo
+`objetivo.py`, 8 testes.
+
+Os três passaram por auditoria (Opus 5): 02 = 8,6, 04 = 8,5, 05 = 8,2 — nenhuma seção abaixo de
+6. Promovidos a `PRONTO` nos 3 `_VOLUME.yml` e nas 52 seções (front-matter alinhado). `volumes/
+prontos/` regenerado.
+
+**Estado do acervo: 13 de 42 volumes `PRONTO`** (os 10 essenciais + os 3 deste lote). 29
+restantes, para os próximos lotes.
+
+449 testes do motor + 264 do acervo + 263 dos exemplos, todos verdes.
+
 ## 2026-08-03 (fim do dia)
 
 ### Os 7 volumes essenciais ganham exemplo executavel e sao promovidos a `PRONTO`
