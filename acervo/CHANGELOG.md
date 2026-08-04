@@ -4,6 +4,17 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 20)
+
+### 35-DOCUMENTATION promovido a PRONTO (35/42)
+
+35-DOCUMENTATION escrito do zero (18 secoes, GOVERNANCA, com matriz de controles) — governanca
+de documentacao: ADR obrigatorio com contexto/decisao/consequencia, imutavel apos aceito
+(mudanca gera novo ADR que supera o anterior, nunca edicao direta), documentacao versionada
+junto do codigo, vigencia verificada explicitamente, conteudo gerado nunca editado manualmente,
+documentacao de usuario e de mantenedor estruturalmente distintas. documentacao.py (ADR,
+RegistroDeADRs, Documento, verificar_vigencia), 8 testes. Auditoria 8,1.
+
 ## 2026-08-04 (lote 19)
 
 ### 34-COST-OPTIMIZATION promovido a PRONTO (34/42) — trio perecível 26/27/34 completo
