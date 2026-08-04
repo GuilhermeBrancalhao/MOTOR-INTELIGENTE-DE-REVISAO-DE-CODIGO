@@ -4,6 +4,19 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 23)
+
+### 38-PROJECT-PLANNER promovido a PRONTO (38/42)
+
+38-PROJECT-PLANNER escrito do zero (17 secoes, PROCESSO, sem 08-Modelos) — processo de decompor
+objetivo em tarefas executaveis: ordenadas por dependencia real (ciclo de dependencia
+detectado), estimativa com incerteza declarada (faixa real, nunca numero unico), escopo
+negociado e registrado antes da execucao, replanejamento sempre com motivo explicito, tarefa
+bloqueada distinta de nao iniciada, conclusao verificavel contra criterio proprio (mesmo
+principio da Definicao de PRONTO deste acervo). Removido 08-Modelos.md remanescente.
+planejamento.py (Tarefa, PlanoDeCiclo, ordenar_por_dependencia, AndamentoDaTarefa), 8 testes.
+Auditoria 8,1.
+
 ## 2026-08-04 (lote 22)
 
 ### 37-CODE-GENERATION promovido a PRONTO (37/42)
