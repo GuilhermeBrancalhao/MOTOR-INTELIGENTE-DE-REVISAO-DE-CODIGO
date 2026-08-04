@@ -4,6 +4,16 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 9)
+
+### 23-BACKEND-ARCHITECT promovido a PRONTO (24/42)
+
+23-BACKEND-ARCHITECT escrito do zero (18 secoes, ARQUITETURA) — camada de logica de negocio e
+orquestracao dentro do mesmo produto: trabalho assincrono com estado consultavel para chamada de
+IA potencialmente longa, worker sem afinidade, backpressure explicita, idempotencia de
+processamento por chave. Fronteira com 24-DATABASE-ARCHITECT, 25-API-ARCHITECT e 16-INTEGRATION
+explicita. fila_de_trabalhos.py (Trabalho, FilaDeTrabalhos), 8 testes. Auditoria 8,1.
+
 ## 2026-08-04 (lote 8)
 
 ### 22-FRONTEND-ARCHITECT promovido a PRONTO (23/42)
