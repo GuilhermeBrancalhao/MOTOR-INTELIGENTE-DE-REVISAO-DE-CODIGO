@@ -4,6 +4,17 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 22)
+
+### 37-CODE-GENERATION promovido a PRONTO (37/42)
+
+37-CODE-GENERATION escrito do zero (18 secoes, ENGINE) — disciplina de geracao automatica de
+codigo: validado com a mesma exigencia de codigo manual (compilacao e teste), marcado como
+gerado e nunca editado diretamente (mudanca vai para a especificacao), geracao deterministica,
+revisao humana obrigatoria antes de producao independente de validacao automatizada,
+especificacao versionada junto do codigo com escopo declarado. geracao_de_codigo.py
+(EspecificacaoDeGeracao, gerar, aceitar_codigo_gerado), 8 testes. Auditoria 8,1.
+
 ## 2026-08-04 (lote 21)
 
 ### 36-DIAGRAMS promovido a PRONTO (36/42) — primeiro volume BIBLIOTECA fechado
