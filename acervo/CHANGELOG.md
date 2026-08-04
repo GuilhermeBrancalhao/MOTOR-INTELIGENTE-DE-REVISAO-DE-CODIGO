@@ -4,6 +4,18 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 18)
+
+### 33-PERFORMANCE promovido a PRONTO (33/42)
+
+33-PERFORMANCE escrito do zero (17 secoes, PROCESSO, sem 08-Modelos) — processo de definir,
+medir e proteger orcamento de desempenho: SLO declarado antes de producao, medicao sob carga
+realista (concorrencia minima), regressao investigada com o mesmo rigor de 32-QUALITY,
+degradacao graciosa sob sobrecarga com estrategia declarada, otimizacao validada por medicao
+antes/depois, SLO de operacao com IA reconhece variabilidade (margem entre p95/p99). Removido
+08-Modelos.md remanescente. orcamento_de_desempenho.py (SLO, declarar_operacao_pronta,
+verificar_slo, detectar_regressao_de_performance, validar_otimizacao), 9 testes. Auditoria 8,1.
+
 ## 2026-08-04 (lote 17)
 
 ### 32-QUALITY promovido a PRONTO (32/42) — grupo 3 completo (17-18, 31-32)

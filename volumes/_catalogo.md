@@ -38,3 +38,4 @@ no contexto.
 - **30-AI-GOVERNANCE** — tipo GOVERNANCA
 - **31-TESTING** — tipo PROCESSO
 - **32-QUALITY** — tipo PROCESSO
+- **33-PERFORMANCE** — tipo PROCESSO
