@@ -4,6 +4,21 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 17)
+
+### 32-QUALITY promovido a PRONTO (32/42) — grupo 3 completo (17-18, 31-32)
+
+32-QUALITY escrito do zero (17 secoes, PROCESSO, sem 08-Modelos) — indicador agregado de
+qualidade: taxa de prova por mutacao nunca cobertura de linha isolada, gate de release com piso
+declarado e excecao rastreavel, divida tecnica registrada com os quatro campos obrigatorios,
+tendencia exige multiplas medicoes, toda regressao investigada antes de virar novo normal,
+indicador sempre decomponivel em submetricas nomeadas. Removido 08-Modelos.md remanescente (mesmo
+padrao do 18-DEVSECOPS). indicador_de_qualidade.py (Medicao, GateDeQualidade, ItemDeDivida,
+detectar_regressao), 9 testes. Auditoria 8,1.
+
+Com este volume, o grupo 3 do ROADMAP.md (17-SECURITY/18-DEVSECOPS, 31-TESTING/32-QUALITY) esta
+completo.
+
 ## 2026-08-04 (lote 16)
 
 ### 30-AI-GOVERNANCE promovido a PRONTO (31/42)

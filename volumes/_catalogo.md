@@ -37,3 +37,4 @@ no contexto.
 - **29-PROMPT-OPTIMIZER** — tipo ENGINE
 - **30-AI-GOVERNANCE** — tipo GOVERNANCA
 - **31-TESTING** — tipo PROCESSO
+- **32-QUALITY** — tipo PROCESSO
