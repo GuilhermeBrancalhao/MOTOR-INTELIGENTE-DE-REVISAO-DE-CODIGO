@@ -6,7 +6,6 @@ de pandas/openpyxl. Fluxo: `ler_csv` → `detectar_colunas` →
 `executar`).
 
 <!-- exemplo: exemplos/54-integracao-erp/normalizar.py -->
-<!-- exemplo: exemplos/54-integracao-erp/tests/test_normalizar.py -->
 
 ## `_para_numerico` — o conversor que faltava
 
