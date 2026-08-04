@@ -85,6 +85,50 @@ def test_mapeamento_grava_valor_correto_nao_o_percentual():
     assert n.df_processado["PCL_COMISSAO"].tolist() == [3.0, 3.0]
 
 
+def test_ler_csv_com_bom_e_separador_ponto_e_virgula_nao_fica_em_1_coluna(tmp_path):
+    """Bug real do arquivo de julho do DIGIO: BOM UTF-8 no inicio do
+    arquivo, separador ';'. `pd.read_csv(encoding='utf-8')` sem `sep`
+    explicito nao levanta excecao nesse caso - aceita a linha inteira
+    como uma unica coluna, com nome faltando ';'. A deteccao antiga so
+    era acionada por excecao, e aqui nao havia nenhuma: o arquivo virava
+    2 colunas em vez de ~29, em silencio."""
+    conteudo = "Tp. Lnc;Prop.;Valor Comiss\nA;500003141261;886,39\n"
+    arquivo = tmp_path / "digio_com_bom.csv"
+    arquivo.write_bytes(b"\xef\xbb\xbf" + conteudo.encode("utf-8"))
+
+    n = Normalizador(str(arquivo), "DIGIO")
+    df = n.ler_csv()
+
+    assert list(df.columns) == ["Tp. Lnc", "Prop.", "Valor Comiss"]
+    assert df["Valor Comiss"].tolist() == ["886,39"]
+
+
+def test_ler_csv_sem_bom_com_separador_ponto_e_virgula_ainda_funciona(tmp_path):
+    """Mesmo caso sem BOM - a deteccao por contagem de separador nao pode
+    regredir o caminho que ja funcionava antes da correcao."""
+    conteudo = "Tp. Lnc;Prop.;Valor Comiss\nA;500003141261;886,39\n"
+    arquivo = tmp_path / "digio_sem_bom.csv"
+    arquivo.write_text(conteudo, encoding="utf-8")
+
+    n = Normalizador(str(arquivo), "DIGIO")
+    df = n.ler_csv()
+
+    assert list(df.columns) == ["Tp. Lnc", "Prop.", "Valor Comiss"]
+
+
+def test_ler_csv_com_virgula_continua_funcionando(tmp_path):
+    """Separador ',' e o caso mais comum - a deteccao por contagem nao
+    pode quebrar o caminho feliz de um CSV convencional."""
+    conteudo = "Prop.,Valor Comiss\n500003141261,886.39\n"
+    arquivo = tmp_path / "convencional.csv"
+    arquivo.write_text(conteudo, encoding="utf-8")
+
+    n = Normalizador(str(arquivo), "BANCO-TESTE")
+    df = n.ler_csv()
+
+    assert list(df.columns) == ["Prop.", "Valor Comiss"]
+
+
 def test_validar_trava_se_coluna_de_comissao_ficar_vazia():
     """Insurance direta contra o falso-positivo real: soma de coluna
     100% NaN da 0,00 no pandas (skipna por padrao), nao NaN -- sem este

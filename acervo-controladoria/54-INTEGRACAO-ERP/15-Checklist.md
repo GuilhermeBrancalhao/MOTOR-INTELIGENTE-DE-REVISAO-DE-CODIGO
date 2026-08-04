@@ -12,15 +12,15 @@ atualizado_em: 2026-08-04
 Antes de considerar este volume pronto para uso em produção — não confundir com a Definição de
 PRONTO do acervo, tratada em `00-INTRODUCAO/Convencoes.md`:
 
-- [x] `normalizar.py` existe, é testado (7 testes) e roda contra pelo menos um CSV real de
+- [x] `normalizar.py` existe, é testado (10 testes) e roda contra pelo menos um CSV real de
       produção com resultado conferido à mão.
 - [x] O bug real do percentual escolhido em vez do valor pago está corrigido e coberto por teste
       que falha se for reintroduzido.
 - [x] Os dois diagramas exigidos pelo tipo `ARQUITETURA` (`C4Context` em `04-Arquitetura.md`,
       `sequenceDiagram` em `05-Diagramas.md`) existem e têm parágrafo descritivo logo depois.
 - [x] Todo exemplo citado no volume existe como arquivo e tem teste correspondente.
-- [ ] Bug conhecido do BOM UTF-8 na detecção de separador (arquivo de julho do DIGIO,
-      `12-Exemplos.md`) — identificado, não corrigido.
+- [x] Bug do BOM UTF-8 e coluna única silenciosa em `ler_csv` (arquivo de julho do DIGIO,
+      `12-Exemplos.md`) — corrigido em 2026-08-04, coberto por 3 testes.
 - [ ] Testado contra mais de um banco — hoje só DIGIO; os outros 39+ ainda não passaram pelo
       script.
 - [ ] Conector de API de ERP (SAP, Oracle, Omie, IFS) — só intenção declarada em

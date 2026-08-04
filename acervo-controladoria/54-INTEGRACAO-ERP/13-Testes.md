@@ -9,8 +9,7 @@ atualizado_em: 2026-08-04
 
 # Testes
 
-7 testes em `exemplos/54-integracao-erp/tests/test_normalizar.py`, todos
-unitários (sem I/O de arquivo — constroem o `DataFrame` em memória):
+10 testes em `exemplos/54-integracao-erp/tests/test_normalizar.py`:
 
 - Conversão de formato brasileiro (com e sem separador de milhar)
 - dtype `str` nativo do pandas recente (não é `object` clássico — bug real
@@ -19,9 +18,15 @@ unitários (sem I/O de arquivo — constroem o `DataFrame` em memória):
 - Desempate correto entre "% da Comissão" e "Valor Comiss"
 - Mapeamento grava o valor certo em `VAL_COMISSAO`, não o percentual
 - `validar()` trava quando a coluna de comissão fica vazia
+- CSV com BOM UTF-8 e separador `;` não fica em 1 coluna silenciosa (o bug
+  do arquivo de julho do DIGIO, corrigido em 2026-08-04)
+- CSV sem BOM com separador `;` continua funcionando (guarda de regressão)
+- CSV com separador `,` continua funcionando (guarda de regressão)
 
-Nenhum teste roda contra o CSV real (dado de cliente, fora do
-versionamento) — todos constroem o cenário mínimo que reproduz o bug.
+Os 7 primeiros são unitários, sem I/O de arquivo (constroem o `DataFrame` em memória). Os 3
+últimos, sobre `ler_csv()`, precisam de arquivo real em disco — usam a fixture `tmp_path` do
+pytest para escrever um CSV temporário a cada teste, sem depender de nenhum dado de produção
+versionado.
 
 ## Dívida conhecida: nenhuma suíte automática coleta estes testes
 

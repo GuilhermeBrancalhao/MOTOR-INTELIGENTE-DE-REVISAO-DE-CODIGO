@@ -11,20 +11,19 @@ atualizado_em: 2026-08-04
 
 ## O que este volume ainda não cobre
 
-Correção do bug de BOM UTF-8 na detecção de separador de `ler_csv` — identificado contra o
-arquivo de julho do DIGIO, ainda sem correção. Cobertura contra bancos além do DIGIO — a lógica
-de detecção foi desenhada para generalizar a 40+ bancos, mas só foi provada contra um. Conector
-de API de ERP (SAP, Oracle, Omie, IFS) — hoje só intenção declarada, sem nenhum caso real que
-justifique a implementação, já que nenhum banco de comissão trabalhado neste projeto expõe API.
+Cobertura contra bancos além do DIGIO — a lógica de detecção foi desenhada para generalizar a
+40+ bancos, mas só foi provada contra um. Conector de API de ERP (SAP, Oracle, Omie, IFS) — hoje
+só intenção declarada, sem nenhum caso real que justifique a implementação, já que nenhum banco
+de comissão trabalhado neste projeto expõe API.
 
 ## Ordem de cobertura pretendida
 
-Primeiro, o bug do BOM, porque é uma falha conhecida e concreta, não uma extensão de escopo.
-Depois, testar contra três a cinco bancos reais adicionais — cada banco novo tende a revelar uma
+Testar contra três a cinco bancos reais adicionais — cada banco novo tende a revelar uma
 peculiaridade de formato que os testes sintéticos de `test_normalizar.py` não previram, do mesmo
-jeito que o CSV real do DIGIO revelou o problema de parsing numérico brasileiro que a lógica de
-desempate, sozinha, não bastava para resolver. Só depois disso caberia decidir se o conector de
-API de ERP é sequer necessário no curto prazo.
+jeito que o CSV real do DIGIO revelou primeiro o problema de parsing numérico brasileiro e depois
+o de coluna única silenciosa por separador não detectado (ambos corrigidos em 2026-08-04). Só
+depois de testar mais bancos caberia decidir se o conector de API de ERP é sequer necessário no
+curto prazo.
 
 ## O que este volume assume que pode mudar
 

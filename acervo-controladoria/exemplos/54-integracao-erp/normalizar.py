@@ -43,43 +43,59 @@ class Normalizador:
         self.deteccoes = {}
         self._series_numericas = {}  # coluna original -> série já convertida para número
 
-    def ler_csv(self, encoding='utf-8', separador=None):
-        """Lê CSV detectando separador automaticamente."""
+    def _detectar_separador(self, encoding):
+        """Espia a primeira linha do arquivo e decide o separador por
+        contagem de ocorrência, não só presença - ';' pode aparecer dentro
+        de um valor de texto mesmo quando ',' é o separador real."""
+        with open(self.arquivo_csv, 'r', encoding=encoding, errors='ignore') as f:
+            primeira_linha = f.readline()
+
+        contagens = {c: primeira_linha.count(c) for c in (';', ',', '\t')}
+        separador = max(contagens, key=contagens.get)
+        if contagens[separador] == 0:
+            raise ValueError("Não consegui detectar separador. Use --sep")
+        return separador
+
+    def ler_csv(self, encoding='utf-8-sig', separador=None):
+        """Lê CSV detectando separador automaticamente.
+
+        `utf-8-sig` como padrão (não `utf-8`) faz o próprio decodificador
+        descartar o BOM quando presente, e se comporta como UTF-8 comum
+        quando ausente - não custa nada no caso sem BOM, evita reler o
+        arquivo no caso com.
+        """
         print(f"📖 Lendo {self.arquivo_csv.name}...", end=" ")
 
+        def _tentar(enc, sep):
+            kwargs = {'encoding': enc}
+            if sep:
+                kwargs['sep'] = sep
+            return pd.read_csv(self.arquivo_csv, **kwargs)
+
         try:
-            # Tentar com encoding especificado
-            kwargs = {'encoding': encoding}
-            if separador:
-                kwargs['sep'] = separador
-            self.df_original = pd.read_csv(self.arquivo_csv, **kwargs)
+            self.df_original = _tentar(encoding, separador)
         except UnicodeDecodeError:
-            # Tentar Latin-1 se UTF-8 falhar
             print(f"\n  UTF-8 falhou, tentando Latin-1...", end=" ")
-            kwargs = {'encoding': 'latin-1'}
-            if separador:
-                kwargs['sep'] = separador
-            self.df_original = pd.read_csv(self.arquivo_csv, **kwargs)
+            encoding = 'latin-1'
+            self.df_original = _tentar(encoding, separador)
         except (ValueError, TypeError):
-            # Se separador não foi especificado, detectar
             if separador:
                 raise
-
             print(f"\n  Detectando separador...", end=" ")
-            with open(self.arquivo_csv, 'r', encoding='utf-8', errors='ignore') as f:
-                primeira_linha = f.readline()
-
-            if ';' in primeira_linha:
-                separador = ';'
-            elif ',' in primeira_linha:
-                separador = ','
-            elif '\t' in primeira_linha:
-                separador = '\t'
-            else:
-                raise ValueError("Não consegui detectar separador. Use --sep")
-
+            separador = self._detectar_separador(encoding)
             print(f"'{separador}'", end=" ")
-            self.df_original = pd.read_csv(self.arquivo_csv, encoding=encoding, sep=separador)
+            self.df_original = _tentar(encoding, separador)
+
+        # Uma leitura com separador errado nem sempre levanta excecao: sem
+        # ',' no arquivo, pd.read_csv aceita a linha inteira como 1 coluna
+        # e devolve normalmente - foi exatamente esse silencio que deixou
+        # passar um CSV real (separador ';') sendo lido como 2 colunas em
+        # vez de ~29, sem nunca acionar a deteccao acima.
+        if len(self.df_original.columns) <= 1 and not separador:
+            print(f"\n  1 coluna e implausivel, detectando separador...", end=" ")
+            separador = self._detectar_separador(encoding)
+            print(f"'{separador}'", end=" ")
+            self.df_original = _tentar(encoding, separador)
 
         print(f"✓ ({len(self.df_original)} linhas, {len(self.df_original.columns)} colunas)")
         return self.df_original

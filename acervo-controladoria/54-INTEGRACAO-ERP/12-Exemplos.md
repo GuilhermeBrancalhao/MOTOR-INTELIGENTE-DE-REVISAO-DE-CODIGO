@@ -26,13 +26,21 @@ contra o CSV original. Reproduzido em
 e
 [`test_mapeamento_grava_valor_correto_nao_o_percentual`](../exemplos/54-integracao-erp/tests/test_normalizar.py).
 
-## Pendência conhecida, ainda sem correção
+## Segundo bug real, corrigido em 2026-08-04: BOM UTF-8 e coluna única silenciosa
 
-O mesmo banco, arquivo de julho (`DIGIO - 110075 01.07.csv`), tem BOM UTF-8
-(`\xef\xbb\xbf`) no início. A detecção de separador de `ler_csv` falha
-nesse arquivo — lê como 2 colunas em vez de ~29 — e ainda não foi
-corrigida. É um bug diferente deste (está em `ler_csv`, não na detecção de
-comissão), registrado aqui para não se perder.
+O mesmo banco, arquivo de julho (`DIGIO - 110075 01.07.csv`), tem BOM UTF-8 (`\xef\xbb\xbf`) no
+início e separador `;`. A causa raiz não era o BOM em si — o parser do pandas já descarta o BOM
+sozinho — era `ler_csv()` só acionar a detecção de separador quando `pd.read_csv` lançava
+exceção. Ler esse arquivo com separador `,` (o default, sem `sep` explícito) não lança nada:
+`pandas` aceita a linha inteira como uma única coluna e devolve normalmente. O arquivo virava 2
+colunas em vez de ~29, em silêncio total — nenhuma exceção, nenhum aviso.
+
+Corrigido comparando o número de colunas resultante contra o mínimo plausível (mais de 1) depois
+da leitura, não só capturando exceção: se sobrar 1 coluna e o separador não foi forçado pelo
+usuário, `ler_csv()` reexecuta a detecção por contagem de ocorrência do caractere (`;`, `,` ou
+`\t`) na primeira linha, e relê com o separador achado. `encoding` padrão também passou de
+`'utf-8'` para `'utf-8-sig'`, mais correto para arquivo que pode ou não ter BOM. Reproduzido em
+`test_ler_csv_com_bom_e_separador_ponto_e_virgula_nao_fica_em_1_coluna`.
 
 ## Por que este caso específico, e não um sintético inventado
 
