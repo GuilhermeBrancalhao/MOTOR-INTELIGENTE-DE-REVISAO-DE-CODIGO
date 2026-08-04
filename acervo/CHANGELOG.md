@@ -4,6 +4,19 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 12)
+
+### 26-AI-MODELS promovido a PRONTO (27/42) — primeiro volume perecível fechado
+
+26-AI-MODELS escrito do zero (18 secoes, ENGINE, perecivel: true) — metodo de selecionar modelo
+de IA para uma tarefa: requisito de capacidade antes de avaliacao, avaliacao contra casos de
+ouro obrigatoria, fallback explicito para tarefa critica, custo comparado pela tarefa completa
+(nao preco unitario), toda troca registrada com motivo e avaliacao. Nenhum preco, limite ou nome
+de modelo fixado como fato duradouro (regra 9 de Convencoes.md), verificado por inspecao —
+nenhuma constante desse tipo existe no exemplo, todo valor e parametro. selecao_de_modelo.py
+(RequisitoDeCapacidade, CandidatoDeModelo, PlanoDeTarefa, CustoPorTarefa), 8 testes. Auditoria
+8,0.
+
 ## 2026-08-04 (lote 11)
 
 ### 25-API-ARCHITECT promovido a PRONTO (26/42) — grupo 4 completo (16 vs 22-25)
