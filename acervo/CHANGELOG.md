@@ -4,6 +4,18 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 8)
+
+### 22-FRONTEND-ARCHITECT promovido a PRONTO (23/42)
+
+22-FRONTEND-ARCHITECT escrito do zero (18 secoes, ARQUITETURA) — camada de interface dentro do
+mesmo produto: estado de carregamento distinto para resultado de IA, renderizacao incremental de
+stream, falha visivel com fallback sempre marcado, escopo de estado componente vs. global,
+cancelamento de requisicao abandonada com descarte de fragmento tardio. Fronteira com
+16-INTEGRATION (robustez da chamada vs. reacao da interface) explicita. painel_ia.py
+(RequisicaoDeIA, resolver_exibicao, promover_para_global, adaptar_resposta_do_provedor), 10
+testes. Auditoria 8,1.
+
 ## 2026-08-04 (lote 7)
 
 ### 20-CLOUD promovido a PRONTO (22/42) — grupo 3 completo (17-18) + 19-20 fechados
