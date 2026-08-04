@@ -1,0 +1,24 @@
+# Dependencias da suite do acervo.
+#
+# Este arquivo existe porque ate 2026-08-04 nao existia nenhum: os 789 testes do
+# acervo passavam por causa de pacotes que estavam instalados na maquina do autor,
+# nao porque o repositorio declarasse deles. Numa maquina limpa a coleta quebrava
+# em `ferramentas/tests/test_chatgpt_app.py`, que importa `starlette`.
+#
+# O motor (raiz) NAO depende de nada disto: os 449 testes dele usam so a
+# biblioteca padrao, e essa propriedade e deliberada -- o plugin se instala em
+# projetos alheios e nao pode arrastar dependencia junto.
+
+pytest>=8.0
+
+# chatgpt_app/server.py e o seu teste.
+starlette>=0.37
+pydantic>=2.0
+uvicorn>=0.30
+httpx>=0.27          # exigido por starlette.testclient.TestClient
+
+# codigo_generators/: SDK usado por llm_filler.py e refinador_iterativo.py.
+# `sniffio` e transitivo do anthropic e vem junto -- fica explicito aqui porque a
+# sua ausencia ja derrubou o import do SDK sem que o erro dissesse "anthropic".
+anthropic>=0.40
+sniffio>=1.3

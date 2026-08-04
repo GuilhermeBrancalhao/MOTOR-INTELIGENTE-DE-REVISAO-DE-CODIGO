@@ -6,10 +6,20 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from codigo_generators import refinador_iterativo as _mod
 from codigo_generators.refinador_iterativo import (
     Refinacao,
     RefinadorIterativo,
     refinar_iterativo,
+)
+
+# `anthropic` e dependencia opcional: sem ela (ou com ela quebrada por dependencia
+# transitiva ausente), `Anthropic` fica None e o construtor levanta ImportError antes
+# de chegar na regra que o teste mede. Pular e o correto; reprovar por dependencia
+# ausente ensina a ignorar vermelho.
+precisa_sdk = pytest.mark.skipif(
+    _mod.Anthropic is None,
+    reason="SDK 'anthropic' indisponivel (ausente ou com dependencia quebrada)",
 )
 
 
@@ -25,6 +35,7 @@ def arquivo_teste():
 
 
 class TestRefinadorIterativo:
+    @precisa_sdk
     def test_init_sem_api_key_falha(self):
         """Sem API key, deve falhar."""
         import os
@@ -40,11 +51,13 @@ class TestRefinadorIterativo:
             if chave_original:
                 os.environ["ANTHROPIC_API_KEY"] = chave_original
 
+    @precisa_sdk
     def test_init_com_api_key_direto(self):
         """Com api_key passada, funciona."""
         refinador = RefinadorIterativo(api_key="test-key")
         assert refinador.api_key == "test-key"
 
+    @precisa_sdk
     def test_gerar_prompt_refinacao(self, arquivo_teste):
         """Prompt de refinação é gerado corretamente."""
         refinador = RefinadorIterativo(api_key="test-key")

@@ -21,7 +21,7 @@ cd .. && python -m pytest acervo-controladoria/exemplos -q
 | **45-CONCILIACAO-CONTAS** | ENGINE | **0** | 5.665 | 6 módulos | **conforme** |
 | **54-INTEGRACAO-ERP** | ARQUITETURA | **0** | 4.647 | 1 módulo | **conforme** |
 
-Os 30 testes de `exemplos/` passam.
+Os 33 testes de `exemplos/` passam, e desde 2026-08-04 rodam na CI.
 
 ### 45-CONCILIACAO-CONTAS — conforme
 
@@ -79,20 +79,21 @@ declarava `ENGINE` e casava com o contrato — o que identificou com segurança 
 aparentes esconderem 657 reais. Vale como regra para este repositório: quando um gate reprovar
 por metadado, o total não é confiável até o metadado estar correto.
 
-## Dívida que permanece: os 30 testes órfãos
+## Dívida quitada: os testes órfãos
 
-`acervo-controladoria/exemplos/` tem 30 testes que passam, e **nenhuma suíte os coleta**:
+`acervo-controladoria/exemplos/` tinha 33 testes que passavam e que **nenhuma suíte
+coletava**. A raiz coleta só a suíte do motor por decisão documentada no `pytest.ini`
+— dois pacotes `ferramentas`, o da raiz e o de `acervo/`, colidem numa sessão só de
+pytest — e o acervo roda de dentro de si. Este acervo não era contemplado por nenhum
+dos dois arranjos, então seus testes passavam por ninguém ter mexido no código, não
+por verificação de rotina.
+
+Em 2026-08-04 isso deixou de ser verdade: `.github/workflows/suites.yml` roda as três
+suítes a cada push, em jobs separados (o job `controladoria` roda estes 33 testes e o
+gate estrutural dos dois volumes).
 
 | Suíte | Testes | Como roda |
 |---|---:|---|
-| motor | 449 | `pytest` na raiz |
-| acervo | 789 | `pytest` de dentro de `acervo/` |
-| controladoria | 30 | **nenhuma** — só manualmente |
-
-A raiz coleta só a suíte do motor por decisão documentada no `pytest.ini`: dois pacotes
-`ferramentas`, o da raiz e o de `acervo/`, colidem numa sessão só de pytest. O acervo roda de
-dentro de si. Este acervo não foi contemplado por nenhum dos dois arranjos, então seus testes
-passam hoje por ninguém ter mexido no código, não por verificação de rotina.
-
-Enquanto isso não se resolve, "os 30 testes passam" é uma afirmação sobre a última vez que
-alguém os rodou à mão, e não uma garantia mantida pelo repositório.
+| motor | 450 | `pytest` na raiz — CI, job `motor` |
+| acervo | 789 | `pytest` de dentro de `acervo/` — CI, job `acervo` |
+| controladoria | 33 | `pytest acervo-controladoria/exemplos` — CI, job `controladoria` |

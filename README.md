@@ -79,8 +79,8 @@ marcado `PRONTO` enquanto a fonte dizia `RASCUNHO`, e a nunca entregar `03-DISCO
 As duas suítes rodam separadas, porque cada uma tem o seu próprio pacote `ferramentas`:
 
 ```bash
-py -m pytest                  # motor  — 449 testes
-cd acervo && py -m pytest     # acervo — 455 testes
+py -m pytest                  # motor  — 450 testes
+cd acervo && py -m pytest     # acervo — 789 testes
 ```
 
 **Um classificador de risco** que roda antes de cada ação:
@@ -184,13 +184,21 @@ plano e relata, mas o classificador de risco rebaixa toda escrita para travada.
 
 ## Testes
 
+Três suítes, e desde 2026-08-04 as três rodam na CI (`.github/workflows/suites.yml`)
+a cada push — antes disso não havia CI nenhuma, e "os testes passam" era uma
+afirmação sobre a última vez que alguém os rodou à mão.
+
 ```bash
-python -m pytest ferramentas/tests -v
+py -m pytest                                   # motor          — 450 testes
+cd acervo && py -m pytest                      # acervo         — 789 testes
+py -m pytest acervo-controladoria/exemplos     # controladoria  —  33 testes
 ```
 
-436 testes, apenas biblioteca padrão do Python — nenhuma dependência de runtime.
+O motor usa **apenas a biblioteca padrão do Python** — nenhuma dependência de
+runtime, porque o plugin se instala em projetos alheios e não pode arrastar
+dependência junto. O acervo tem as dele declaradas em `acervo/requirements-dev.txt`.
 
-Além deles, dois scripts de aceite disparam os hooks de verdade como subprocesso:
+Além delas, dois scripts de aceite disparam os hooks de verdade como subprocesso:
 
 ```bash
 python aceite/verificar_familias.py

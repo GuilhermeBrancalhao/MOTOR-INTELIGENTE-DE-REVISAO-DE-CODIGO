@@ -235,3 +235,59 @@ def test_acervo_ausente_nao_estoura(tmp_path):
     """Instalado como plugin, o motor não leva o acervo junto — só o artefato.
     Nesse contexto a ferramenta não tem o que sincronizar, e não pode quebrar."""
     assert sincronizar.volumes_consultaveis(tmp_path / "acervo") == {}
+
+
+# --------------------------------------------------------------------------
+# A trava: so o sincronizador escreve no acervo
+# --------------------------------------------------------------------------
+
+#: Chamadas que gravam em disco. Se um modulo tem uma destas E fala de `acervo`,
+#: ele e candidato a sobrescrever conteudo real da fonte.
+_ESCRITAS = (
+    "write_text",
+    "write_bytes",
+    "mkdir",
+    "rmtree",
+    "unlink",
+    "copytree",
+)
+
+#: Unico modulo do motor autorizado a gravar dentro de `acervo/` -- e mesmo ele
+#: so LE de la: escreve em `volumes/prontos/`. Qualquer outro que ganhe essa
+#: combinacao esta reintroduzindo a classe de defeito descrita abaixo.
+_AUTORIZADO = {"sincronizar.py"}
+
+
+def test_nenhum_modulo_do_motor_escreve_no_acervo():
+    """O acervo e a FONTE. Ferramenta do motor nao grava nela.
+
+    Esta trava existe porque dois geradores de andaime moraram aqui ate
+    2026-08-04: `gerar_volumes_conteudo.py` fazia `write_text` incondicional em
+    `acervo/{02..42}/*.md` -- rodar por engano substituia 702 arquivos de 39
+    volumes PRONTO por stubs de dez linhas, e a sincronizacao seguinte levava os
+    stubs para dentro do plugin sem que nenhum teste ficasse vermelho, porque a
+    copia continuaria fiel a fonte destruida. O companheiro
+    (`gerar_volumes_controladoria.py`) ainda apontava para o acervo errado.
+
+    Nenhum dos dois era citado por doc, CHANGELOG ou teste: eram codigo morto
+    armado. Foram removidos por `git rm` e continuam recuperaveis pelo historico.
+    """
+    modulos = sorted(
+        p
+        for p in (Path(__file__).resolve().parent.parent).glob("*.py")
+        if p.name not in _AUTORIZADO
+    )
+    assert modulos, "esperava encontrar modulos do motor para inspecionar"
+
+    culpados = []
+    for modulo in modulos:
+        fonte = modulo.read_text(encoding="utf-8", errors="ignore")
+        if '"acervo"' not in fonte and "'acervo'" not in fonte:
+            continue
+        if any(escrita in fonte for escrita in _ESCRITAS):
+            culpados.append(modulo.name)
+
+    assert not culpados, (
+        "modulo do motor que escreve no acervo (o acervo e a fonte, nao destino): "
+        + ", ".join(culpados)
+    )

@@ -1,0 +1,95 @@
+# As tres suites deste repositorio, mais a porta da invariante principal.
+#
+# Ate 2026-08-04 nao havia CI nenhuma aqui: as tres suites so rodavam a mao. Num
+# projeto cuja tese e "gate em codigo, nao instrucao que o modelo esquece", isso
+# deixava a propria invariante central -- `volumes/prontos/` e artefato derivado --
+# sustentada por disciplina humana, que e exatamente o que ela existe para
+# substituir.
+#
+# Roda so em Windows de proposito. E a unica plataforma em que os hooks e o
+# lancador (`hooks/engine.sh`, sob Git Bash) foram verificados de fato; o README
+# registra macOS e Linux como nao provados. Um job Linux vermelho na estreia
+# ensinaria a ignorar vermelho -- o mesmo defeito que os skips de dependencia
+# opcional acabaram de corrigir. Quando o lancador for provado nessas
+# plataformas, acrescente-as a matriz.
+
+name: suites
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  motor:
+    name: motor + copia do plugin em dia
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # O motor nao tem dependencia de runtime: so a biblioteca padrao. Instalar
+      # qualquer outra coisa aqui mascararia a perda dessa propriedade.
+      - name: Instalar pytest (unica dependencia da suite)
+        run: python -m pip install --disable-pip-version-check pytest
+
+      - name: Suite do motor
+        run: python -m pytest -q
+
+      # Redundante com `test_a_copia_do_plugin_esta_em_dia`, e de proposito: se
+      # alguem apagar ou marcar aquele teste, esta porta continua fechada.
+      - name: volumes/prontos/ em dia com o acervo
+        run: python -m ferramentas.sincronizar --verificar
+
+  acervo:
+    name: acervo
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias do acervo
+        run: python -m pip install --disable-pip-version-check -r acervo/requirements-dev.txt
+
+      # De dentro de `acervo/`: os dois pacotes `ferramentas` (o do motor e o do
+      # acervo) colidem numa sessao unica de pytest. Ver `pytest.ini` na raiz.
+      - name: Suite do acervo
+        working-directory: acervo
+        run: python -m pytest -q
+
+  controladoria:
+    name: controladoria
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar pytest
+        run: python -m pip install --disable-pip-version-check pytest
+
+      # Estes testes eram orfaos: nenhuma das duas suites os coletava, e "os
+      # testes passam" era uma afirmacao sobre a ultima vez que alguem os rodou a
+      # mao. Este job e o que transforma isso em garantia mantida.
+      - name: Exemplos do acervo de Controladoria
+        run: python -m pytest acervo-controladoria/exemplos -q
+
+      - name: Gate estrutural dos volumes de Controladoria
+        working-directory: acervo
+        run: python -m ferramentas.validar --raiz ../acervo-controladoria --tudo

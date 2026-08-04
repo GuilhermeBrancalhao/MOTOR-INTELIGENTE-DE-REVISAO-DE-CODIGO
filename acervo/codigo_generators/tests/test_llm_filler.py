@@ -6,10 +6,22 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from codigo_generators import llm_filler
 from codigo_generators.llm_filler import (
     ArquivoPreenchido,
     PreenchedorComLLM,
     ScaffoldPreenchido,
+)
+
+# `anthropic` e dependencia opcional: sem ela (ou com ela quebrada por dependencia
+# transitiva ausente), `llm_filler.Anthropic` fica None e o construtor levanta
+# ImportError antes de chegar na regra que o teste mede. Os testes que constroem o
+# preenchedor de verdade sao PULADOS, nunca reprovados -- suite que nasce vermelha
+# por dependencia ausente ensina a ignorar vermelho. Os demais casos desta classe
+# usam @patch e continuam rodando sem o SDK.
+precisa_sdk = pytest.mark.skipif(
+    llm_filler.Anthropic is None,
+    reason="SDK 'anthropic' indisponivel (ausente ou com dependencia quebrada)",
 )
 
 
@@ -46,6 +58,7 @@ def scaffold_teste():
 
 
 class TestPreenchedorComLLM:
+    @precisa_sdk
     def test_init_sem_api_key_falha(self):
         """Sem chave API, deve falhar."""
         import os
@@ -63,11 +76,13 @@ class TestPreenchedorComLLM:
             if chave_original:
                 os.environ["ANTHROPIC_API_KEY"] = chave_original
 
+    @precisa_sdk
     def test_init_com_api_key_direto(self):
         """Com api_key passada, inicializa OK."""
         preenchedor = PreenchedorComLLM(api_key="test-key-123")
         assert preenchedor.api_key == "test-key-123"
 
+    @precisa_sdk
     def test_descobrir_arquivos_vazios(self, scaffold_teste):
         """Descobre arquivos com placeholder."""
         preenchedor = PreenchedorComLLM(api_key="test-key")
@@ -76,6 +91,7 @@ class TestPreenchedorComLLM:
         # Deve encontrar App.jsx (tem TODO)
         assert any("App.jsx" in a for a in arquivos)
 
+    @precisa_sdk
     def test_gerar_prompt_react(self):
         """Prompt para React é gerado corretamente."""
         preenchedor = PreenchedorComLLM(api_key="test-key")
@@ -92,6 +108,7 @@ class TestPreenchedorComLLM:
         assert "TestApp" in prompt
         assert "className" in prompt  # Tailwind
 
+    @precisa_sdk
     def test_gerar_prompt_nodejs(self):
         """Prompt para Node.js é gerado corretamente."""
         preenchedor = PreenchedorComLLM(api_key="test-key")
@@ -202,6 +219,7 @@ class TestPreenchedorComLLM:
         assert resultado.status in ("completo", "parcial")
         assert len(resultado.arquivos_preenchidos) > 0
 
+    @precisa_sdk
     def test_preencher_scaffold_nao_existe(self, blueprint_teste):
         """Scaffold inexistente retorna erro."""
         preenchedor = PreenchedorComLLM(api_key="test-key")

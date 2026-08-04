@@ -4,12 +4,14 @@ Este repositório é **um projeto só**, com duas metades que se alimentam:
 
 | Pasta | O que é | Suíte |
 |---|---|---|
-| raiz (`ferramentas/`, `hooks/`, `agents/`, `cartoes/`, `motores/`, `skills/`) | o **motor**: plugin do Claude Code, modo de engenharia persistente | `py -m pytest` (449) |
-| `acervo/` | a **plataforma** que produz os volumes de conhecimento (42 volumes, contrato legível por máquina, 3 gates) | `cd acervo && py -m pytest` (455) |
+| raiz (`ferramentas/`, `hooks/`, `agents/`, `cartoes/`, `motores/`, `skills/`) | o **motor**: plugin do Claude Code, modo de engenharia persistente | `py -m pytest` (450) |
+| `acervo/` | a **plataforma** que produz os volumes de conhecimento (42 volumes, contrato legível por máquina, 3 gates) | `cd acervo && py -m pytest` (789) |
+| `acervo-controladoria/` | acervo de Controladoria — 2 volumes reais (`45`, `54`) e os seus exemplos | `py -m pytest acervo-controladoria/exemplos` (33) |
 | `volumes/prontos/` | **artefato derivado** — a cópia que o plugin carrega | gerado, nunca editado |
 
-As duas suítes rodam separadas de propósito: cada metade tem o seu próprio pacote
-`ferramentas`, e numa sessão única de pytest eles colidem. Ver `pytest.ini`.
+As suítes rodam separadas de propósito: o motor e o acervo têm cada um o seu próprio
+pacote `ferramentas`, e numa sessão única de pytest eles colidem. Ver `pytest.ini`.
+As três rodam juntas na CI (`.github/workflows/suites.yml`), em jobs separados.
 
 ## A regra que não se quebra
 

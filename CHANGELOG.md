@@ -5,7 +5,50 @@
 
 ---
 
-## 2026-08-03 — Unificação: a plataforma de acervo entra no motor
+## 2026-08-04 — Revisão do repositório: dois geradores armados, e a primeira CI
+
+Uma revisão do repositório encontrou dois scripts em `ferramentas/` que ninguém citava —
+nem doc, nem CHANGELOG, nem teste — e que destruíam conteúdo real se rodados:
+
+| Script | O que fazia |
+|---|---|
+| `gerar_volumes_conteudo.py` | `write_text` incondicional em `acervo/{02..42}/*.md`: **702 arquivos de 39 volumes PRONTO** substituídos por stubs de dez linhas |
+| `gerar_volumes_controladoria.py` | recriava os 12 esqueletos removidos no dia anterior — e apontava para `acervo/`, não para `acervo-controladoria/` |
+
+O primeiro era o pior, porque o dano passava pela porta: os volumes atingidos são `PRONTO`,
+então a sincronização seguinte levaria os stubs para dentro do plugin, e
+`test_a_copia_do_plugin_esta_em_dia` continuaria **verde** — a cópia estaria fiel à fonte
+destruída. O segundo recarimbava `tipo: PROCESSO` nos doze volumes, que é exatamente o defeito
+de metadado que a `ESTADO.md` da controladoria identifica como causa das 420 violações
+mascaradas.
+
+**O que mudou**
+
+- Os dois foram removidos por `git rm` — recuperáveis pelo histórico, mesmo tratamento dado aos
+  10 volumes-esqueleto.
+- `test_nenhum_modulo_do_motor_escreve_no_acervo` — a trava. Nenhum módulo de `ferramentas/`
+  além de `sincronizar.py` pode combinar a palavra `acervo` com uma chamada de escrita.
+  Provada por mutação: restaurar `gerar_volumes_conteudo.py` deixa a suíte vermelha.
+- `.github/workflows/suites.yml` — **a primeira CI deste repositório.** Até aqui as três suítes
+  só rodavam à mão, o que deixava a invariante central (`volumes/prontos/` é derivado)
+  sustentada por disciplina humana — que é o que ela existe para substituir. Três jobs: motor
+  (450) + `sincronizar --verificar`, acervo (789), controladoria (33) + gate estrutural. Só
+  Windows, de propósito: é a única plataforma em que os hooks e o lançador foram verificados de
+  fato, e um job Linux vermelho na estreia ensinaria a ignorar vermelho.
+- Os **33 testes de `acervo-controladoria/exemplos/` deixaram de ser órfãos.** Nenhuma das duas
+  suítes os coletava; agora o job `controladoria` os roda a cada push.
+- `acervo/requirements-dev.txt` — o acervo não declarava dependência nenhuma. Os 789 testes
+  passavam por causa de pacotes instalados na máquina do autor (`starlette`, `pydantic`,
+  `httpx`); numa máquina limpa a coleta quebrava.
+- 9 testes de `codigo_generators/` **pulam** em vez de reprovar quando o SDK `anthropic` está
+  indisponível. Estavam vermelhos porque o pacote, embora instalado, tinha uma dependência
+  transitiva ausente (`sniffio`) — e o erro não dizia isso. Suíte que nasce vermelha por
+  dependência ausente ensina a ignorar vermelho, que é a mesma patologia do falso positivo do
+  classificador.
+- Contagens de teste corrigidas no `README.md` (dizia 436 e 455), no `CLAUDE.md` (455) e na
+  `ESTADO.md` da controladoria (dizia 30 testes; são 33).
+
+
 
 O motor e a plataforma que produz os volumes de conhecimento eram dois repositórios, e o motor
 carregava uma **cópia manual** dos volumes em `volumes/prontos/`. A cópia derivou, e a medição
