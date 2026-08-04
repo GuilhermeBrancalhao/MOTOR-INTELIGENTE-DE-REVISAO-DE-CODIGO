@@ -4,6 +4,16 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 6)
+
+### 19-DEVOPS promovido a PRONTO (21/42)
+
+19-DEVOPS escrito do zero (18 secoes, ARQUITETURA) — o pipeline que leva uma mudanca do commit
+ao deploy: sequencia nao pulavel de estagios (BUILD-TESTE-SEGURANCA-STAGING-PRODUCAO), rollout
+gradual por padrao, rastreabilidade, reversao. Fronteira com 18-DEVSECOPS (gate como etapa, nao
+processo paralelo) e 20-CLOUD (infra vs. caminho de entrega) explicita. pipeline.py (Artefato,
+Pipeline congelado, GerenciadorDeploy), 9 testes. Auditoria 8,1.
+
 ## 2026-08-04 (lote 5)
 
 ### 18-DEVSECOPS promovido a PRONTO (20/42)
