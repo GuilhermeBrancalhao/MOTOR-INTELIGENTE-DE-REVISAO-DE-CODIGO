@@ -4,6 +4,18 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 24)
+
+### 39-ROADMAP promovido a PRONTO (39/42)
+
+39-ROADMAP escrito do zero (17 secoes, PROCESSO, sem 08-Modelos) — backlog de longo prazo:
+priorizacao por criterio explicito (valor/risco/dependencia), item fora de escopo registrado com
+motivo, decisao que exige autoridade externa sinalizada explicitamente, revisao periodica contra
+o que de fato foi entregue, item direcional de longo prazo nunca com data comprometida. Formaliza
+praticas ja em uso no ROADMAP.md real deste acervo (secoes "Fora de escopo" e "Decisao que
+permanece com o autor"). Removido 08-Modelos.md remanescente. roadmap.py (CriterioDePriorizacao,
+Roadmap, ItemDeRoadmap, DependenciaEntreCiclos), 8 testes. Auditoria 8,1.
+
 ## 2026-08-04 (lote 23)
 
 ### 38-PROJECT-PLANNER promovido a PRONTO (38/42)
