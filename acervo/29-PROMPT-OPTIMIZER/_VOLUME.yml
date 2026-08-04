@@ -1,6 +1,6 @@
 volume: "29"
 nome: PROMPT-OPTIMIZER
-tipo: PROCESSO
+tipo: ENGINE
 status: RASCUNHO
 perecivel: false
 depende_de: []

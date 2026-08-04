@@ -4,6 +4,30 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 2)
+
+### 06, 11, 14, 13 promovidos a PRONTO (17/42)
+
+Bug de tipo divergente encontrado em 17 volumes (mesmo padrao do 41/42 documentado em
+2026-08-03 mas nunca corrigido, porque estavam fora do escopo dos 10 essenciais): arquivo
+diverge do contrato.json em 11, 13, 14, 15, 16, 19, 20, 26, 27, 28, 29, 30, 35, 36, 37, 41, 42.
+Todos os 17 corrigidos para o tipo do contrato. perecivel corrigido para true em 26, 27, 34.
+
+06-ENTERPRISE-ARCHITECTURE escrito do zero (18 secoes, ARQUITETURA) — visao de portfolio:
+quando decisao tecnica de projeto vira decisao de portfolio (consequencia nomeavel que cruza
+projeto), custo total agregado por fornecedor, deteccao de duplicacao entre projetos.
+inventario.py, 7 testes. Auditoria 8,2.
+
+11-KNOWLEDGE, 14-VECTOR, 13-RAG escritos do zero (grupo 2 do ROADMAP.md, fronteiras ja
+decididas em 2026-07-29: fonte / indice / pipeline). 11 = curadoria e ciclo de vida de
+documento (curadoria.py, 8 testes, auditoria 8,1). 14 = indice vetorial, versao de embedding e
+metrica sempre explicitas (indice.py, 8 testes, auditoria 8,1). 13 = pipeline que junta os dois
+numa resposta com citacao rastreavel e fidelidade medida, nao assumida (pipeline.py, 6 testes,
+auditoria 8,0) — depende_de: [11, 14], unico volume deste lote com pre-requisito real.
+
+449 testes do motor + 264 do acervo + 292 dos exemplos, todos verdes. volumes/prontos/
+regenerado.
+
 ## 2026-08-04
 
 ### Lote 1 dos 32 volumes restantes: 02-CORE, 04-REQUIREMENTS, 05-BUSINESS promovidos a `PRONTO`

@@ -1,6 +1,6 @@
 volume: "30"
 nome: AI-GOVERNANCE
-tipo: PROCESSO
+tipo: GOVERNANCA
 status: RASCUNHO
 perecivel: false
 depende_de: []

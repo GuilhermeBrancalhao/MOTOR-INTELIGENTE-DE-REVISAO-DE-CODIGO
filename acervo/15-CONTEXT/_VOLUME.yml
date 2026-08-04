@@ -1,7 +1,7 @@
 volume: "15"
 nome: CONTEXT
-tipo: BIBLIOTECA
+tipo: ENGINE
 status: RASCUNHO
 perecivel: false
 depende_de: []
-escopo: Management de contexto
+escopo: O orçamento da janela de contexto — o que entra, em que ordem, o que é descartado, quando compactar. Vale mesmo em sistema sem RAG.

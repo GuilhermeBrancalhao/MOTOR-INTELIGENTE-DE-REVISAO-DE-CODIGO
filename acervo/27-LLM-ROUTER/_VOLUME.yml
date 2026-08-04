@@ -1,7 +1,7 @@
 volume: "27"
 nome: LLM-ROUTER
-tipo: PROCESSO
+tipo: ENGINE
 status: RASCUNHO
-perecivel: false
+perecivel: true
 depende_de: []
 escopo: Roteamento entre modelos

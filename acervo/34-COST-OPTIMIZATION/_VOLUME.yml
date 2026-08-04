@@ -2,6 +2,6 @@ volume: "34"
 nome: COST-OPTIMIZATION
 tipo: PROCESSO
 status: RASCUNHO
-perecivel: false
+perecivel: true
 depende_de: []
 escopo: Otimização de custos

@@ -1,6 +1,6 @@
 volume: "19"
 nome: DEVOPS
-tipo: PROCESSO
+tipo: ARQUITETURA
 status: RASCUNHO
 perecivel: false
 depende_de: []

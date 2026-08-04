@@ -1,6 +1,6 @@
 volume: "42"
 nome: PLUGINS
-tipo: BIBLIOTECA
+tipo: ENGINE
 status: RASCUNHO
 perecivel: false
 depende_de: []

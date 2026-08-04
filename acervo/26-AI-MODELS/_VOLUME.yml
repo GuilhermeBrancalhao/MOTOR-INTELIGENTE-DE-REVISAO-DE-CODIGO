@@ -1,7 +1,7 @@
 volume: "26"
 nome: AI-MODELS
-tipo: PROCESSO
+tipo: ENGINE
 status: RASCUNHO
-perecivel: false
+perecivel: true
 depende_de: []
 escopo: Seleção de modelos

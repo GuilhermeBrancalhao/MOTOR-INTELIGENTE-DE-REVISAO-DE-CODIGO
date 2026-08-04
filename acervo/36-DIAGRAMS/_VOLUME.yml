@@ -1,6 +1,6 @@
 volume: "36"
 nome: DIAGRAMS
-tipo: PROCESSO
+tipo: BIBLIOTECA
 status: RASCUNHO
 perecivel: false
 depende_de: []

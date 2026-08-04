@@ -1,6 +1,6 @@
 volume: "35"
 nome: DOCUMENTATION
-tipo: PROCESSO
+tipo: GOVERNANCA
 status: RASCUNHO
 perecivel: false
 depende_de: []
