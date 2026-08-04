@@ -4,6 +4,21 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 19)
+
+### 34-COST-OPTIMIZATION promovido a PRONTO (34/42) — trio perecível 26/27/34 completo
+
+34-COST-OPTIMIZATION escrito do zero (17 secoes, PROCESSO, perecivel: true, sem 08-Modelos) —
+metodo de medir, atribuir e otimizar custo pela tarefa completa: nunca por token isolado, sempre
+atribuido a escopo explicito, orcamento com alerta antecipado antes do limite rigido (tres
+estados OK/ALERTA/ESTOURADO), tendencia exige multiplos periodos, otimizacao validada por
+medicao real antes/depois. Nenhum preco fixado como fato duradouro. Removido 08-Modelos.md
+remanescente. otimizacao_de_custo.py (CustoDeTarefa, OrcamentoDeEscopo, verificar_orcamento,
+detectar_tendencia_de_custo, validar_otimizacao_de_custo), 8 testes. Auditoria 8,1.
+
+Com este volume, os tres volumes pereciveis do contrato (26-AI-MODELS, 27-LLM-ROUTER,
+34-COST-OPTIMIZATION) estao completos.
+
 ## 2026-08-04 (lote 18)
 
 ### 33-PERFORMANCE promovido a PRONTO (33/42)

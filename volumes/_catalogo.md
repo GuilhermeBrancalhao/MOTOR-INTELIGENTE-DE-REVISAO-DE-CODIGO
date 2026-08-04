@@ -39,3 +39,4 @@ no contexto.
 - **31-TESTING** — tipo PROCESSO
 - **32-QUALITY** — tipo PROCESSO
 - **33-PERFORMANCE** — tipo PROCESSO
+- **34-COST-OPTIMIZATION** — tipo PROCESSO
