@@ -903,3 +903,40 @@ def test_hook_contexto_nao_vaza_credencial_do_objetivo_no_stdout(tmp_path):
     # a marca visível fica no lugar (só a parte ASCII: o decode do subprocess no
     # Windows pode não ser UTF-8, e as aspas angulares virariam mojibake)
     assert "redigido" in saida.stdout
+
+
+def test_com_avisos_aparece_mesmo_com_o_cartao_ja_no_teto():
+    """Aviso que so aparece em cartao vazio e o mesmo que aviso nenhum.
+
+    Os avisos eram empilhados no FIM e o conjunto cortado em `linhas[:teto]`.
+    Enquanto o cartao vinha quase vazio isso funcionava por sobra de espaco. Ao
+    passar a trazer as secoes de motores e de volumes (que ate entao so
+    apareciam dentro do repositorio do proprio ENGINE), o cartao ja chegava no
+    teto -- e todo aviso caia no corte, deixando a configuracao quebrada
+    invisivel justamente no cenario em que ela existe para ser vista.
+
+    O aviso toma o espaco do CORPO. Cabecalho e rodape continuam inegociaveis.
+    """
+    contexto = _importar_contexto()
+    teto = 20
+    dados = {
+        "ativo": True,
+        "fase": "BUILD",
+        "ciclo": {"objetivo": "objetivo qualquer", "modo": "normal"},
+        # Corpo maior que o orcamento: o cartao ja sai no teto sem nenhum aviso.
+        "cartoes": [f"tecnologia-{n}" for n in range(30)],
+        "decisoes": [{"o_que": f"decisao {n}", "porque": "porque sim"} for n in range(30)],
+        "diffs_pendentes": [f"arquivo-{n}.py" for n in range(30)],
+        "pendencias": [f"pendencia {n}" for n in range(30)],
+    }
+    cfg = {"teto_cartao_linhas": teto, "_avisos": ["config.json: chave desconhecida"]}
+
+    cartao_sem = contexto.montar_cartao(dados, cfg)
+    assert len(cartao_sem.splitlines()) == teto, "o cartao precisa ja estar no teto"
+
+    cartao = contexto._com_avisos(cartao_sem, cfg)
+
+    assert len(cartao.splitlines()) <= teto, "o aviso nao pode furar o teto"
+    assert "ENGINE aviso: config.json: chave desconhecida" in cartao
+    for invariante in contexto.INVARIANTES:
+        assert invariante in cartao, "o rodape nao pode ser sacrificado pelo aviso"

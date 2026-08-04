@@ -5,6 +5,90 @@
 
 ---
 
+## 2026-08-04 (3) — O cartão de contexto só funcionava no repositório do autor
+
+### 1. Duas raízes tratadas como uma (o defeito mais grave desta série)
+
+`hooks/engine_contexto.py` procurava `motores/*/SKILL.md` e `volumes/prontos/` a
+partir da raiz do **projeto hospedeiro**. Essas duas árvores viajam dentro do
+**plugin**. Como `raiz_do_ciclo()` devolve sempre o projeto do usuário, em
+qualquer projeto que não fosse este repositório a seção `📚 Volumes PRONTO`
+**não aparecia** e os motores saíam sem descrição.
+
+Dito com todas as letras: **os 42 volumes empacotados pelo `sincronizar.py` eram
+entregues e nunca lidos**. A funcionalidade nunca funcionou em produção — só na
+máquina de quem a escreveu.
+
+O que escondeu isso por tanto tempo: o parâmetro se chamava `raiz`, ambíguo o
+bastante para os dois papéis, e **todos os testes existentes codificavam a
+suposição errada** (criavam `motores/` e `volumes/prontos/` dentro do `tmp_path`
+que passavam como "projeto"). A suíte validava o cartão num mundo onde o bug não
+existia. `ferramentas/cli.py` sempre fez certo, passando as duas raízes
+explicitamente — era o hook que estava fora do padrão.
+
+Correções: parâmetro renomeado para `raiz_plugin` (o nome ambíguo é o que
+permitiu o erro), `principal()` passa `config.raiz_plugin()`. Trava: três testes
+que rodam o hook **real como subprocesso** contra um projeto hospedeiro
+temporário — único jeito de medir o comportamento de produção.
+
+### 2. Efeito dominó: o aviso de configuração era sempre cortado
+
+`_com_avisos` empilhava avisos no fim e cortava em `linhas[:teto]`. Funcionava
+por sobra de espaço enquanto o cartão vinha quase vazio; com o cartão cheio
+(defeito 1 corrigido), **todo aviso caía no corte**. Um teste já existente
+apontava isso e passava apenas por causa do outro bug.
+
+Agora os avisos entram antes do rodapé e o **corpo** cede espaço. Cabeçalho e
+rodapé continuam inegociáveis.
+
+### 3. Bypass de R8 por escape de aspas
+
+`_dividir_segmentos` não tratava `\"`. Em
+`bash -c "python -c \"import shutil; shutil.rmtree('/dados')\""` a aspa escapada
+era lida como fim da string, o `;` seguinte virava separador, e a expressão
+perigosa nunca cabia inteira num segmento: **R8 saía `rastreado` no lugar de
+`travado`**. Medido antes de corrigir. A contrabarra agora escapa fora de aspas e
+dentro de aspas duplas — não dentro de aspas simples, onde o shell não tem
+escape.
+
+### 4. R5 era assimétrica entre ferramenta e shell
+
+`Write(config.py, "AKIA…")` travava pelo corpo; `echo 'AKIA…' >> config.py`
+saía `rastreado`, porque no shell R5 só olhava o **nome** do alvo. A assimetria
+fazia do shell o caminho fácil para contornar a regra que existe para segredo não
+virar commit. Fechada, com contraprova de falso positivo junto.
+
+### 5. Cadeado quebrado e mesmo assim negado a quem quebrou
+
+Quebrar um cadeado abandonado não dava direito a uma tentativa: a checagem de
+prazo vinha logo depois e derrubava quem tinha acabado de quebrar. Com `espera`
+curta, o erro reportava ocupação de um cadeado que já não existia, e o benefício
+ia para o processo seguinte.
+
+### 6. Três volumes PRONTO sem escopo
+
+`03-DISCOVERY`, `07-PROMPT-ENGINE` e `12-MEMORY` viajavam no plugin sem `escopo`
+nem `README.md` — o cartão os listava como `"Volume 07-PROMPT-ENGINE"`, nome
+pelado. Escopo preenchido na FONTE, condensado do próprio `03-Escopo.md` de cada
+volume (nada inventado). A trava exige escopo de todo volume que viaja, não dos
+que estão em rascunho.
+
+### 7. Menores
+
+- Percentual da sugestão do `AnalisadorDiff` dividia o score do vencedor pelo
+  `max` — e o vencedor **é** o max, então dizia `(100%)` sempre. Agora é
+  participação no total.
+- `_extrair_diffs_locais` removido: stub que devolvia `""` fingindo cobrir um caso.
+- `test_lancador.py` passava ou falhava conforme o `PYTHONIOENCODING` herdado do
+  shell — media o locale da máquina, não o lançador. Codificação fixada nas duas
+  pontas.
+- Docstrings citavam `ferramentas/status.py` como se fosse do motor; esse arquivo
+  só existe em `acervo/ferramentas/status.py`.
+
+Motor: 466 → **478** testes. Toda correção provada por mutação.
+
+---
+
 ## 2026-08-04 (2) — O arquivo único ganha cadeado, e a durabilidade deixa de ser aposta
 
 Duas armadilhas que o `CLAUDE.md` e o `README.md` registravam como conhecidas-e-não-resolvidas.

@@ -79,7 +79,7 @@ marcado `PRONTO` enquanto a fonte dizia `RASCUNHO`, e a nunca entregar `03-DISCO
 As duas suítes rodam separadas, porque cada uma tem o seu próprio pacote `ferramentas`:
 
 ```bash
-py -m pytest                  # motor  — 466 testes
+py -m pytest                  # motor  — 478 testes
 cd acervo && py -m pytest     # acervo — 789 testes
 ```
 
@@ -189,7 +189,7 @@ a cada push — antes disso não havia CI nenhuma, e "os testes passam" era uma
 afirmação sobre a última vez que alguém os rodou à mão.
 
 ```bash
-py -m pytest                                   # motor          — 466 testes
+py -m pytest                                   # motor          — 478 testes
 cd acervo && py -m pytest                      # acervo         — 789 testes
 py -m pytest acervo-controladoria/exemplos     # controladoria  —  33 testes
 ```

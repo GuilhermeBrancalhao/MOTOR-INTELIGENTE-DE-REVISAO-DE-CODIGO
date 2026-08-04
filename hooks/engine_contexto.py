@@ -19,6 +19,30 @@ Duas garantias de segurança valem para TODO o cartão (auditoria adversarial):
    ao contexto do modelo a cada turno — vazar `sk-…`/`ghp_…`/`AKIA…` aqui é
    pior que na trilha, que só é lida sob demanda.
 
+DUAS RAÍZES, E ELAS NÃO SÃO A MESMA
+-----------------------------------
+Este hook trabalha com duas árvores diferentes, e confundi-las já custou as duas
+seções mais caras do cartão:
+
+- a raiz do **projeto hospedeiro** (`raiz_do_ciclo(cwd)`) — onde mora
+  `.engine/estado.json`, e só isso;
+- a raiz do **plugin** (`config.raiz_plugin()`) — onde moram `motores/*/SKILL.md`
+  e `volumes/prontos/`, que viajam DENTRO do plugin.
+
+O plugin instalado é uma cópia isolada em `~/.claude/plugins/…`; o projeto
+hospedeiro é outra pasta, de outra pessoa, que obviamente não tem `motores/` nem
+`volumes/prontos/`. Procurar as duas árvores na raiz do projeto fazia a seção de
+volumes SUMIR por completo e as descrições de motor virarem linha pelada em todo
+projeto que não fosse o próprio repositório do ENGINE — isto é, funcionava na
+máquina de quem escreveu e em lugar nenhum além dela. Era o `sincronizar.py`
+inteiro (42 volumes empacotados no plugin de propósito) entregue e nunca lido.
+
+Por isso os parâmetros aqui se chamam `raiz_plugin` e `cwd`, nunca `raiz`: o nome
+ambíguo é o que permitiu passar um pelo outro sem ninguém notar.
+`ferramentas/cli.py` sempre fez a distinção certa
+(`detectar.cartoes_do_projeto(raiz, config.raiz_plugin())`) — era este arquivo o
+que estava fora do padrão.
+
 Falha segura na direção oposta à do PreToolUse: qualquer erro devolve 0 sem
 imprimir nada — o cartão é conveniência, não pode atrapalhar o turno.
 """
@@ -131,9 +155,13 @@ def _campo(texto, limite: int) -> str:
     return _cortar(trilha.redigir(str(texto)), limite)
 
 
-def _ler_descricao_motor(raiz: Path, motor: str) -> Optional[str]:
-    """Lê a descrição do motor de seu SKILL.md."""
-    skill_path = raiz / "motores" / motor / "SKILL.md"
+def _ler_descricao_motor(raiz_plugin: Path, motor: str) -> Optional[str]:
+    """Lê a descrição do motor de seu `SKILL.md`, na árvore do PLUGIN.
+
+    `motores/` viaja dentro do plugin — procurar em `<projeto>/motores/` só
+    acertava quando o projeto hospedeiro era o próprio repositório do ENGINE.
+    """
+    skill_path = raiz_plugin / "motores" / motor / "SKILL.md"
     if not skill_path.exists():
         return None
 
@@ -154,14 +182,19 @@ def _ler_descricao_motor(raiz: Path, motor: str) -> Optional[str]:
     return None
 
 
-def _detectar_volumes_dinamicos(raiz: Path) -> list[tuple[str, str]]:
-    """Detecta volumes PRONTO dinamicamente (V4 novo)."""
+def _detectar_volumes_dinamicos(raiz_plugin: Path) -> list[tuple[str, str]]:
+    """Detecta volumes PRONTO em `<plugin>/volumes/prontos/`.
+
+    A árvore é a do PLUGIN, não a do projeto hospedeiro: `volumes/prontos/` é o
+    artefato que `ferramentas/sincronizar.py` gera para o plugin CARREGAR consigo
+    (ver o docstring daquele módulo). Um projeto hospedeiro nunca tem essa pasta.
+    """
     if not DetectorVolumesAoVivo:
         return []
 
     try:
         detector = DetectorVolumesAoVivo(cache_ttl_segundos=300)
-        return detector.detectar_volumes(raiz)
+        return detector.detectar_volumes(raiz_plugin)
     except Exception:
         return []
 
@@ -263,8 +296,15 @@ def montar_cartao(dados: dict, cfg: dict) -> str:
     return "\n".join(linhas[:teto])
 
 
-def montar_cartao_estendido(dados: dict, cfg: dict, raiz: Path, cwd: str) -> str:
-    """Monta cartão com motores + volumes dinâmicos + sugestão automática."""
+def montar_cartao_estendido(dados: dict, cfg: dict, raiz_plugin: Path, cwd: str) -> str:
+    """Monta cartão com motores + volumes dinâmicos + sugestão automática.
+
+    `raiz_plugin` é a árvore do PLUGIN (onde estão `motores/` e
+    `volumes/prontos/`); `cwd` é o diretório da sessão no projeto hospedeiro, e
+    serve só para o `git diff` da sugestão automática. Ver o docstring do módulo:
+    trocar um pelo outro apaga duas seções inteiras do cartão em qualquer projeto
+    que não seja o repositório do próprio ENGINE.
+    """
     teto = _teto_efetivo(cfg)
     ciclo = dados.get("ciclo", {})
     fase = dados.get("fase", "?")
@@ -288,7 +328,7 @@ def montar_cartao_estendido(dados: dict, cfg: dict, raiz: Path, cwd: str) -> str
     if motores:
         acrescentar("📋 Motores desta fase:")
         for motor in motores:
-            desc = _ler_descricao_motor(raiz, motor)
+            desc = _ler_descricao_motor(raiz_plugin, motor)
             if desc:
                 acrescentar(f"  • {motor}: {desc}")
             else:
@@ -300,8 +340,8 @@ def montar_cartao_estendido(dados: dict, cfg: dict, raiz: Path, cwd: str) -> str
     if sugestao:
         acrescentar(sugestao)
 
-    # Seção: Volumes PRONTO (V4 novo - detecta dinamicamente)
-    volumes_dinamicos = _detectar_volumes_dinamicos(raiz)
+    # Seção: Volumes PRONTO (detectados na árvore do PLUGIN, não na do projeto)
+    volumes_dinamicos = _detectar_volumes_dinamicos(raiz_plugin)
 
     if volumes_dinamicos:
         acrescentar("📚 Volumes PRONTO (consultáveis):")
@@ -338,9 +378,36 @@ def montar_cartao_estendido(dados: dict, cfg: dict, raiz: Path, cwd: str) -> str
     return "\n".join(linhas[:teto])
 
 
+#: Quantas linhas o cabeçalho ocupa (título, fase/modo, objetivo). O rodapé tem
+#: `1 + len(INVARIANTES)`. Os dois são inegociáveis; quem cede espaço é o corpo.
+_LINHAS_CABECALHO = 3
+
+
+def _partir_cartao(linhas: list[str]) -> tuple[list[str], list[str], list[str]]:
+    """Separa o cartão em (cabeçalho, corpo, rodapé).
+
+    O rodapé é reconhecido pela sua forma exata (`"Invariantes:"` seguido dos
+    invariantes) no fim da lista. Se não estiver lá — cartão truncado por um teto
+    apertadíssimo —, não há rodapé a preservar e tudo vira corpo.
+    """
+    tamanho_rodape = 1 + len(INVARIANTES)
+    corte = len(linhas) - tamanho_rodape
+    if corte >= _LINHAS_CABECALHO and linhas[corte] == "Invariantes:":
+        return linhas[:_LINHAS_CABECALHO], linhas[_LINHAS_CABECALHO:corte], linhas[corte:]
+    return linhas[:_LINHAS_CABECALHO], linhas[_LINHAS_CABECALHO:], []
+
+
 def _com_avisos(cartao: str, cfg: dict) -> str:
     """Acrescenta os avisos de configuração (`cfg['_avisos']`) ao cartão, sem nunca
     furar o teto de linhas — os avisos entram no mesmo orçamento, não por fora dele.
+
+    Eles entram ANTES do rodapé, tomando o espaço do CORPO. Empilhá-los no fim e
+    cortar em `linhas[:teto]` era o mesmo que não emiti-los: assim que o cartão
+    passou a trazer as seções de motores e volumes (que só apareciam no
+    repositório do próprio ENGINE — ver o docstring do módulo), ele já chegava
+    aqui no teto, e todo aviso caía no corte. Aviso de configuração que nunca é
+    exibido é configuração quebrada invisível, que é exatamente o que ele existe
+    para impedir.
 
     O teto passa por `_teto_bruto` (nunca por `int(cfg.get(...))` direto): um valor
     não numérico aqui derrubava o cartão inteiro — o `ValueError` subia até o
@@ -357,12 +424,16 @@ def _com_avisos(cartao: str, cfg: dict) -> str:
     teto = _teto_bruto(cfg)
     if teto < 1:
         teto = _TETO_DEFAULT
-    linhas = cartao.splitlines()
-    for aviso in avisos:
-        # Aviso também é texto que veio de fora (nome de chave, item de config do
-        # projeto): recebe a mesma redação do resto do cartão.
-        linhas.append(f"ENGINE aviso: {trilha.redigir(str(aviso))}")
-    return "\n".join(linhas[:teto])
+
+    cabecalho, corpo, rodape = _partir_cartao(cartao.splitlines())
+    # Aviso também é texto que veio de fora (nome de chave, item de config do
+    # projeto): recebe a mesma redação do resto do cartão.
+    novos = [f"ENGINE aviso: {trilha.redigir(str(aviso))}" for aviso in avisos]
+
+    disponivel = max(teto - len(cabecalho) - len(rodape), 0)
+    novos = novos[:disponivel]
+    corpo = corpo[: max(disponivel - len(novos), 0)]
+    return "\n".join((cabecalho + corpo + novos + rodape)[:teto])
 
 
 def principal() -> int:
@@ -380,6 +451,10 @@ def principal() -> int:
             return 0
 
         cwd = evento.get("cwd") or "."
+        # A raiz do PROJETO é usada só para achar o estado. As árvores de
+        # `motores/` e `volumes/prontos/` são do PLUGIN — ver o docstring do
+        # módulo. Passar `raiz` aqui embaixo é o bug que apagava as duas seções
+        # em todo projeto hospedeiro.
         raiz = raiz_do_ciclo(Path(cwd))
 
         dados = estado.carregar(raiz)
@@ -387,7 +462,7 @@ def principal() -> int:
             return 0
 
         cfg = config.carregar(raiz)
-        cartao = montar_cartao_estendido(dados, cfg, raiz, cwd)
+        cartao = montar_cartao_estendido(dados, cfg, config.raiz_plugin(), cwd)
         cartao = _com_avisos(cartao, cfg)
 
         if cartao.strip():

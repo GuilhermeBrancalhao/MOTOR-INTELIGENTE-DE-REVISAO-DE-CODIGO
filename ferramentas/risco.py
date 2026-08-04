@@ -522,6 +522,14 @@ def _dividir_segmentos(comando: str) -> list[str]:
     `;` em `python -c "import shutil; shutil.rmtree('x')"`. Dividir ali cegava a
     checagem de `python -c` perigoso — a expressão nunca aparecia inteira em um único
     segmento.
+
+    A contrabarra escapa o caractere seguinte fora de aspas e **dentro de aspas
+    duplas** — não dentro de aspas simples, onde o shell a trata como literal. Sem
+    isso havia um desvio de verdade, não uma imprecisão teórica: em
+    `bash -c "python -c \\"import shutil; shutil.rmtree('/dados')\\""` o `\\"` era
+    lido como fim da string, o `;` seguinte virava separador, e a expressão
+    perigosa nunca cabia inteira em um segmento — R8 saía `rastreado` no lugar de
+    `travado`. Medido antes de corrigir.
     """
     segmentos: list[str] = []
     atual: list[str] = []
@@ -530,6 +538,13 @@ def _dividir_segmentos(comando: str) -> list[str]:
     n = len(comando)
     while i < n:
         ch = comando[i]
+        if ch == "\\" and aspas != "'" and i + 1 < n:
+            # Escape: o par inteiro é conteúdo, e o caractere escapado nunca
+            # separa nem abre/fecha aspas. Em aspas simples não há escape.
+            atual.append(ch)
+            atual.append(comando[i + 1])
+            i += 2
+            continue
         if aspas:
             atual.append(ch)
             if ch == aspas:
@@ -630,6 +645,18 @@ def _classificar_segmento(
             )
         if _e_segredo(alvo, config):
             return Classificacao(TRAVADO, "R5", f"redirecionamento para segredo: {alvo}")
+
+    # A mesma credencial no mesmo arquivo travava por `Write` e passava por `Bash`.
+    # R5 no comando só olhava o NOME do alvo, então `echo 'AKIA…' >> config.py` saía
+    # `rastreado` — e a assimetria transformava o shell no caminho fácil para
+    # contornar uma regra que existe justamente para não deixar segredo virar
+    # commit. Os padrões exigem a forma que o emissor deu à chave (prefixo fixo e
+    # comprimento mínimo), então não é adivinhação sobre texto qualquer.
+    achado = _PADROES_CREDENCIAL.search(segmento)
+    if achado:
+        return Classificacao(
+            TRAVADO, "R5", f"credencial no corpo do comando: {achado.group(0)[:12]}…"
+        )
 
     e_git = bool(re.match(r"\s*git\b", segmento))
     if e_git:

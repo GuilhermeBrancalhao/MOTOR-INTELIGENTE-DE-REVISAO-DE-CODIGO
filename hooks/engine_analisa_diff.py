@@ -1,8 +1,22 @@
 #!/usr/bin/env python3
-"""FASE 3: Analisador de diff para sugestão automática de motor.
+"""Classificador de diff que sugere um motor — MÓDULO, não hook.
 
-Hook PreToolUse que analisa mudanças do usuário e sugere motor apropriado.
+Apesar de morar em `hooks/`, isto **não é um hook**: não está em
+`hooks/hooks.json` e o Claude Code nunca o executa. Quem o usa é
+`hooks/engine_contexto.py` (UserPromptSubmit), que o importa para montar a linha
+de sugestão do cartão. A docstring antiga o anunciava como "Hook PreToolUse", o
+que é um convite a registrá-lo — e registrá-lo seria um defeito de segurança:
+o bloco `__main__` abaixo sai com **código 1**, e o contrato deste repositório
+(ver `hooks/engine.sh` e `hooks/engine_risco.py`) é explícito em que 1 não
+bloqueia nada e, num hook de decisão, equivale a liberar a ação.
+
+O `__main__` existe só para inspeção manual (`echo '{...}' | py
+hooks/engine_analisa_diff.py`), e por isso pode sair 1: é uma ferramenta de
+linha de comando, não um caminho de decisão.
+
 Padrões classificados: revisar, otimizar, arquitetar, materializar, diagramar.
+A classificação é heurística por contagem de palavra-chave e extensão — serve
+para sugerir, nunca para decidir.
 """
 import json
 import re
@@ -109,7 +123,9 @@ class AnalisadorDiff:
     }
 
     def __init__(self):
-        self.sugestoes = []
+        #: Pontuação por motor, preenchida por `analisar_diff` e lida por
+        #: `gerar_sugestao`. Um analisador serve a UM diff: reaproveitá-lo soma a
+        #: pontuação de diffs diferentes e falseia a participação.
         self.confianca = {}
 
     def analisar_diff(self, diff_texto: str) -> Optional[str]:
@@ -160,29 +176,42 @@ class AnalisadorDiff:
         return score
 
     def gerar_sugestao(self, motor: str) -> str:
-        """Gera texto de sugestão formatado."""
+        """Texto da sugestão, com a **participação** do motor no total de pontos.
+
+        O percentual antigo dividia o score do vencedor pelo MAIOR score — e o
+        vencedor é o maior por construção, então o cartão dizia `(100%)` sempre,
+        para qualquer diff. Um número constante disfarçado de medida é pior que
+        número nenhum: ele vai para o contexto do modelo a cada turno afirmando
+        uma certeza que ninguém apurou.
+
+        A participação no total, sim, varia e diz algo: quatro candidatos
+        empatados dão ~25% (o diff não separa nada), um vencedor isolado dá um
+        número alto (a evidência aponta para um lado só).
+        """
         if motor not in self.PADROES:
             return ""
 
         config = self.PADROES[motor]
-        confianca_pct = int(
-            (self.confianca.get(motor, 0) / max(self.confianca.values() or [1]))
-            * 100
-        )
+        total = sum(self.confianca.values())
+        participacao = int((self.confianca.get(motor, 0) / total) * 100) if total else 0
 
-        return f"💡 Sugestão de motor: {motor} ({confianca_pct}%)\n   {config['descricao']}"
+        return f"💡 Sugestão de motor: {motor} ({participacao}%)\n   {config['descricao']}"
 
 
 def processar_evento_hook(evento: dict) -> Optional[str]:
-    """Processa evento PreToolUse e retorna sugestão."""
-    # Extrair diff do evento
-    # Formato esperado: evento["tool_use_input"] pode conter diffs de mudanças
-    diffs = evento.get("diffs", "")
-    if not diffs:
-        # Tentar extrair de caminho se houver mudanças locais
-        cwd = evento.get("cwd", "")
-        diffs = _extrair_diffs_locais(cwd)
+    """Sugere um motor a partir do diff que vier no evento.
 
+    Só serve à inspeção manual pelo `__main__`: quem usa isto em produção é
+    `hooks/engine_contexto.py`, que chama `AnalisadorDiff` direto e obtém o diff
+    com `git diff` de verdade (`_extrair_diff_local`, com timeout).
+
+    Aqui o diff tem de vir pronto em `evento["diffs"]`. Havia um
+    `_extrair_diffs_locais(cwd)` que prometia rodar `git diff` e devolvia string
+    vazia em todos os casos — a chamada parecia cobrir o caso "sem `diffs` no
+    evento" e não cobria nada. Sem diff, esta função devolve `None`, que é a
+    verdade.
+    """
+    diffs = evento.get("diffs", "")
     if not diffs:
         return None
 
@@ -195,15 +224,9 @@ def processar_evento_hook(evento: dict) -> Optional[str]:
     return None
 
 
-def _extrair_diffs_locais(cwd: str) -> str:
-    """Tenta extrair diffs de mudanças locais (stub para teste)."""
-    # Em produção, isso rodaria 'git diff' no cwd
-    # Por enquanto, retorna vazio
-    return ""
-
-
 if __name__ == "__main__":
-    # Modo teste: ler evento do stdin
+    # Inspeção manual, fora de qualquer caminho de decisão do Claude Code — por
+    # isso a saída 1 aqui é legítima (ver o docstring do módulo).
     try:
         evento = json.loads(sys.stdin.read())
         resultado = processar_evento_hook(evento)

@@ -13,6 +13,7 @@ que a produz de propósito e exige que seja detectada.
 from pathlib import Path
 
 from ferramentas import sincronizar
+from ferramentas.validar import ler_metadados
 
 
 def _volume(raiz: Path, nome_dir: str, status: str, corpo: str = "conteudo\n") -> Path:
@@ -290,4 +291,39 @@ def test_nenhum_modulo_do_motor_escreve_no_acervo():
     assert not culpados, (
         "modulo do motor que escreve no acervo (o acervo e a fonte, nao destino): "
         + ", ".join(culpados)
+    )
+
+
+def test_todo_volume_que_viaja_no_plugin_tem_escopo():
+    """Volume PRONTO sem `escopo` entra no cartao como uma linha sem informacao.
+
+    `hooks/volume_detector.py` usa o `escopo` do `_VOLUME.yml` como resumo do
+    volume no cartao de contexto; sem ele (e sem README.md, o fallback), o
+    resumo vira o literal `"Volume 07-PROMPT-ENGINE"` -- que repete o nome e nao
+    diz nada sobre o que ha la dentro. O modelo le essa lista para decidir o que
+    consultar: uma entrada sem escopo ocupa a linha, gasta o teto do cartao e nao
+    ajuda a decidir nada.
+
+    Tres volumes PRONTO estavam assim (03-DISCOVERY, 07-PROMPT-ENGINE,
+    12-MEMORY): `escopo` era chave vazia em dois deles e ausente no terceiro.
+    `escopo` nao esta em `validar.CAMPOS_OBRIGATORIOS` de proposito -- volume em
+    rascunho pode nao ter escopo ainda. A exigencia e so para quem VIAJA no
+    plugin.
+    """
+    raiz = sincronizar.raiz_padrao()
+    prontos = sincronizar.volumes_consultaveis(raiz / sincronizar.PASTA_ACERVO)
+    assert prontos, "nenhum volume PRONTO no acervo -- o teste nao provaria nada"
+
+    sem_escopo = sorted(
+        nome
+        for nome, pasta in prontos.items()
+        if not ler_metadados(pasta / "_VOLUME.yml").get("escopo")
+    )
+
+    assert not sem_escopo, (
+        "volume(s) PRONTO sem 'escopo' no _VOLUME.yml: "
+        f"{sem_escopo}. Eles entram no cartao de contexto como uma linha sem "
+        "informacao. Escreva o escopo em acervo/<VOLUME>/_VOLUME.yml (uma frase, "
+        "condensando o proprio 03-Escopo.md do volume) e rode "
+        "`py -m ferramentas.sincronizar`."
     )

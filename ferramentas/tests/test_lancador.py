@@ -73,14 +73,24 @@ def _rodar(argumentos: list[str], entrada: str, path_env: str) -> subprocess.Com
     `env` é uma cópia do ambiente atual com só o PATH sobrescrito — preserva
     variáveis que o Windows/Git Bash precisam para funcionar (SystemRoot,
     TEMP etc.) sem deixar o PATH real da máquina vazar para dentro do teste.
+
+    A codificação é fixada em UTF-8 nas DUAS pontas — `encoding` aqui e
+    `PYTHONIOENCODING` no filho. Sem isso o teste media o locale da máquina em
+    vez do lançador: `text=True` codifica o stdin na codificação preferida do
+    sistema (cp1252 no Windows PT-BR), enquanto o script filho decodifica
+    conforme o `PYTHONIOENCODING` que estivesse herdado do shell de quem chamou.
+    Bastava a variável estar definida na sessão para o caso com acento quebrar
+    num `UnicodeDecodeError` que não tem nada a ver com o que se quer medir.
     """
     ambiente = dict(os.environ)
     ambiente["PATH"] = path_env
+    ambiente["PYTHONIOENCODING"] = "utf-8"
     return subprocess.run(
         [_BASH, str(LANCADOR), *argumentos],
         input=entrada,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env=ambiente,
     )
 

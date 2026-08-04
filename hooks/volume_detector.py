@@ -121,7 +121,8 @@ class DetectorVolumesAoVivo:
         """Valida que diretório é um volume PRONTO e consultável.
 
         Se existe `_VOLUME.yml` (convenção real dos volumes deste repositório,
-        lida também por `ferramentas/validar.py` e `ferramentas/status.py`), o
+        lida também por `ferramentas/validar.py` aqui e por
+        `acervo/ferramentas/status.py` do lado da plataforma), o
         campo `status` manda: só `PRONTO` é consultável — um volume em rascunho
         ou descontinuado não deve aparecer no cartão como se estivesse pronto,
         mesmo que já tenha capítulos `.md` escritos.

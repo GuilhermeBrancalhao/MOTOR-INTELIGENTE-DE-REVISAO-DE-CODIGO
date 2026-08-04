@@ -94,6 +94,6 @@ gate estrutural dos dois volumes).
 
 | Suíte | Testes | Como roda |
 |---|---:|---|
-| motor | 466 | `pytest` na raiz — CI, job `motor` |
+| motor | 478 | `pytest` na raiz — CI, job `motor` |
 | acervo | 789 | `pytest` de dentro de `acervo/` — CI, job `acervo` |
 | controladoria | 33 | `pytest acervo-controladoria/exemplos` — CI, job `controladoria` |

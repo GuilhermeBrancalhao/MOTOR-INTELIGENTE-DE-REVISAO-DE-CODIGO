@@ -9,3 +9,4 @@ tipo: ENGINE
 status: PRONTO
 perecivel: false
 depende_de: []
+escopo: Ciclo de vida de um prompt dentro de um unico dialeto de provedor — declarar o contrato tipado, renderizar, registrar por versao derivada do hash, avaliar, promover e depreciar.

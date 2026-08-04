@@ -136,6 +136,14 @@ def cadeado(
     NÃO é reentrante: chamar uma função que pega o cadeado de dentro de outra que
     já o segura trava até o timeout. Por isso as funções públicas deste módulo
     pegam o cadeado e delegam o trabalho a um núcleo `_sem_cadeado`.
+
+    Quebrar um cadeado abandonado dá direito a uma tentativa imediata, sem passar
+    pela checagem de prazo. Sem isso, quem chega com `espera` curta (ou já
+    estourada) removia o cadeado morto e mesmo assim levantava `EstadoOcupado`,
+    deixando o caminho livre para o próximo em vez de para si — o efeito era um
+    erro contra um cadeado que já não existia mais. Não há laço infinito: se
+    outro processo recriar o arquivo, o cadeado novo é recente e `_abandonado`
+    passa a ser falso, então a checagem de prazo volta a valer.
     """
     alvo = caminho_cadeado(raiz)
     alvo.parent.mkdir(parents=True, exist_ok=True)
@@ -152,6 +160,8 @@ def cadeado(
                     alvo.unlink()
                 except OSError:
                     pass  # outro processo quebrou primeiro; tanto faz quem foi
+                else:
+                    continue  # quebrei: tenho direito a uma tentativa agora
             if time.monotonic() >= limite:
                 raise EstadoOcupado(
                     f"cadeado do estado ({alvo}) ocupado por mais de {espera}s — "

@@ -1,7 +1,10 @@
 """Valida os metadados dos volumes (`_VOLUME.yml`) sob `volumes/prontos/`.
 
 Cada `_VOLUME.yml` deste repositório promete, no próprio comentário, ser lido por
-este módulo e por `ferramentas/status.py`. A checagem central é
+este módulo e por `status.py`. Atenção: esse `status.py` é o da plataforma
+(`acervo/ferramentas/status.py`), que opera sobre a FONTE em `acervo/NN-NOME/`;
+não existe `ferramentas/status.py` no lado do motor. São dois pacotes homônimos
+e separados de propósito (ver `pytest.ini`). A checagem central é
 `depende-de-inexistente`: um volume não pode declarar `depende_de` apontando para
 um número que não existe como diretório em `volumes/prontos/` — isso criaria um
 pré-requisito de leitura que não pode ser lido, e é exatamente o cenário que os

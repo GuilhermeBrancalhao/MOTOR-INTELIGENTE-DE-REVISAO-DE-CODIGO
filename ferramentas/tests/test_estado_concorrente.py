@@ -190,6 +190,25 @@ def test_cadeado_abandonado_e_quebrado_por_idade(tmp_path):
         pass  # tratado como abandonado, quebrado, e retomado
 
 
+def test_quebrar_cadeado_abandonado_da_direito_a_tentativa_imediata(tmp_path):
+    """Quebrar e mesmo assim desistir deixa o caminho livre para o próximo, não para si.
+
+    A quebra por idade acontecia e logo em seguida a checagem de prazo derrubava
+    quem quebrou. Com `espera=0` — prazo já vencido na primeira volta do laço — o
+    resultado era `EstadoOcupado` levantado contra um cadeado que este mesmo
+    processo tinha acabado de apagar: o erro reportava ocupação que não existia
+    mais, e o benefício da quebra ia para o processo seguinte.
+    """
+    alvo = estado.caminho_cadeado(tmp_path)
+    alvo.parent.mkdir(parents=True, exist_ok=True)
+    alvo.write_text("99999\n", encoding="utf-8")
+
+    with estado.cadeado(tmp_path, espera=0, idade_maxima=-1):
+        assert alvo.exists(), "o cadeado precisa estar em minhas mãos aqui dentro"
+
+    assert not alvo.exists(), "o cadeado precisa ser solto na saída"
+
+
 def test_atualizar_nao_grava_quando_o_mutador_devolve_none(tmp_path):
     estado.gravar(tmp_path, {"ativo": True, "marca": "original"})
 

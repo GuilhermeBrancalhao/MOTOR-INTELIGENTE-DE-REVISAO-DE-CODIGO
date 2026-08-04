@@ -166,3 +166,40 @@ if __name__ == "__main__":
     print("\n" + "=" * 80)
     print("✅ TODOS OS TESTES PASSARAM")
     print("=" * 80)
+
+
+def test_o_percentual_da_sugestao_nao_e_sempre_cem():
+    """O numero no cartao tem de variar com a evidencia.
+
+    O calculo antigo dividia o score do vencedor pelo MAIOR score. O vencedor e o
+    maior por construcao, entao o cartao dizia `(100%)` para qualquer diff --
+    inclusive para um diff que empatava quatro candidatos. Numero constante
+    disfarcado de medida e pior que numero nenhum: ele volta ao contexto do
+    modelo a cada turno afirmando uma certeza que ninguem apurou.
+
+    Nao se exige aqui um valor especifico (a heuristica pode ser reajustada), so
+    que dois diffs de separacao diferente NAO produzam o mesmo percentual.
+    """
+    def percentual(diff: str) -> int:
+        analisador = AnalisadorDiff()
+        motor = analisador.analisar_diff(diff)
+        assert motor is not None, f"nenhum motor sugerido para {diff!r}"
+        texto = analisador.gerar_sugestao(motor)
+        return int(texto.split("(")[1].split("%")[0])
+
+    # Vocabulario de um dominio so: a evidencia aponta para um lado.
+    isolado = percentual("--- a/x.sql\n+++ b/x.sql\n+ SELECT\n+ join\n+ index\n+ index\n+ join\n")
+    # Vocabulario de varios dominios ao mesmo tempo: a evidencia nao separa nada.
+    disputado = percentual(
+        "--- a/x.py\n+++ b/x.py\n+ try:\n+ except:\n+ def f():\n+ interface\n"
+        "+ abstract\n+ query\n+ index\n+ schema\n+ diagram\n"
+    )
+
+    assert isolado != disputado, (
+        f"os dois diffs deram o mesmo percentual ({isolado}%) -- o numero "
+        "provavelmente voltou a ser constante por construcao"
+    )
+    assert disputado < isolado, (
+        f"o diff que nao separa nada ({disputado}%) deveria pontuar abaixo do "
+        f"que aponta para um dominio so ({isolado}%)"
+    )

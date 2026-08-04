@@ -12,4 +12,4 @@ tipo: ENGINE
 status: PRONTO
 perecivel: false
 depende_de: []
-escopo:
+escopo: Armazem de decisoes observadas, com a procedencia de cada uma, e a regra de precedencia entre origens que discordam.

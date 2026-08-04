@@ -7,6 +7,8 @@ linhas. Este arquivo nasceu dos antigos testes das cópias `engine_contexto_v3`
 e `engine_contexto_v4` (removidas), reapontados para o módulo que o
 `hooks.json` executa de verdade.
 """
+import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -22,9 +24,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "hooks"))
 # exista uma única vez na sessão do pytest.
 import engine_contexto as hook  # noqa: E402
 
+RAIZ_PLUGIN = Path(__file__).resolve().parent.parent.parent
+
 
 def criar_estrutura_teste(tmp_path: Path, volumes=("07-PROMPT-ENGINE", "12-MEMORY", "31-TESTING", "99-NOVO-VOLUME")) -> Path:
-    """Cria estrutura mínima de projeto: motores/ e volumes/prontos/."""
+    """Cria um PLUGIN de mentira: `motores/` e `volumes/prontos/`.
+
+    Estas duas árvores são do plugin, não do projeto hospedeiro — é por isso que
+    o valor devolvido aqui é passado como `raiz_plugin` a
+    `montar_cartao_estendido`, e nunca como raiz de projeto.
+    """
     for motor_nome in [
         "revisar-codigo",
         "materializar-ideia",
@@ -295,3 +304,112 @@ def test_volume_pronto_usa_escopo_do_volume_yml_como_resumo(tmp_path):
 
     assert "12-MEMORY" in cartao
     assert "Persistência de estado entre sessões" in cartao
+
+
+# --- A trava: as duas raizes nao podem voltar a ser a mesma -----------------------
+
+
+def _estado_de_teste(fase: str = "BUILD") -> dict:
+    return {
+        "versao": 1,
+        "ativo": True,
+        "ciclo": {
+            "id": "2026-08-04-1",
+            "objetivo": "trabalhar num projeto hospedeiro qualquer",
+            "iniciado_em": "2026-08-04T10:00:00",
+            "modo": "normal",
+        },
+        "fase": fase,
+        "fases_concluidas": [],
+        "cartoes": ["python"],
+        "decisoes": [],
+        "pendencias": [],
+        "diffs_pendentes": [],
+        "cobrancas_por_fase": {},
+        "historico": ["2026-08-04-1"],
+    }
+
+
+def _rodar_hook_vivo(cwd: Path) -> str:
+    """Roda `hooks/engine_contexto.py` como subprocesso, igual ao Claude Code."""
+    evento = json.dumps({"cwd": str(cwd), "hook_event_name": "UserPromptSubmit"})
+    resultado = subprocess.run(
+        [sys.executable, str(RAIZ_PLUGIN / "hooks" / "engine_contexto.py")],
+        input=evento.encode("utf-8"),
+        capture_output=True,
+    )
+    assert resultado.returncode == 0, resultado.stderr.decode("utf-8", "replace")
+    return resultado.stdout.decode("utf-8", "replace")
+
+
+def _projeto_hospedeiro(tmp_path: Path, fase: str = "BUILD") -> Path:
+    projeto = tmp_path / "projeto-de-outra-pessoa"
+    (projeto / ".engine").mkdir(parents=True)
+    (projeto / "app.py").write_text("print('oi')\n", encoding="utf-8")
+    (projeto / ".engine" / "estado.json").write_text(
+        json.dumps(_estado_de_teste(fase), ensure_ascii=False), encoding="utf-8"
+    )
+    return projeto
+
+
+def test_o_projeto_hospedeiro_nao_tem_as_arvores_do_plugin(tmp_path):
+    """Premissa da trava: um projeto qualquer nao tem motores/ nem volumes/prontos/.
+
+    Se este teste falhar, os dois abaixo nao provam nada -- estariam achando as
+    arvores no lugar errado por acidente.
+    """
+    projeto = _projeto_hospedeiro(tmp_path)
+
+    assert not (projeto / "motores").exists()
+    assert not (projeto / "volumes" / "prontos").exists()
+    assert (RAIZ_PLUGIN / "motores").is_dir()
+    assert (RAIZ_PLUGIN / "volumes" / "prontos").is_dir()
+
+
+def test_o_cartao_traz_os_volumes_do_plugin_num_projeto_hospedeiro(tmp_path):
+    """A secao de volumes vem da arvore do PLUGIN, nunca da do projeto.
+
+    Este e o teste que reprova a regressao original: `principal()` passava a raiz
+    do projeto hospedeiro a `montar_cartao_estendido`, e a secao inteira de
+    volumes -- os 42 volumes que `ferramentas/sincronizar.py` empacota no plugin
+    justamente para viajarem com ele -- simplesmente nao aparecia em NENHUM
+    projeto que nao fosse o proprio repositorio do ENGINE.
+
+    Nomes de volume nao sao fixados aqui de proposito: o acervo cresce. O que se
+    exige e que a secao exista e que os volumes citados sejam os que estao em
+    disco no plugin AGORA.
+    """
+    projeto = _projeto_hospedeiro(tmp_path)
+
+    cartao = _rodar_hook_vivo(projeto)
+
+    assert "Volumes PRONTO" in cartao, (
+        "a secao de volumes sumiu do cartao -- provavelmente a raiz do projeto "
+        f"voltou a ser usada no lugar da raiz do plugin. Cartao:\n{cartao}"
+    )
+    do_disco = {caminho.name for caminho in (RAIZ_PLUGIN / "volumes" / "prontos").iterdir() if caminho.is_dir()}
+    citados = {nome for nome in do_disco if nome in cartao}
+    assert citados, f"nenhum volume real citado. Em disco: {sorted(do_disco)}"
+
+
+def test_o_cartao_traz_a_descricao_dos_motores_num_projeto_hospedeiro(tmp_path):
+    """As descricoes vem de `<plugin>/motores/*/SKILL.md`, nao de `<projeto>/motores/`.
+
+    Falha mais silenciosa que a dos volumes: a secao continuava aparecendo, so
+    que com o nome pelado do motor e sem uma palavra sobre o que ele faz -- e
+    nome de motor sozinho nao ajuda o modelo a decidir se vale consultar.
+    """
+    projeto = _projeto_hospedeiro(tmp_path, fase="BUILD")
+
+    cartao = _rodar_hook_vivo(projeto)
+
+    linhas_de_motor = [
+        linha for linha in cartao.splitlines() if "materializar-ideia" in linha
+    ]
+    assert linhas_de_motor, f"motor da fase BUILD ausente do cartao:\n{cartao}"
+    assert any(
+        "materializar-ideia:" in linha for linha in linhas_de_motor
+    ), (
+        "o motor aparece sem descricao -- `_ler_descricao_motor` esta procurando "
+        f"SKILL.md na arvore errada. Linhas: {linhas_de_motor}"
+    )

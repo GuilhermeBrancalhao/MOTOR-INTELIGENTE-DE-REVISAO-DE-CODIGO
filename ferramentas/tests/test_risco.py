@@ -825,3 +825,95 @@ def test_desempenho_comando_gigante_classifica_rapido(tmp_path):
     assert decorrido < 1.0, f"classificar levou {decorrido:.3f}s (esperado < 1s)"
     assert resultado.nivel == risco.TRAVADO
     assert resultado.regra == "R12"
+
+
+def test_escape_de_aspas_nao_parte_o_comando_ao_meio(tmp_path):
+    r"""Contrabarra escapando aspas era um desvio de verdade do classificador.
+
+    `\"` dentro de aspas duplas e aspa literal para o shell; a string continua
+    aberta. `_dividir_segmentos` lia aquilo como fim da string, e o `;` seguinte
+    -- que so existia DENTRO do literal -- virava separador de comando. Efeito
+    medido: a expressao perigosa nunca cabia inteira em um segmento e R8 saia
+    `rastreado` no lugar de `travado`. Um bypass, nao uma imprecisao.
+    """
+    perigoso = 'bash -c "python -c \\"import shutil; shutil.rmtree(\'/dados\')\\""'
+
+    assert risco._dividir_segmentos(perigoso) == [perigoso], (
+        "o escape nao pode partir o comando: nao ha separador de shell aqui"
+    )
+
+    resultado = risco.classificar("Bash", {"command": perigoso}, raiz=tmp_path, config=CFG)
+    assert resultado.nivel == risco.TRAVADO, f"bypass de R8 reaberto: {resultado}"
+    assert resultado.regra == "R8"
+
+
+def test_contrabarra_em_aspas_simples_nao_e_escape(tmp_path):
+    r"""Aspas simples nao tem escape nenhum no shell -- nem para a propria aspa.
+
+    Tratar `\` como escape em toda parte fecharia a aspa simples no lugar errado
+    e mascararia o `rm` que vem DEPOIS dela, fora de qualquer literal. A
+    correcao do escape em aspas duplas nao pode custar isto.
+    """
+    comando = "echo 'a \\' ; rm -rf /dados"
+
+    assert len(risco._dividir_segmentos(comando)) == 2, (
+        "a aspa simples fecha no `\\`, e o `;` seguinte separa comandos de verdade"
+    )
+
+    resultado = risco.classificar("Bash", {"command": comando}, raiz=tmp_path, config=CFG)
+    assert resultado.nivel == risco.TRAVADO, f"o rm real precisa travar: {resultado}"
+    assert resultado.regra == "R3"
+
+
+def test_contrabarra_final_sem_nada_para_escapar_nao_trava_o_laco(tmp_path):
+    r"""Comando terminado em `\` nao pode fazer o laco de divisao girar sem fim."""
+    assert risco._dividir_segmentos("echo ok \\") == ["echo ok \\"]
+    assert risco._dividir_segmentos("\\") == ["\\"]
+
+
+def test_credencial_no_corpo_do_comando_trava_como_trava_pela_ferramenta(tmp_path):
+    """A mesma chave, no mesmo arquivo, nao pode depender do caminho usado.
+
+    R5 travava `Write(config.py, "AKIA...")` inspecionando o corpo, mas no shell
+    so olhava o NOME do alvo -- entao `echo 'AKIA...' >> config.py` saia
+    `rastreado`. A assimetria fazia do shell o caminho facil para contornar
+    exatamente a regra que existe para segredo nao virar commit.
+    """
+    chave = "AKIA" + "Q" * 16
+    pela_ferramenta = risco.classificar(
+        "Write",
+        {"file_path": str(tmp_path / "config.py"), "content": f"AWS = '{chave}'"},
+        raiz=tmp_path,
+        config=CFG,
+    )
+    assert pela_ferramenta.nivel == risco.TRAVADO
+    assert pela_ferramenta.regra == "R5"
+
+    pelo_shell = risco.classificar(
+        "Bash",
+        {"command": f"echo \"AWS = '{chave}'\" >> config.py"},
+        raiz=tmp_path,
+        config=CFG,
+    )
+    assert pelo_shell.nivel == risco.TRAVADO, (
+        f"segredo pelo shell precisa travar igual: {pelo_shell}"
+    )
+    assert pelo_shell.regra == "R5"
+
+
+def test_comando_sem_credencial_nao_trava_por_r5(tmp_path):
+    """Contraprova: falso positivo aqui treina o humano a aprovar no automatico.
+
+    Os padroes exigem a forma que o emissor deu a chave. Texto que so FALA de
+    credencial, ou um prefixo curto demais, nao pode travar nada.
+    """
+    for comando in (
+        "git log --oneline | head -20",
+        "echo 'AKIA' >> notas.txt",  # prefixo sem os 16 caracteres da chave
+        "grep -rn 'token' src/",
+        "python -m pytest -q",
+    ):
+        resultado = risco.classificar(
+            "Bash", {"command": comando}, raiz=tmp_path, config=CFG
+        )
+        assert resultado.regra != "R5", f"falso positivo de R5 em {comando!r}: {resultado}"
