@@ -4,6 +4,19 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 21)
+
+### 36-DIAGRAMS promovido a PRONTO (36/42) — primeiro volume BIBLIOTECA fechado
+
+36-DIAGRAMS escrito do zero (17 secoes, BIBLIOTECA, 04-Catalogo em vez de
+04-Arquitetura/05-Diagramas) — catalogo dos quatro tipos de diagrama usados no acervo
+(C4Context, sequenceDiagram, stateDiagram-v2, flowchart): proposito de cada tipo, prosa
+explicativa obrigatoria, notacao consistente (conjunto fechado de tipos reconhecidos), escolha
+por necessidade (nunca o inverso), escopo declarado, vigencia verificada. Removidos
+04-Arquitetura.md e 05-Diagramas.md do scaffold generico (substituidos por 04-Catalogo.md).
+catalogo_de_diagramas.py (TipoDeDiagrama, Catalogo, escolher_tipo_por_necessidade,
+verificar_vigencia_do_diagrama), 7 testes. Auditoria 8,0.
+
 ## 2026-08-04 (lote 20)
 
 ### 35-DOCUMENTATION promovido a PRONTO (35/42)
