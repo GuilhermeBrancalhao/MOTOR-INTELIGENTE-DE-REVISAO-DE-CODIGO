@@ -4,6 +4,17 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 13)
+
+### 27-LLM-ROUTER promovido a PRONTO (28/42) — dupla perecível 26/27 completa
+
+27-LLM-ROUTER escrito do zero (18 secoes, ENGINE, perecivel: true, depende_de: ["26"]) —
+roteamento em tempo de execucao entre candidatos ja aprovados pelo 26: degradacao julgada por
+janela minima de amostra (nunca falha isolada), fallback automatico sem bloquear, recuperacao ao
+principal exige janela de estabilidade (assimetria deliberada "cai rapido, sobe devagar"), toda
+decisao registrada, estado sempre consultavel. roteador.py (Roteador, JanelaDeSaude,
+DecisaoDeRoteamento), 7 testes. Auditoria 8,0.
+
 ## 2026-08-04 (lote 12)
 
 ### 26-AI-MODELS promovido a PRONTO (27/42) — primeiro volume perecível fechado

@@ -32,4 +32,5 @@ no contexto.
 - **24-DATABASE-ARCHITECT** — tipo ARQUITETURA
 - **25-API-ARCHITECT** — tipo ARQUITETURA
 - **26-AI-MODELS** — tipo ENGINE
+- **27-LLM-ROUTER** — tipo ENGINE
 - **31-TESTING** — tipo PROCESSO
