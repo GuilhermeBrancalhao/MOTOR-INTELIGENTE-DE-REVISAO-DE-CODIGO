@@ -4,6 +4,17 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 10)
+
+### 24-DATABASE-ARCHITECT promovido a PRONTO (25/42)
+
+24-DATABASE-ARCHITECT escrito do zero (18 secoes, ARQUITETURA) — camada de persistencia dentro
+do mesmo produto: migracao de schema compativel com a versao anterior, procedencia inseparavel
+de conteudo gerado por IA, concorrencia otimista, retencao declarada, leitura tolerante a campo
+desconhecido, exclusao bloqueada por referencia ativa. repositorio.py (Migracao,
+RegistroDeConteudo, Repositorio), 9 testes. Auditoria 8,1. Falso positivo de dominio neutro
+verificado (substring "concilia" dentro de "Reconciliacao", mesmo padrao ja visto em 20-CLOUD).
+
 ## 2026-08-04 (lote 9)
 
 ### 23-BACKEND-ARCHITECT promovido a PRONTO (24/42)
