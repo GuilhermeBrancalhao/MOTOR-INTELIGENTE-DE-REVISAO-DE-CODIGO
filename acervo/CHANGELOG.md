@@ -4,6 +4,17 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 7)
+
+### 20-CLOUD promovido a PRONTO (22/42) — grupo 3 completo (17-18) + 19-20 fechados
+
+20-CLOUD escrito do zero (18 secoes, ARQUITETURA) — a infraestrutura que hospeda o sistema em
+execucao: recurso declarado com dono obrigatorio, redundancia verificavel contra alvo de
+disponibilidade, sem segredo inline, isolamento de mudanca por ambiente, drift detectavel entre
+declarado e real. infraestrutura.py (Recurso, PlanoDeInfraestrutura, detectar_drift), 9 testes.
+Auditoria 8,1. Falso positivo de dominio neutro verificado (substring "concilia" dentro de
+"reconciliar", sem relacao com o projeto irmao).
+
 ## 2026-08-04 (lote 6)
 
 ### 19-DEVOPS promovido a PRONTO (21/42)

@@ -25,5 +25,6 @@ no contexto.
 - **17-SECURITY** — tipo GOVERNANCA
 - **18-DEVSECOPS** — tipo PROCESSO
 - **19-DEVOPS** — tipo ARQUITETURA
+- **20-CLOUD** — tipo ARQUITETURA
 - **21-OBSERVABILITY** — tipo GOVERNANCA
 - **31-TESTING** — tipo PROCESSO
