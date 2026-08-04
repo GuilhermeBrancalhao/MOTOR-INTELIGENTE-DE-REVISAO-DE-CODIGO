@@ -9,9 +9,9 @@ atualizado_em: 2026-08-04
 
 # Implementação
 
-<!-- exemplo: exemplos/19-devops/pipeline.py -->
+<!-- exemplo: exemplos/19-devops/pipeline_deploy.py -->
 
-`pipeline.py`, citado acima, formaliza P1-P6: `Pipeline.executar_estagio` recusa estágio fora de
+`pipeline_deploy.py`, citado acima, formaliza P1-P6: `Pipeline.executar_estagio` recusa estágio fora de
 ordem e bloqueia estágios seguintes após uma falha (P1/P5); `Pipeline` é um dataclass congelado
 construído em torno de um único `Artefato`, tornando reatribuição de artefato um erro em tempo de
 execução (P6); `implantar_em_producao` rejeita percentual 100 sem `forcar_completo=True` (P3);

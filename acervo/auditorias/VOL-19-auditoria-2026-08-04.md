@@ -13,7 +13,7 @@ $ python -m pytest exemplos/19-devops -q
 
 ## Método
 
-Verificadas as seis regras (P1-P6) contra `pipeline.py`: P1/P5 (sequência não pulável) via
+Verificadas as seis regras (P1-P6) contra `pipeline_deploy.py`: P1/P5 (sequência não pulável) via
 `Pipeline.executar_estagio` e os testes de estágio fora de ordem e de falha bloqueante; P2
 (reversão) via `GerenciadorDeploy.reverter` e os testes de ausência de histórico e restauração
 correta; P3 (rollout gradual por padrão) via `implantar_em_producao` e os dois testes que provam

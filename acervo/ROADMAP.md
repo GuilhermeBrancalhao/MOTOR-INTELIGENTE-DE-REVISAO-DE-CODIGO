@@ -214,6 +214,13 @@ colisão**, e com 9 pastas de exemplo (crescendo a cada lote de volumes promovid
 duas escolherem o mesmo nome genérico (`orcamento`, `modelo`, `processo`) só aumenta. A
 verificação de gate que reprovaria isso automaticamente continua não implementada.
 
+**Segunda colisão confirmada em 2026-08-04.** `13-rag/pipeline.py` e `19-devops/pipeline.py` —
+mesmo padrão, mesmo tipo de nome genérico (`pipeline`). Corrigido renomeando o de `19-devops`
+para `pipeline_deploy.py` (módulo e teste), citação em `11-Implementacao.md` atualizada. Duas
+colisões reais em nomes genéricos diferentes (`orcamento`, `pipeline`) em menos de 24h de
+produção reforça que isto não é caso isolado — a verificação de gate continua sendo o item mais
+alto de prioridade desta dívida, não apenas uma melhoria nice-to-have.
+
 ## Fora de escopo neste ciclo
 
 Registrado, não construído agora:

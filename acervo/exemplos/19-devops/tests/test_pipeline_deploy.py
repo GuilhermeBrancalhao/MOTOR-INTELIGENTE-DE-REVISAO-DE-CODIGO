@@ -2,7 +2,7 @@ import dataclasses
 
 import pytest
 
-from pipeline import (
+from pipeline_deploy import (
     Artefato,
     DeployCompletoRequerJustificativa,
     EstagioFalhou,
