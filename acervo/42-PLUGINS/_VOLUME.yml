@@ -1,7 +1,7 @@
 volume: "42"
 nome: PLUGINS
 tipo: ENGINE
-status: RASCUNHO
+status: PRONTO
 perecivel: false
 depende_de: []
-escopo: Ecossistema de plugins
+escopo: Ecossistema de plugins — contrato de extensão versionado entre host e plugin, isolamento de falha (exceção de plugin nunca propaga ao host), permissão declarada explicitamente (nenhuma capacidade concedida por omissão), registro explícito de ativação, desativação sem efeito residual, evolução do contrato seguindo a mesma disciplina de versionamento semântico de 41-SDK.

@@ -4,6 +4,30 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 27) — ULTIMO VOLUME
+
+### 42-PLUGINS promovido a PRONTO (42/42) — acervo completo
+
+42-PLUGINS escrito do zero (18 secoes, ENGINE, C4Context/sequenceDiagram/stateDiagram-v2) —
+disciplina de ecossistema de plugin: contrato de extensao versionado entre host e plugin, plugin
+com contrato alvo incompativel rejeitado antes de qualquer hook ser chamado (AD1); falha
+originada dentro de um plugin sempre isolada e contida, nunca propaga ao host (AD2, o teste mais
+importante do volume); toda capacidade usada por um plugin declarada explicitamente, capacidade
+nao declarada negada (AD3); ativacao exige registro explicito — nome, versao de contrato, ponto
+de entrada —, nunca execucao implicita por presenca em caminho de busca (AD4); desativacao libera
+todo recurso alocado sem efeito residual (AD5); o proprio contrato de extensao evolui seguindo a
+mesma disciplina de versionamento semantico de 41-SDK — mudanca que quebra hook exige versao
+maior nova do contrato (AD6, reaproveita literalmente a logica de validar_release). Fronteira
+explicita com 41-SDK (AD6), 20-CLOUD e 18-DEVSECOPS (isolamento e menor privilegio aplicados a
+host-plugin) e 30-AI-GOVERNANCA (trilha auditavel). Exemplo `exemplos/42-plugins/plugins.py`, 12
+testes, suite completa `exemplos` com 496 testes sem regressao nem colisao de nome de modulo com
+os 41 volumes anteriores. Auditoria 8.1, nenhuma secao abaixo de 6, dominio neutro sem qualquer
+ocorrencia.
+
+**Este e o 42o e ultimo volume do acervo — os 42 volumes planejados estao agora todos PRONTO.**
+Resta o checkpoint final: suite completa (motor+acervo+exemplos), sincronizacao, commit e push
+final para origin e motor.
+
 ## 2026-08-04 (lote 26)
 
 ### 41-SDK promovido a PRONTO (41/42)
