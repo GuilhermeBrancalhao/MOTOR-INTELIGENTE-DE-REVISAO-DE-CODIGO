@@ -1,21 +1,56 @@
 # ROADMAP
 
-**Atualizado em:** 2026-08-03
+**Atualizado em:** 2026-08-04
 
-Estado hoje: a máquina de produção está completa e testada, o contrato está em v1.0.0, e **três
-volumes** atravessaram a linha inteira — `03-DISCOVERY`, `07-PROMPT-ENGINE` (padrão-ouro,
-auditoria 8,9) e `12-MEMORY` (8,7). Os outros **39 volumes** estão declarados no contrato e
-materializados como pasta com `_VOLUME.yml`, em `RASCUNHO` — e uma auditoria externa em
-2026-08-03 confirmou que estavam abaixo do mínimo de substância exigido pelo contrato (esqueletos
-gerados em lote, não conteúdo real), além de um bug de BOM UTF-8 nos `_VOLUME.yml` que mascarava
-a extensão real do problema (39 violações aparentes → 657 reais, após o fix).
+**Estado hoje: os 42 volumes do contrato estão `PRONTO`.** A cobertura integral foi alcançada em
+2026-08-04, com o último lote (`41-SDK`, `42-PLUGINS`). Cada volume atravessou os quatro
+critérios da Definição de PRONTO: gate estrutural, exemplo executável com testes, auditoria com
+média ≥8,0 registrada em `auditorias/`, e entrada no `CHANGELOG.md`. Suíte completa do
+repositório (motor + acervo + exemplos): **449 testes**. `ferramentas.validar --tudo` e
+`--cross-refs` sem violação. `volumes/prontos/` é artefato derivado, regenerado por
+`ferramentas.sincronizar` — nunca editado à mão.
 
-**Decisão de escopo, 2026-08-03:** em vez de perseguir os 42, o ciclo atual fecha em **motor +
-10 volumes essenciais** — `01`, `03`, `07`, `08`, `09`, `10`, `12`, `17`, `21`, `31`. Os outros
-32 permanecem `RASCUNHO` declarado, biblioteca evolutiva sem prazo de conclusão nesta entrega.
-Isso substitui a lista de "candidatos seguintes" que este arquivo tinha antes — `08`, `09`, `10`,
-`17`, `21` e `31` já estavam nela; a diferença é que agora é escopo fechado do ciclo, não
-sugestão aberta. Cobertura dos 42 continua não sendo meta.
+**Histórico da decisão de escopo (2026-08-03), mantido para contexto:** o ciclo daquele dia
+fechava em motor + 10 volumes essenciais (`01`, `03`, `07`, `08`, `09`, `10`, `12`, `17`, `21`,
+`31`), com os outros 32 em `RASCUNHO` declarado e cobertura dos 42 explicitamente fora de meta.
+Essa decisão foi superada pela produção subsequente: os 32 restantes foram escritos em lotes ao
+longo de 2026-08-03 e 2026-08-04, cada um pelo mesmo processo dos 10 primeiros, sem afrouxar
+nenhum gate.
+
+## Verificação do merge dos dois históricos (2026-08-04)
+
+A unificação decidida em 2026-08-02 — motor de revisão de código + plataforma de engenharia de
+projetos de IA num repositório só — foi conferida e **está íntegra**:
+
+- `ecd5fdd` é merge real de dois pais (`544cc6b` do lado motor, `bf95c57` do lado plataforma),
+  não uma reimportação achatada;
+- o histórico tem **duas raízes** (`de733fb`, motor, 2026-07-30; `a553dfa`, plataforma,
+  2026-07-29), confirmando que dois históricos independentes foram fundidos com autoria e datas
+  preservadas;
+- as três referências do remoto `plataforma` (`main`, `copilot/criar-interface-projeto`,
+  `feat/volume-03-descoberta`) estão **totalmente contidas** em `HEAD` — nada ficou para trás;
+- `HEAD`, `origin/master` e `motor/master` apontam para o mesmo commit.
+
+### Dívida achada na conferência: `acervo-controladoria/` está fora de todo gate
+
+Um segundo acervo, `acervo-controladoria/` (12 volumes, `43`–`54`, 262 arquivos), entrou no
+repositório por commits de outra sessão durante a unificação. Ele tem `contrato.json` e
+`Convencoes.md` próprios, mas **nenhuma ferramenta, teste ou gate deste repositório o referencia**:
+não é validado por `ferramentas.validar`, não aparece na suíte, não é sincronizado para
+`volumes/prontos/`, e não é mencionado em nenhum `CHANGELOG` ou `README`.
+
+Consequência prática: a afirmação "42/42 `PRONTO`" é verdadeira sobre `acervo/` e **não diz nada**
+sobre `acervo-controladoria/`, cujo estado real nunca foi medido. É preciso decidir — decisão do
+autor, não delegável — se esse acervo (a) entra no contrato e passa a ser gated como os outros,
+(b) vira repositório próprio, ou (c) sai. Enquanto não se decide, ele é conteúdo não verificado
+convivendo com conteúdo verificado, que é exatamente a ambiguidade que a Definição de PRONTO
+existe para eliminar.
+
+Verificado também que `acervo-controladoria/` **não vaza o projeto vizinho**: as únicas
+ocorrências de "Omie" o citam como fornecedor de ERP genérico ao lado de SAP, Oracle e IFS, e não
+há qualquer menção a Sicoob, Rezoluti ou nome de cliente. Mesma conclusão para
+`ferramentas/web.py` e `chatgpt_app/widget.html`, onde "Omie" aparece só como exemplo em
+`placeholder` de formulário.
 
 A ordem de produção não é a ordem numérica. Um volume só deve ser escrito depois dos volumes
 que ele declara em `depende_de`, porque `depende_de` significa pré-requisito de leitura — e
