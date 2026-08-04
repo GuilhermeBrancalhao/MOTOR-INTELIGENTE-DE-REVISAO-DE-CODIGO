@@ -35,4 +35,5 @@ no contexto.
 - **27-LLM-ROUTER** — tipo ENGINE
 - **28-PROMPT-COMPILER** — tipo ENGINE
 - **29-PROMPT-OPTIMIZER** — tipo ENGINE
+- **30-AI-GOVERNANCE** — tipo GOVERNANCA
 - **31-TESTING** — tipo PROCESSO

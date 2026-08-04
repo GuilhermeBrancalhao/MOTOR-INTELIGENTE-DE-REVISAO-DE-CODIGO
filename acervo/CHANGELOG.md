@@ -4,6 +4,17 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 16)
+
+### 30-AI-GOVERNANCE promovido a PRONTO (31/42)
+
+30-AI-GOVERNANCE escrito do zero (18 secoes, GOVERNANCA, com matriz de controles) — governanca
+organizacional do uso de IA: dono responsavel nomeado obrigatorio, classificacao de risco antes
+de producao, revisao humana obrigatoria para decisao ALTO/CRITICO, trilha de auditoria imutavel
+com contexto completo, aprovacao explicita antes de producao, revisao periodica de classificacao
+e dono. Fronteira com 17-SECURITY (defesa tecnica vs. governanca de decisao) explicita.
+governanca_ia.py (RegistroDeCasosDeUso, CasoDeUso, DecisaoAutomatizada), 8 testes. Auditoria 8,2.
+
 ## 2026-08-04 (lote 15)
 
 ### 29-PROMPT-OPTIMIZER promovido a PRONTO (30/42) — grupo 1 completo (07, 28, 29)
