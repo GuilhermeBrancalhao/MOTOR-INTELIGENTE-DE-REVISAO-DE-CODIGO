@@ -5,7 +5,78 @@
 
 ---
 
-## 2026-08-04 — Revisão do repositório: dois geradores armados, e a primeira CI
+## 2026-08-04 (2) — O arquivo único ganha cadeado, e a durabilidade deixa de ser aposta
+
+Duas armadilhas que o `CLAUDE.md` e o `README.md` registravam como conhecidas-e-não-resolvidas.
+
+### 1. `.engine/estado.json` é arquivo único — colisão entre sessões
+
+**O defeito.** Toda mutação do motor era **ler → alterar → gravar** em três passos soltos. Duas
+sessões do Claude Code na mesma pasta produziam *lost update*: a segunda lia antes de a primeira
+gravar, e a gravação da segunda apagava o que a primeira acabara de escrever. Não era corrupção
+— `gravar` sempre foi atômico. Era pior: o estado final era JSON perfeitamente válido, só que
+**sem a transição de fase que a CLI já tinha confirmado ao usuário na tela**. O contorno
+documentado era humano: "não ligar o motor em pasta com mais de uma sessão aberta".
+
+**A correção.** `estado.cadeado` — `.engine/estado.lock` criado com `O_CREAT | O_EXCL`, a única
+primitiva de exclusão entre processos que funciona igual no Windows e no POSIX usando só a
+biblioteca padrão (`fcntl.flock` não existe no Windows, `msvcrt.locking` não existe fora dele, e
+o motor não pode ganhar dependência de runtime). Cadeado abandonado é quebrado por idade
+(30 s): dono morto travaria o motor para sempre naquela pasta, que é um modo de falhar pior do
+que a corrida.
+
+Em cima dele, `estado.atualizar(raiz, mutador)`, que **relê de dentro da seção crítica**. É esse
+detalhe que mata o defeito: com o cadeado só na gravação, a segunda sessão ainda gravaria por
+cima com dados velhos. Os cinco sítios de mutação foram roteados por ele — `cli.py` (ligar e
+fase), `engine_gate.py`, `engine_salvar.py` e `estado.registrar_diff` —, e
+`test_nenhum_gravar_fora_do_estado` trava a regra: nenhum módulo de produção chama
+`estado.gravar` direto.
+
+**Um defeito extra, achado pela mutação.** Removendo o cadeado de propósito para provar que o
+teste de regressão não era decorativo, os processos concorrentes não perderam escrita: eles
+**quebraram**, com `PermissionError` (`WinError 32`). `gravar` usava um temporário de nome fixo
+(`estado.json.tmp`), disputado por todos os escritores. O temporário passou a levar o pid.
+
+`ferramentas/tests/test_estado_concorrente.py` (8 testes) reproduz a corrida com **seis
+subprocessos de verdade**, não threads — a exclusão é entre processos, e o GIL mascararia o que
+precisa aparecer. Uma barreira de relógio faz os seis disputarem no mesmo instante; sem ela, o
+custo de arranque do interpretador espalharia as tentativas e o teste passaria por acidente.
+
+### 2. Durabilidade sob compactação
+
+**O que estava escrito.** "O motor nunca atravessou uma sessão longa com compactação de verdade
+[...] trate 'sobrevive à compactação' como projeto, não como fato observado."
+
+**O erro estava na pergunta.** A durabilidade não é empírica. Ela é consequência de uma
+propriedade verificável do hook que injeta o cartão:
+
+> o cartão é função **apenas do disco**, e de nada que a compactação possa destruir.
+
+`hooks/engine_contexto.py` lê do evento **uma única chave: `cwd`**. Nunca `transcript_path`,
+`session_id`, mensagens ou contexto — que é exatamente o que a compactação destrói. Não
+existindo leitura, não existe caminho pelo qual a compactação altere a saída.
+
+`test_o_cartao_nao_depende_de_nada_que_a_compactacao_destroi` trava isso na árvore sintática do
+hook (não por substring: prosa citando "contexto" não pode reprovar). Acrescentar uma leitura de
+`transcript_path` — ideia natural, para enriquecer o cartão com o histórico — deixa a suíte
+vermelha no mesmo commit. Provado por mutação.
+
+`ferramentas/tests/test_durabilidade_compactacao.py` (8 testes) exerce a propriedade com os
+hooks reais como subprocesso, indo além do turno 10 de `aceite/simular_turnos.py`: compactação
+em **todo** limite de turno contra uma execução de controle (cartão a cartão), dez compactações
+seguidas, compactação em cada fase do ciclo, `PreCompact` **morto no meio da escrita**, ciclo
+desligado que não pode ressuscitar, e — onde os dois defeitos deste commit se encontram —
+`PreCompact` concorrente com uma transição de fase de outra sessão. O PreCompact era o pior
+lugar possível para um *lost update*: dispara quando o contexto vai ser descartado, então o que
+ele apagasse do estado não sobrava em lugar nenhum.
+
+**O que continua não observado**, e os testes não afirmam: uma sessão real do Claude Code
+atravessando auto-compactação. O resíduo, porém, passou a ser o contrato do Claude Code
+(disparar `PreCompact`, preservar o `cwd`) — não o motor.
+
+Suíte do motor: 450 → **466**.
+
+
 
 Uma revisão do repositório encontrou dois scripts em `ferramentas/` que ninguém citava —
 nem doc, nem CHANGELOG, nem teste — e que destruíam conteúdo real se rodados:

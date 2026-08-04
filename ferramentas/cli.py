@@ -96,8 +96,26 @@ def _verbo_ligar(raiz: Path, resto: list[str]) -> int:
     except estado.CicloJaAtivo as erro:
         print(f"ENGINE: {erro}")
         return 1
-    dados["cartoes"] = _detectar_cartoes(raiz)
-    estado.gravar(raiz, dados)
+    except estado.EstadoOcupado as erro:
+        print(f"ENGINE: {erro}")
+        return 1
+
+    cartoes = _detectar_cartoes(raiz)
+
+    # Segunda mutação, e por isso sob cadeado próprio: entre `novo_ciclo` e aqui a
+    # detecção de cartões roda (varre o projeto, pode demorar), e nesse intervalo
+    # outra sessão pode ter tocado o estado. Gravar o `dados` que voltou de
+    # `novo_ciclo` apagaria o que ela escreveu.
+    def _gravar_cartoes(atual: dict | None) -> dict | None:
+        if atual is None:
+            return None
+        atual["cartoes"] = cartoes
+        return atual
+
+    try:
+        dados = estado.atualizar(raiz, _gravar_cartoes) or dados
+    except estado.EstadoOcupado as erro:
+        print(f"ENGINE: aviso — cartões não gravados ({erro})")
     print(_relatar(dados))
     return 0
 
@@ -133,7 +151,11 @@ def _verbo_desligar(raiz: Path) -> int:
     if not estado.caminho(raiz).is_file():
         print(_relatar_desligado())
         return 0
-    print(_relatar(estado.desligar(raiz)))
+    try:
+        print(_relatar(estado.desligar(raiz)))
+    except estado.EstadoOcupado as erro:
+        print(f"ENGINE: {erro}")
+        return 1
     return 0
 
 
@@ -151,23 +173,40 @@ def _verbo_status(raiz: Path) -> int:
 
 
 def _verbo_fase(raiz: Path, resto: list[str]) -> int:
+    """Transição de fase — a mutação que mais doía perder.
+
+    Antes, `carregar_estrito` … `transicionar` … `gravar` eram três passos soltos:
+    outra sessão que gravasse no meio via a sua escrita apagada, e o usuário desta
+    sessão já tinha visto a transição confirmada na tela. Agora a leitura e a
+    gravação acontecem dentro do mesmo cadeado, e `transicionar` valida o grafo
+    contra a fase que está no disco AGORA, não contra a que se leu antes.
+    """
     if not resto:
         print(USO)
         return 1
+    destino = resto[0].upper()
+    falha: list[str] = []
+
+    def _mutar(dados: dict | None) -> dict | None:
+        if not dados:
+            falha.append("ENGINE: desligado; não há fase para mudar.")
+            return None
+        return estado.transicionar(dados, destino)
+
     try:
-        dados = estado.carregar_estrito(raiz)
+        dados = estado.atualizar(raiz, _mutar)
     except estado.EstadoCorrompido as erro:
         print(f"ENGINE: {erro}")
         return 1
-    if not dados:
-        print("ENGINE: desligado; não há fase para mudar.")
-        return 1
-    try:
-        dados = estado.transicionar(dados, resto[0].upper())
     except estado.TransicaoInvalida as erro:
         print(f"ENGINE: {erro}")
         return 1
-    estado.gravar(raiz, dados)
+    except estado.EstadoOcupado as erro:
+        print(f"ENGINE: {erro}")
+        return 1
+    if dados is None:
+        print(falha[0])
+        return 1
     print(_relatar(dados))
     return 0
 

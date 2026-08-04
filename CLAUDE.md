@@ -4,7 +4,7 @@ Este repositório é **um projeto só**, com duas metades que se alimentam:
 
 | Pasta | O que é | Suíte |
 |---|---|---|
-| raiz (`ferramentas/`, `hooks/`, `agents/`, `cartoes/`, `motores/`, `skills/`) | o **motor**: plugin do Claude Code, modo de engenharia persistente | `py -m pytest` (450) |
+| raiz (`ferramentas/`, `hooks/`, `agents/`, `cartoes/`, `motores/`, `skills/`) | o **motor**: plugin do Claude Code, modo de engenharia persistente | `py -m pytest` (466) |
 | `acervo/` | a **plataforma** que produz os volumes de conhecimento (42 volumes, contrato legível por máquina, 3 gates) | `cd acervo && py -m pytest` (789) |
 | `acervo-controladoria/` | acervo de Controladoria — 2 volumes reais (`45`, `54`) e os seus exemplos | `py -m pytest acervo-controladoria/exemplos` (33) |
 | `volumes/prontos/` | **artefato derivado** — a cópia que o plugin carrega | gerado, nunca editado |
@@ -39,9 +39,14 @@ estava em `volumes/prontos/` marcado `PRONTO` enquanto a fonte dizia `RASCUNHO`,
 
 ## Armadilhas conhecidas
 
-- **`.engine/estado.json` é arquivo único.** Duas sessões no mesmo projeto se atropelam: a
-  segunda sobrescreve o ciclo da primeira, e as transições que a CLI confirmou somem do disco.
-  Não ligar o motor em pasta com mais de uma sessão aberta.
+- **`.engine/estado.json` é arquivo único, e agora tem cadeado.** Duas sessões no mesmo projeto
+  se atropelavam: toda mutação era ler → alterar → gravar em três passos soltos, a segunda lia
+  antes de a primeira gravar, e as transições que a CLI já tinha confirmado sumiam do disco.
+  Não era corrupção (`gravar` sempre foi atômico) — era pior: JSON válido, sem o trabalho.
+  Corrigido em 2026-08-04 com `estado.cadeado` (`.engine/estado.lock`, `O_EXCL`) e
+  `estado.atualizar`, que relê **de dentro** da seção crítica. Quem muta estado usa
+  `atualizar()`, nunca `gravar()` direto — `test_nenhum_gravar_fora_do_estado` trava a regra.
+  Rodar o motor com várias sessões abertas na mesma pasta deixou de ser proibido.
 - **Erro de caixa volta.** Já apareceu quatro vezes (`re.I` em `_PY_PERIGO`, filtro
   `*WindowsApps*` do lançador, `.ENGINE/` em `_sob_painel`, `shutil.which("bash")` no teste do
   lançador). Quando achar um, **varra o repositório inteiro** — não conserte só a ocorrência.
@@ -54,6 +59,10 @@ estava em `volumes/prontos/` marcado `PRONTO` enquanto a fonte dizia `RASCUNHO`,
   muda o que roda até reinstalar.
 - **Push exige `fetch` + merge antes**, sempre, e `--force` nunca: já houve sessão paralela
   empurrando 17 commits neste mesmo repositório.
+- **A durabilidade não é observação, é propriedade.** O cartão sobrevive à compactação porque
+  `hooks/engine_contexto.py` lê do evento **só `cwd`** — nada de `transcript_path`,
+  `session_id` ou contexto. Enriquecer o cartão com a transcrição quebra a durabilidade no
+  mesmo commit; `test_o_cartao_nao_depende_de_nada_que_a_compactacao_destroi` reprova.
 
 ## Contexto de história
 

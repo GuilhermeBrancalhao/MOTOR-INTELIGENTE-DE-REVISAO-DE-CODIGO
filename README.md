@@ -79,7 +79,7 @@ marcado `PRONTO` enquanto a fonte dizia `RASCUNHO`, e a nunca entregar `03-DISCO
 As duas suítes rodam separadas, porque cada uma tem o seu próprio pacote `ferramentas`:
 
 ```bash
-py -m pytest                  # motor  — 450 testes
+py -m pytest                  # motor  — 466 testes
 cd acervo && py -m pytest     # acervo — 789 testes
 ```
 
@@ -189,7 +189,7 @@ a cada push — antes disso não havia CI nenhuma, e "os testes passam" era uma
 afirmação sobre a última vez que alguém os rodou à mão.
 
 ```bash
-py -m pytest                                   # motor          — 450 testes
+py -m pytest                                   # motor          — 466 testes
 cd acervo && py -m pytest                      # acervo         — 789 testes
 py -m pytest acervo-controladoria/exemplos     # controladoria  —  33 testes
 ```
@@ -221,11 +221,30 @@ falso positivo, corrigido depois: a string `'EXEC(ruim)'` casava `\bexec\(` porq
 padrão era compilado sem distinguir maiúsculas. Isso prova que o **mecanismo** funciona
 numa sessão real; não é uma declaração de vitória.
 
-**O que ainda não foi provado.** A **durabilidade**: o motor nunca atravessou uma sessão
-longa com compactação de verdade. `aceite/simular_turnos.py` simula vinte turnos e uma
-compactação chamando os hooks reais, o que demonstra a mecânica — mas simulação não é
-sessão. Até que isso seja verificado, trate "sobrevive à compactação" como projeto, não
-como fato observado.
+**Durabilidade: por que ela vale.** A pergunta "o modo sobrevive à compactação?" era tratada
+como empírica, e ficava em aberto porque o motor nunca tinha atravessado uma sessão longa com
+compactação de verdade. Ela não é empírica. É consequência de uma propriedade do hook que
+injeta o cartão:
+
+> o cartão é função **apenas do disco** (`.engine/`, config, projeto), e de nada que a
+> compactação possa destruir.
+
+A compactação descarta contexto e reescreve a transcrição. `hooks/engine_contexto.py` lê do
+evento **uma única chave: `cwd`** — nunca `transcript_path`, `session_id`, mensagens ou
+qualquer coisa derivada do contexto. Não existindo leitura, não existe caminho pelo qual a
+compactação altere a saída. `test_o_cartao_nao_depende_de_nada_que_a_compactacao_destroi`
+trava isso na árvore sintática do hook: acrescentar uma leitura de `transcript_path` — ideia
+natural, para enriquecer o cartão com o histórico — deixa a suíte vermelha no mesmo commit.
+
+Em cima dessa razão, `ferramentas/tests/test_durabilidade_compactacao.py` exerce a propriedade
+com os hooks reais rodando como subprocesso: compactação em **todo** limite de turno (contra
+uma execução de controle sem compactação nenhuma, cartão a cartão), dez compactações seguidas,
+compactação em cada fase do ciclo, `PreCompact` **morto no meio da escrita**, e `PreCompact`
+concorrente com uma transição de fase de outra sessão.
+
+**O que continua não observado**, e não é o que esses testes afirmam: uma sessão real do
+Claude Code atravessando auto-compactação. O que sobra de resíduo, porém, é o **contrato do
+Claude Code** (disparar `PreCompact`, preservar o `cwd`), não o motor.
 
 Também pendente: os quatro cenários de aceite com projetos-cobaia. O lançador
 (`hooks/engine.sh`) tem suíte automatizada (`ferramentas/tests/test_lancador.py`) cobrindo os

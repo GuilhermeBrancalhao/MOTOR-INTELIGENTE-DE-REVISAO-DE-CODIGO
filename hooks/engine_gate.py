@@ -88,18 +88,15 @@ def principal() -> int:
 
         raiz = raiz_do_ciclo(Path(evento.get("cwd") or "."))
 
+        # Leitura barata fora do cadeado, só para desistir cedo no caso comum
+        # (motor desligado). A decisão que importa é retomada lá dentro, sobre o
+        # estado relido — nada aqui é usado para gravar.
         dados = estado.carregar(raiz)
         if not dados or not dados.get("ativo"):
             return 0
 
         fase = dados.get("fase")
         if fase not in _FASES_QUE_EXIGEM_EVIDENCIA:
-            return 0
-
-        cobrancas = dados.get("cobrancas_por_fase")
-        if not isinstance(cobrancas, dict):
-            cobrancas = {}
-        if cobrancas.get(fase, 0) >= 1:
             return 0
 
         trilha_dados = trilha.ler(raiz)
@@ -113,17 +110,32 @@ def principal() -> int:
         if tem_acao_da_fase:
             return 0
 
-        # O contador é o requisito central desta tarefa: grava ANTES de cobrar,
-        # para que a segunda invocação do Stop nesta fase (mesmo em outra
-        # sessão) já ache `>= 1` e não cobre de novo.
-        cobrancas[fase] = cobrancas.get(fase, 0) + 1
-        dados["cobrancas_por_fase"] = cobrancas
+        # "Ler o contador, decidir cobrar, incrementar" tem que ser UMA operação.
+        # Com os três passos soltos, dois Stop simultâneos (duas sessões na mesma
+        # pasta) liam ambos `0`, cobravam ambos, e o incremento de um sobrescrevia
+        # o do outro -- a cobrança "só uma vez por fase" acontecia duas vezes e o
+        # contador terminava em 1. `atualizar` relê de dentro do cadeado, então o
+        # segundo enxerga o `1` que o primeiro gravou e devolve `None`.
+        def _cobrar_uma_vez(atual: dict | None) -> dict | None:
+            if not atual or not atual.get("ativo") or atual.get("fase") != fase:
+                return None
+            cobrancas = atual.get("cobrancas_por_fase")
+            if not isinstance(cobrancas, dict):
+                cobrancas = {}
+            if cobrancas.get(fase, 0) >= 1:
+                return None
+            cobrancas[fase] = cobrancas.get(fase, 0) + 1
+            atual["cobrancas_por_fase"] = cobrancas
+            return atual
+
         try:
-            estado.gravar(raiz, dados)
+            if estado.atualizar(raiz, _cobrar_uma_vez) is None:
+                # Ou já foi cobrado, ou a fase mudou por baixo: não cobra.
+                return 0
         except Exception:  # noqa: BLE001
-            # Não conseguiu persistir o contador: cobrar agora arriscaria um
-            # laço (a próxima invocação não veria o incremento), então melhor
-            # deixar passar desta vez.
+            # Não conseguiu persistir o contador (inclusive `EstadoOcupado`):
+            # cobrar agora arriscaria um laço (a próxima invocação não veria o
+            # incremento), então melhor deixar passar desta vez.
             return 0
 
         print(

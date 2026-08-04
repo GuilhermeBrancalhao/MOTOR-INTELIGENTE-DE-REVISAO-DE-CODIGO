@@ -313,13 +313,11 @@ def main() -> int:
         # Avanço de fase no meio da sequência.
         for turno_gatilho, destino in TRANSICOES_NO_MEIO:
             if turno == turno_gatilho:
-                dados = estado.carregar(raiz)
-                fase_antes = dados["fase"]
-                estado.transicionar(dados, destino)
-                estado.gravar(raiz, dados)
+                fase_antes = (estado.carregar(raiz) or {})["fase"]
+                estado.atualizar(raiz, lambda atual: estado.transicionar(atual, destino))
                 linhas_de_log.append(
                     f"          -- transição de fase: {fase_antes} -> {destino} "
-                    f"(via estado.transicionar + estado.gravar)"
+                    f"(via estado.atualizar + estado.transicionar)"
                 )
 
     # ---- Estado ao fim dos 20 turnos, ANTES de exercitar o gate ----

@@ -99,12 +99,26 @@ def principal() -> int:
             return 0
 
         trilha_dados = trilha.ler(raiz)
-        linhas_do_ciclo = _linhas_do_ciclo_corrente(dados, trilha_dados)
-        dados["ultima_consolidacao"] = _agora()
-        dados["resumo_trilha"] = _resumo_por_nivel(linhas_do_ciclo)
+        carimbo = _agora()
+
+        # Sob cadeado, e relendo de dentro dele. Este hook é o pior lugar possível
+        # para um *lost update*: ele dispara exatamente quando o contexto vai ser
+        # descartado, então o que ele apagar do estado não sobra em lugar nenhum —
+        # nem no disco, nem no contexto que a compactação levou. Com a leitura
+        # solta de antes, uma transição de fase feita por outra sessão entre o
+        # `carregar` e o `gravar` desaparecia justamente no instante em que o disco
+        # virava a única memória do motor.
+        def _consolidar(atual: dict | None) -> dict | None:
+            if not atual or not atual.get("ativo"):
+                return None
+            atual["ultima_consolidacao"] = carimbo
+            atual["resumo_trilha"] = _resumo_por_nivel(
+                _linhas_do_ciclo_corrente(atual, trilha_dados)
+            )
+            return atual
 
         try:
-            estado.gravar(raiz, dados)
+            estado.atualizar(raiz, _consolidar)
         except Exception:  # noqa: BLE001
             pass
         return 0
