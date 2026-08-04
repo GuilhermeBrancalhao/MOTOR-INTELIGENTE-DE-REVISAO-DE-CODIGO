@@ -4,6 +4,15 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 5)
+
+### 18-DEVSECOPS promovido a PRONTO (20/42)
+
+18-DEVSECOPS escrito do zero (17 secoes, PROCESSO, depende_de: ["17"]) — o processo que faz os
+controles do 17-SECURITY rodarem no pipeline a cada mudanca: gate bloqueia por padrao, excecao
+so via waiver nomeado e com prazo, waiver expirado volta a bloquear sem revogacao manual.
+gate.py (Controle, Waiver, GateDeSeguranca), 6 testes. Auditoria 8,1.
+
 ## 2026-08-04 (lote 4)
 
 ### 16-INTEGRATION promovido a PRONTO (19/42)

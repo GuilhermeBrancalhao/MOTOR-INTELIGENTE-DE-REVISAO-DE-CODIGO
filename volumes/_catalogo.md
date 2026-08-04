@@ -23,5 +23,6 @@ no contexto.
 - **15-CONTEXT** — tipo ENGINE
 - **16-INTEGRATION** — tipo ARQUITETURA
 - **17-SECURITY** — tipo GOVERNANCA
+- **18-DEVSECOPS** — tipo PROCESSO
 - **21-OBSERVABILITY** — tipo GOVERNANCA
 - **31-TESTING** — tipo PROCESSO
