@@ -4,6 +4,17 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 14)
+
+### 28-PROMPT-COMPILER promovido a PRONTO (29/42)
+
+28-PROMPT-COMPILER escrito do zero (18 secoes, ENGINE, depende_de: ["07"]) — compila prompt ja
+PROMOVIDO (07) em payload concreto de provedor: so aceita prompt promovido, determinismo por
+ausencia de estado externo, orcamento de tokens verificado apos renderizacao (nunca truncamento
+silencioso), dialeto isolado atras de adaptador injetado, ponto de cache so em conteudo estavel,
+variavel ausente e erro explicito antes da renderizacao. compilador.py (compilar, Dialeto,
+PayloadCompilado), 7 testes. Auditoria 8,1.
+
 ## 2026-08-04 (lote 13)
 
 ### 27-LLM-ROUTER promovido a PRONTO (28/42) — dupla perecível 26/27 completa
