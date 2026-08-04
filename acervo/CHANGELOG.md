@@ -4,6 +4,19 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 25)
+
+### 40-TEMPLATES promovido a PRONTO (40/42) — segundo BIBLIOTECA
+
+40-TEMPLATES escrito do zero (17 secoes, BIBLIOTECA, 04-Catalogo) — catalogo de templates
+reutilizaveis: variavel obrigatoria declarada, versionado (conteudo gerado nunca presumido
+compativel com versao mais nova), validado no uso (variavel ausente falha explicito), nunca com
+conteudo especifico de dominio embutido (reaproveita o mesmo mecanismo de verificacao ja usado
+por toda auditoria de volume deste acervo), depreciacao explicita com motivo. Formaliza os
+templates ja em uso (front-matter, _VOLUME.yml, conftest.py). catalogo_de_templates.py
+(Template, renderizar, verificar_compatibilidade), 7 testes. Auditoria 8,1 — dominio neutro
+confirmado com nota especial (auto-referencia intencional ao mecanismo, nao vazamento).
+
 ## 2026-08-04 (lote 24)
 
 ### 39-ROADMAP promovido a PRONTO (39/42)

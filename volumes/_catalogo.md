@@ -45,3 +45,4 @@ no contexto.
 - **37-CODE-GENERATION** — tipo ENGINE
 - **38-PROJECT-PLANNER** — tipo PROCESSO
 - **39-ROADMAP** — tipo PROCESSO
+- **40-TEMPLATES** — tipo BIBLIOTECA
