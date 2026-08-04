@@ -1,7 +1,0 @@
-volume: "44"
-nome: INDICADORES-KPI
-tipo: PROCESSO
-status: RASCUNHO
-perecivel: false
-depende_de: []
-escopo: Métricas de negócio, dashboards, ratios financeiros

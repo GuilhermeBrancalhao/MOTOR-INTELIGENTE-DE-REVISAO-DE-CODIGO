@@ -1,80 +1,86 @@
-# Estado do acervo de Controladoria — medição de 2026-08-04
+# Estado do acervo de Controladoria
 
-Este arquivo registra o resultado da **primeira validação já executada** sobre
-`acervo-controladoria/`. Até esta data, nenhuma ferramenta, teste ou gate deste repositório
-apontava para cá: os 12 volumes existiam sem que seu estado tivesse sido medido uma única vez.
+**Atualizado em:** 2026-08-04
 
-O laudo abaixo é medição, não opinião. Todos os números são reproduzíveis pelos comandos citados.
+Este acervo foi **reduzido ao que nele é real** em 2026-08-04, por decisão do autor. Restam dois
+volumes: `45-CONCILIACAO-CONTAS`, conforme, e `54-INTEGRACAO-ERP`, parcial. Os dez volumes que
+eram esqueletos foram removidos.
 
-## Como reproduzir
+## Como reproduzir a medição
 
 ```
 cd acervo
 python -m ferramentas.validar --raiz ../acervo-controladoria --tudo
-python -m ferramentas.validar --raiz ../acervo-controladoria 45
 cd .. && python -m pytest acervo-controladoria/exemplos -q
 ```
 
-## Resultado por volume
+## Estado atual
 
-| Volume | Tipo (contrato) | Violações | Prosa | Exemplo | Estado real |
+| Volume | Tipo | Violações | Prosa | Exemplo | Estado |
 |---|---|---:|---:|---|---|
-| 43-CONTABILIDADE-BASICA | ENGINE | 38 | 287 | — | esqueleto |
-| 44-INDICADORES-KPI | PROCESSO | 36 | 283 | — | esqueleto |
-| **45-CONCILIACAO-CONTAS** | **ENGINE** | **0** | **5.665** | **6 módulos** | **conforme** |
-| 46-ORCAMENTO-FORECAST | PROCESSO | 36 | 279 | — | esqueleto |
-| 47-FLUXO-CAIXA | PROCESSO | 36 | 279 | — | esqueleto |
-| 48-CUSTOS-ABC | ENGINE | 38 | 275 | — | esqueleto |
-| 49-ANALISE-FINANCEIRA | PROCESSO | 36 | 283 | — | esqueleto |
-| 50-COMPLIANCE-FISCAL | GOVERNANCA | 38 | 283 | — | esqueleto |
-| 51-RELATORIOS-GERENCIAIS | PROCESSO | 36 | 275 | — | esqueleto |
-| 52-CONSOLIDACAO-CONTAS | ENGINE | 38 | 275 | — | esqueleto |
-| 53-AUDITORIA-TRILHA | GOVERNANCA | 38 | 275 | — | esqueleto |
-| 54-INTEGRACAO-ERP | ARQUITETURA | 39 | 1.344 | 2 módulos | parcial |
-| **TOTAL** | | **420** | **9.803** | **30 testes** | |
+| **45-CONCILIACAO-CONTAS** | ENGINE | **0** | 5.665 | 6 módulos | **conforme** |
+| 54-INTEGRACAO-ERP | ARQUITETURA | 41 | 1.344 | 2 módulos | parcial |
 
-## Leitura do resultado
+Os 30 testes de `exemplos/` passam.
 
-**Um volume está conforme.** `45-CONCILIACAO-CONTAS` passa o gate estrutural com zero violações,
-tem 5.665 palavras de prosa real e seis módulos de exemplo. É trabalho legítimo e completo pelo
-critério 1 da Definição de PRONTO.
+### 45-CONCILIACAO-CONTAS — conforme
 
-**Um volume está parcial.** `54-INTEGRACAO-ERP` tem 1.344 palavras e um exemplo real
-(`normalizar.py`, normalização de CSV de banco/fintech sem API, testado contra dado real), mas
-15 das 18 seções estão abaixo do mínimo de substância.
+Passa o gate estrutural com zero violações: 18 seções com front-matter, 5.665 palavras de prosa
+real, seis módulos de exemplo (`ancora`, `casamento`, `confianca`, `guarda`, `trilha` e um teste
+de fluxo completo). Satisfaz o critério 1 da Definição de PRONTO. Falta-lhe o critério 3 —
+auditoria por modelo distinto registrada em `auditorias/` — para ser promovido a `PRONTO`.
 
-**Dez volumes são esqueletos.** Cerca de 280 palavras distribuídas em 18 seções — aproximadamente
-15 palavras por seção. `43-CONTABILIDADE-BASICA/01-Introducao.md`, por exemplo, tem cinco linhas:
-título, uma frase de escopo, o tipo e a frase "Volume essencial para Controladoria moderna". Não
-há front-matter em nenhuma das 18 seções desses volumes.
+### 54-INTEGRACAO-ERP — parcial
 
-Isto é exatamente a patologia que o `ROADMAP.md` do acervo principal registrou em 2026-08-03 —
-"esqueletos gerados em lote, não conteúdo real" — repetida aqui por outra sessão.
+Tem um exemplo real e útil: `normalizar.py`, normalização de CSV de exportação de banco e
+fintech sem API, com detecção automática de coluna crítica por padrão de nome, cobrindo mais de
+40 bancos e testado contra dado real. O código é legítimo; a prosa em volta dele é que está
+incompleta.
 
-## O curto-circuito que escondia 234 violações
+As 41 violações se distribuem em: 17 seções sem front-matter, 15 seções abaixo do mínimo de
+substância, os dois diagramas que o tipo `ARQUITETURA` exige (`C4Context` e `sequenceDiagram`), e
+uma citação defeituosa.
 
-A primeira medição acusou **186** violações. O número verdadeiro é **420**.
+**A citação defeituosa merece nota**, porque não é falta de conteúdo e sim um erro que se corrige
+sozinho quando alguém olhar: `11-Implementacao.md` cita
+`exemplos/54-integracao-erp/tests/test_normalizar.py` como se fosse um módulo de exemplo. O gate
+então cobra um teste *do teste*, em
+`exemplos/54-integracao-erp/tests/tests/test_test_normalizar.py`. A citação deveria apontar para
+`exemplos/54-integracao-erp/normalizar.py`, o módulo de fato.
 
-A diferença tem causa mecânica: seis volumes declaravam `tipo: PROCESSO` no `_VOLUME.yml`
-enquanto o `contrato.json` os define como `ENGINE`, `GOVERNANCA` ou `ARQUITETURA`. O validador
-reprova por `volume-tipo` e **para ali**, sem chegar a examinar as 18 seções. Um volume inteiro
-de esqueletos aparecia como "1 violação".
+## O que foi removido, e por quê
 
-Os stubs carimbaram `PROCESSO` em todos os 12 volumes indiscriminadamente — o gerador escreveu a
-linha `Tipo: PROCESSO` até dentro do corpo de `01-Introducao.md`. O único volume escrito de
-verdade, o `45`, declara `ENGINE` e casa com o contrato. Isso identifica com segurança qual lado
-estava errado: o `contrato.json` é a fonte única de verdade, e os `_VOLUME.yml` dos stubs foram
-alinhados a ele.
+Dez volumes — `43`, `44`, `46`, `47`, `48`, `49`, `50`, `51`, `52`, `53` — foram removidos por
+`git rm` em 2026-08-04. Cada um tinha 18 arquivos de seção somando cerca de 280 palavras, isto é,
+aproximadamente 15 palavras por seção, sem front-matter e sem exemplo. O `01-Introducao.md` de
+`43-CONTABILIDADE-BASICA` tinha cinco linhas: título, uma frase de escopo, o tipo e a frase
+"Volume essencial para Controladoria moderna".
 
-Um sétimo volume, o `54`, falhava por outra causa: `escopo:` usava bloco YAML `>`, que o
-front-matter restrito da plataforma não aceita (só `chave: valor`). Colapsado para uma linha.
+Eram andaime gerado em lote, não conteúdo — a mesma patologia que o `ROADMAP.md` do acervo
+principal registrou em 2026-08-03. **Continuam recuperáveis pelo histórico do git** (estavam em
+`HEAD` até o commit desta remoção), caso venha a existir intenção concreta de escrevê-los.
+
+O `contrato.json` foi reduzido junto: declarava doze volumes, declara agora os dois que existem.
+Contrato que promete o que não existe deixa de ser fonte de verdade.
+
+## Medição anterior, preservada como registro
+
+A validação de 2026-08-04, antes da redução, encontrou **420 violações** nos doze volumes.
+
+O total aparente inicial era **186**, e a diferença tinha causa mecânica: seis volumes declaravam
+`tipo: PROCESSO` no `_VOLUME.yml` enquanto o `contrato.json` os definia como `ENGINE`,
+`GOVERNANCA` ou `ARQUITETURA`. O validador reprovava por `volume-tipo` e **parava ali**, sem
+examinar as 18 seções — um volume inteiro de esqueletos aparecia como "1 violação".
+
+Os stubs haviam carimbado `PROCESSO` nos doze indiscriminadamente; o gerador escreveu a linha
+`Tipo: PROCESSO` até dentro do corpo de `01-Introducao.md`. O `45`, único escrito de verdade,
+declarava `ENGINE` e casava com o contrato — o que identificou com segurança qual lado errara.
 
 **É a mesma classe de defeito do bug de BOM UTF-8 de 2026-08-03**, que fazia 39 violações
-aparentes esconderem 657 reais: um erro que reprova cedo mascara todo o resto. Vale como regra
-geral para este repositório — sempre que um gate reprovar por metadado, desconfiar do total até
-que o metadado esteja correto.
+aparentes esconderem 657 reais. Vale como regra para este repositório: quando um gate reprovar
+por metadado, o total não é confiável até o metadado estar correto.
 
-## Os 30 testes órfãos
+## Dívida que permanece: os 30 testes órfãos
 
 `acervo-controladoria/exemplos/` tem 30 testes que passam, e **nenhuma suíte os coleta**:
 
@@ -84,40 +90,10 @@ que o metadado esteja correto.
 | acervo | 789 | `pytest` de dentro de `acervo/` |
 | controladoria | 30 | **nenhuma** — só manualmente |
 
-A raiz coleta só a suíte do motor por decisão documentada no `pytest.ini` (dois pacotes
-`ferramentas` colidem numa sessão só). O acervo roda de dentro de si. O acervo de controladoria
-não foi contemplado por nenhum dos dois arranjos, então seus testes existem sem nunca serem
-executados por rotina — passam hoje por coincidência de ninguém ter mexido no código, não por
-verificação.
+A raiz coleta só a suíte do motor por decisão documentada no `pytest.ini`: dois pacotes
+`ferramentas`, o da raiz e o de `acervo/`, colidem numa sessão só de pytest. O acervo roda de
+dentro de si. Este acervo não foi contemplado por nenhum dos dois arranjos, então seus testes
+passam hoje por ninguém ter mexido no código, não por verificação de rotina.
 
-## O que falta para conformidade
-
-Levar os 11 volumes não-conformes ao padrão do `45` significa escrever aproximadamente **55 mil
-palavras** de doutrina contábil densa (contabilidade geral, KPI, orçamento, fluxo de caixa,
-custeio ABC, análise financeira, compliance fiscal, relatórios gerenciais, consolidação, trilha
-de auditoria, integração ERP), mais exemplo executável, testes e auditoria por volume.
-
-**Esse trabalho não deveria ser feito por geração automática**, e a razão está na decisão
-fundadora desta plataforma: perseguir a contagem de volumes força conteúdo genérico, o que
-contradiz a regra "nunca gere conteúdo superficial". Os dez esqueletos existem precisamente
-porque uma sessão anterior tentou o atalho. Repetir o atalho em escala maior produziria 55 mil
-palavras de texto plausível e sem autoridade — pior que o esqueleto, porque o esqueleto ao menos
-é honesto sobre estar vazio.
-
-Contabilidade e controladoria são domínio de expertise do autor. A prosa desses volumes precisa
-da autoridade dele, não de paráfrase de manual.
-
-## Decisão pendente do autor
-
-Registrado, não decidido:
-
-1. **Incorporar** — `acervo-controladoria/` entra no contrato e nas ferramentas, com os 11
-   volumes voltando a `RASCUNHO` declarado e sendo escritos ao longo do tempo, um a um, como
-   foram os 42 do acervo principal.
-2. **Separar** — vira repositório próprio, com contrato, ferramentas e suíte próprios.
-3. **Reduzir ao que é real** — preservar `45` e `54`, que são trabalho legítimo, e remover os dez
-   esqueletos até que haja intenção concreta de escrevê-los.
-
-Enquanto não se decide, os 30 testes continuam fora de qualquer rotina e os dez esqueletos
-continuam convivendo com conteúdo verificado — a ambiguidade que a Definição de PRONTO existe
-para eliminar.
+Enquanto isso não se resolve, "os 30 testes passam" é uma afirmação sobre a última vez que
+alguém os rodou à mão, e não uma garantia mantida pelo repositório.

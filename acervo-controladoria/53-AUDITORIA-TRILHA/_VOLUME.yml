@@ -1,7 +1,0 @@
-volume: "53"
-nome: AUDITORIA-TRILHA
-tipo: GOVERNANCA
-status: RASCUNHO
-perecivel: false
-depende_de: []
-escopo: Trilha completa, imutabilidade, rastreamento

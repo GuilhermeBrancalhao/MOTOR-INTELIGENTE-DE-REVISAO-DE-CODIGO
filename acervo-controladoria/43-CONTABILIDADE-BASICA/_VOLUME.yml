@@ -1,7 +1,0 @@
-volume: "43"
-nome: CONTABILIDADE-BASICA
-tipo: ENGINE
-status: RASCUNHO
-perecivel: false
-depende_de: []
-escopo: GL, Journal Entries, contas, plano de contas

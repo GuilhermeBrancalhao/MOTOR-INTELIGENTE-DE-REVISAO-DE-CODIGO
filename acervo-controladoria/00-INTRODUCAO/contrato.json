@@ -51,17 +51,7 @@
     }
   },
   "volumes": {
-    "43": {"nome": "CONTABILIDADE-BASICA", "tipo": "ENGINE", "perecivel": false},
-    "44": {"nome": "INDICADORES-KPI", "tipo": "PROCESSO", "perecivel": false},
     "45": {"nome": "CONCILIACAO-CONTAS", "tipo": "ENGINE", "perecivel": false},
-    "46": {"nome": "ORCAMENTO-FORECAST", "tipo": "PROCESSO", "perecivel": false},
-    "47": {"nome": "FLUXO-CAIXA", "tipo": "PROCESSO", "perecivel": false},
-    "48": {"nome": "CUSTOS-ABC", "tipo": "ENGINE", "perecivel": false},
-    "49": {"nome": "ANALISE-FINANCEIRA", "tipo": "PROCESSO", "perecivel": false},
-    "50": {"nome": "COMPLIANCE-FISCAL", "tipo": "GOVERNANCA", "perecivel": false},
-    "51": {"nome": "RELATORIOS-GERENCIAIS", "tipo": "PROCESSO", "perecivel": false},
-    "52": {"nome": "CONSOLIDACAO-CONTAS", "tipo": "ENGINE", "perecivel": false},
-    "53": {"nome": "AUDITORIA-TRILHA", "tipo": "GOVERNANCA", "perecivel": false},
     "54": {"nome": "INTEGRACAO-ERP", "tipo": "ARQUITETURA", "perecivel": false}
   }
 }

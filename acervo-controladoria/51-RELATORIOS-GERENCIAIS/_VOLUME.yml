@@ -1,7 +1,0 @@
-volume: "51"
-nome: RELATORIOS-GERENCIAIS
-tipo: PROCESSO
-status: RASCUNHO
-perecivel: false
-depende_de: []
-escopo: BI, dashboards executivos, relatórios

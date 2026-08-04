@@ -46,15 +46,22 @@ não é validado por `ferramentas.validar`, não aparece na suíte, não é sinc
 `volumes/prontos/`, e não é mencionado em nenhum `CHANGELOG` ou `README`.
 
 Consequência prática: a afirmação "42/42 `PRONTO`" é verdadeira sobre `acervo/` e **não diz nada**
-sobre `acervo-controladoria/`. É preciso decidir — decisão do autor, não delegável — se esse
-acervo (a) entra no contrato e passa a ser gated como os outros, (b) vira repositório próprio, ou
-(c) é reduzido ao que nele é real.
+sobre `acervo-controladoria/`.
 
-**Medido em 2026-08-04, laudo completo em
-[acervo-controladoria/ESTADO.md](../acervo-controladoria/ESTADO.md):** 420 violações no total.
-Um volume conforme (`45-CONCILIACAO-CONTAS`, zero violações, 5.665 palavras, 6 módulos de
-exemplo), um parcial (`54-INTEGRACAO-ERP`) e **dez esqueletos** de ~15 palavras por seção. Os 30
-testes de `acervo-controladoria/exemplos/` passam mas **nenhuma suíte os coleta**.
+**Medido e resolvido em 2026-08-04, laudo em
+[acervo-controladoria/ESTADO.md](../acervo-controladoria/ESTADO.md).** A validação encontrou 420
+violações nos doze volumes: um conforme (`45-CONCILIACAO-CONTAS`, zero violações, 5.665 palavras,
+6 módulos de exemplo), um parcial (`54-INTEGRACAO-ERP`, exemplo real com testes mas prosa
+incompleta) e **dez esqueletos** de ~15 palavras por seção.
+
+**Decisão do autor: reduzir ao que é real.** Os dez esqueletos foram removidos por `git rm` —
+recuperáveis pelo histórico caso venha a existir intenção de escrevê-los — e o `contrato.json`
+daquele acervo foi reduzido de doze volumes para os dois que existem. Restam `45` (conforme) e
+`54` (41 violações, todas de prosa e diagrama; o código é legítimo).
+
+**Dívida que permanece:** os 30 testes de `acervo-controladoria/exemplos/` passam mas **nenhuma
+suíte os coleta** — nem a da raiz, nem a de `acervo/`. Passam por ninguém ter mexido no código,
+não por verificação de rotina.
 
 A medição também expôs um mascaramento: o total aparente era 186 porque seis volumes reprovavam
 por `volume-tipo` e o validador parava ali, sem examinar as 18 seções. Alinhados os tipos ao
