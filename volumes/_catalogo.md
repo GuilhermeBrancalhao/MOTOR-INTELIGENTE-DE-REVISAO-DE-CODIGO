@@ -46,3 +46,5 @@ no contexto.
 - **38-PROJECT-PLANNER** — tipo PROCESSO
 - **39-ROADMAP** — tipo PROCESSO
 - **40-TEMPLATES** — tipo BIBLIOTECA
+- **41-SDK** — tipo ENGINE
+- **42-PLUGINS** — tipo ENGINE

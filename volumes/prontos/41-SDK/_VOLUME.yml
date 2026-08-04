@@ -1,0 +1,7 @@
+volume: "41"
+nome: SDK
+tipo: ENGINE
+status: PRONTO
+perecivel: false
+depende_de: []
+escopo: SDK exposto a desenvolvedor externo — versionamento semântico real (mudança que quebra exige versão maior), superfície pública mínima e deliberada, erro que orienta correção, compatibilidade retroativa dentro da mesma versão maior, depreciação explícita com motivo antes de remoção, exemplo de uso sempre verificado contra o código real.
