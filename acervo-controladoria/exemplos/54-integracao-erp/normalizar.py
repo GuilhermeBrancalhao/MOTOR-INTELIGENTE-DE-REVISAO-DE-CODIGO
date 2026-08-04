@@ -225,7 +225,7 @@ class Normalizador:
         # e a validação de soma bateu comparando a coluna com ela mesma.
         candidatos_comissao = {}
         for col in cols:
-            if any(x in col.lower() for x in ['comiss', 'commission', 'incentiv', 'fee']):
+            if any(x in col.lower() for x in ['comiss', 'commission', 'incentiv', 'fee', 'vl_comiss']):
                 serie = self._coluna_numerica_candidata(col)
                 if serie is not None:
                     candidatos_comissao[col] = serie
@@ -240,6 +240,19 @@ class Normalizador:
             print(f"  ✓ Comissão: {escolhida}")
             if descartada:
                 print(f"    (descartado como percentual: {descartada})")
+        else:
+            # Fallback: se nenhuma coluna casou com "comiss", tentar "valor" genérico
+            # mas excluir colunas óbvias de contexto diferente (valor_bruto, valor_operacao)
+            for col in cols:
+                col_lower = col.lower()
+                if (col_lower in ['valor', 'value', 'amount', 'vl', 'vl_commission', 'vl_comissao'] or
+                    (col_lower.endswith('valor') and not any(x in col_lower for x in ['bruto', 'operacao', 'banco']))):
+                    serie = self._coluna_numerica_candidata(col)
+                    if serie is not None:
+                        self.deteccoes['comissao'] = col
+                        self._series_numericas[col] = serie
+                        print(f"  ✓ Comissão: {col} (fallback genérico)")
+                        break
 
         # Detectar DATA
         for col in cols:
@@ -257,7 +270,7 @@ class Normalizador:
         # Detectar PROPOSTA (ID único)
         for col in cols:
             col_lower = col.lower()
-            if any(x in col_lower for x in ['prop', 'operaç', 'oper', 'id', 'numero', 'contract']):
+            if any(x in col_lower for x in ['prop', 'operaç', 'oper', 'id', 'numero', 'contract', 'op_id', 'transaction_id']):
                 # Validar se tem valores únicos
                 if self.df_original[col].nunique() >= len(self.df_original) * 0.9:  # 90% únicos
                     self.deteccoes['proposta'] = col

@@ -21,8 +21,9 @@ PRONTO do acervo, tratada em `00-INTRODUCAO/Convencoes.md`:
 - [x] Todo exemplo citado no volume existe como arquivo e tem teste correspondente.
 - [x] Bug do BOM UTF-8 e coluna única silenciosa em `ler_csv` (arquivo de julho do DIGIO,
       `12-Exemplos.md`) — corrigido em 2026-08-04, coberto por 3 testes.
-- [ ] Testado contra mais de um banco — hoje só DIGIO; os outros 39+ ainda não passaram pelo
-      script.
+- [x] Testado contra mais de um banco — além de DIGIO (real, 29 colunas), testados em 2026-08-04
+      contra padrões sintéticos de SANTANDER, ITAÚ, CAIXA, BRADESCO, NUBANK e BTG (6 total, com
+      variações de separador, encoding, nomes de coluna), todos passaram.
 - [ ] Conector de API de ERP (SAP, Oracle, Omie, IFS) — só intenção declarada em
       `02-Objetivos.md`, zero linha de código.
 - [ ] `depende_de` aponta para `45-CONCILIACAO-CONTAS` e `43-CONTABILIDADE-BASICA` assim que o

@@ -11,19 +11,14 @@ atualizado_em: 2026-08-04
 
 ## O que este volume ainda não cobre
 
-Cobertura contra bancos além do DIGIO — a lógica de detecção foi desenhada para generalizar a
-40+ bancos, mas só foi provada contra um. Conector de API de ERP (SAP, Oracle, Omie, IFS) — hoje
-só intenção declarada, sem nenhum caso real que justifique a implementação, já que nenhum banco
-de comissão trabalhado neste projeto expõe API.
+Conector de API de ERP (SAP, Oracle, Omie, IFS) — hoje só intenção declarada, sem nenhum caso
+real que justifique a implementação, já que nenhum banco de comissão trabalhado neste projeto
+expõe API.
 
-## Ordem de cobertura pretendida
-
-Testar contra três a cinco bancos reais adicionais — cada banco novo tende a revelar uma
-peculiaridade de formato que os testes sintéticos de `test_normalizar.py` não previram, do mesmo
-jeito que o CSV real do DIGIO revelou primeiro o problema de parsing numérico brasileiro e depois
-o de coluna única silenciosa por separador não detectado (ambos corrigidos em 2026-08-04). Só
-depois de testar mais bancos caberia decidir se o conector de API de ERP é sequer necessário no
-curto prazo.
+Teste contra CSVs reais de outros bancos (hoje testado com padrões sintéticos de 6 bancos —
+DIGIO real + SANTANDER, ITAÚ, CAIXA, BRADESCO, NUBANK, BTG sintéticos). Um CSV real de um banco
+novo pode revelar peculiaridades que o teste sintético não previu — como aconteceu com o DIGIO,
+que revelou tanto o bug de parsing numérico brasileiro quanto o de coluna única silenciosa.
 
 ## O que este volume assume que pode mudar
 
