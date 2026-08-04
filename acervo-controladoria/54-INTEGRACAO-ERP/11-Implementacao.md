@@ -1,9 +1,21 @@
+---
+volume: "54"
+volume_nome: INTEGRACAO-ERP
+tipo: ARQUITETURA
+secao: 11-Implementacao
+status: RASCUNHO
+atualizado_em: 2026-08-04
+---
+
 # Implementação
 
-`normalizar.py` é uma classe, `Normalizador`, sem dependência externa além
-de pandas/openpyxl. Fluxo: `ler_csv` → `detectar_colunas` →
-`mapear_para_padrao` → `validar` → `salvar_xlsx` (ou tudo de uma vez via
-`executar`).
+`normalizar.py` é uma classe, `Normalizador`, sem dependência externa além de pandas e
+openpyxl — a mesma escolha de biblioteca padrão que `45-CONCILIACAO-CONTAS` faz pelos mesmos
+motivos: testável sem mock, sem custo de infraestrutura para rodar. Fluxo: `ler_csv` →
+`detectar_colunas` → `mapear_para_padrao` → `validar` → `salvar_xlsx` (ou tudo de uma vez via
+`executar`, que também captura qualquer exceção e imprime o traceback antes de sair com código 1
+— pensado para uso via linha de comando, não para ser chamado de dentro de outro processo Python
+que precise capturar a exceção original).
 
 <!-- exemplo: exemplos/54-integracao-erp/normalizar.py -->
 

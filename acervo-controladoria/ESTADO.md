@@ -3,8 +3,8 @@
 **Atualizado em:** 2026-08-04
 
 Este acervo foi **reduzido ao que nele é real** em 2026-08-04, por decisão do autor. Restam dois
-volumes: `45-CONCILIACAO-CONTAS`, conforme, e `54-INTEGRACAO-ERP`, parcial. Os dez volumes que
-eram esqueletos foram removidos.
+volumes, e os dois hoje passam o gate estrutural com zero violações: `45-CONCILIACAO-CONTAS` e
+`54-INTEGRACAO-ERP`. Os dez volumes que eram esqueletos foram removidos.
 
 ## Como reproduzir a medição
 
@@ -19,7 +19,7 @@ cd .. && python -m pytest acervo-controladoria/exemplos -q
 | Volume | Tipo | Violações | Prosa | Exemplo | Estado |
 |---|---|---:|---:|---|---|
 | **45-CONCILIACAO-CONTAS** | ENGINE | **0** | 5.665 | 6 módulos | **conforme** |
-| 54-INTEGRACAO-ERP | ARQUITETURA | 41 | 1.344 | 2 módulos | parcial |
+| **54-INTEGRACAO-ERP** | ARQUITETURA | **0** | 4.647 | 1 módulo | **conforme** |
 
 Os 30 testes de `exemplos/` passam.
 
@@ -30,23 +30,22 @@ real, seis módulos de exemplo (`ancora`, `casamento`, `confianca`, `guarda`, `t
 de fluxo completo). Satisfaz o critério 1 da Definição de PRONTO. Falta-lhe o critério 3 —
 auditoria por modelo distinto registrada em `auditorias/` — para ser promovido a `PRONTO`.
 
-### 54-INTEGRACAO-ERP — parcial
+### 54-INTEGRACAO-ERP — conforme (reescrito em 2026-08-04, depois desta auditoria)
 
-Tem um exemplo real e útil: `normalizar.py`, normalização de CSV de exportação de banco e
-fintech sem API, com detecção automática de coluna crítica por padrão de nome, cobrindo mais de
-40 bancos e testado contra dado real. O código é legítimo; a prosa em volta dele é que está
-incompleta.
+A medição original desta auditoria encontrou 41 violações — 17 seções sem front-matter, 15
+seções abaixo do mínimo de substância, os dois diagramas que o tipo `ARQUITETURA` exige
+(`C4Context` e `sequenceDiagram`) ausentes, e uma citação defeituosa (`11-Implementacao.md`
+citava `tests/test_normalizar.py` como se fosse módulo de exemplo, fazendo o gate cobrar um
+teste *do teste*). As 18 seções foram reescritas com prosa real ancorada no único exemplo que
+existe de fato — `normalizar.py`, normalização de CSV de banco/fintech sem API, com detecção
+automática de coluna crítica e testado contra dado real do DIGIO — e os dois diagramas exigidos
+foram adicionados em `04-Arquitetura.md` (`C4Context`) e `05-Diagramas.md` (`sequenceDiagram`).
+A citação defeituosa foi corrigida separadamente, antes desta reescrita.
 
-As 41 violações se distribuem em: 17 seções sem front-matter, 15 seções abaixo do mínimo de
-substância, os dois diagramas que o tipo `ARQUITETURA` exige (`C4Context` e `sequenceDiagram`), e
-uma citação defeituosa.
-
-**A citação defeituosa merece nota**, porque não é falta de conteúdo e sim um erro que se corrige
-sozinho quando alguém olhar: `11-Implementacao.md` cita
-`exemplos/54-integracao-erp/tests/test_normalizar.py` como se fosse um módulo de exemplo. O gate
-então cobra um teste *do teste*, em
-`exemplos/54-integracao-erp/tests/tests/test_test_normalizar.py`. A citação deveria apontar para
-`exemplos/54-integracao-erp/normalizar.py`, o módulo de fato.
+Satisfaz o critério 1 da Definição de PRONTO, como o 45. Falta-lhe, além do critério 3
+(auditoria por modelo distinto): cobertura contra mais de um banco (hoje só DIGIO, e um dos dois
+arquivos do DIGIO tem bug conhecido de BOM UTF-8 ainda não corrigido, ver `12-Exemplos.md`
+daquele volume) e o conector de API de ERP, que permanece só intenção declarada.
 
 ## O que foi removido, e por quê
 

@@ -1,3 +1,12 @@
+---
+volume: "54"
+volume_nome: INTEGRACAO-ERP
+tipo: ARQUITETURA
+secao: 12-Exemplos
+status: RASCUNHO
+atualizado_em: 2026-08-04
+---
+
 # Exemplos Práticos
 
 ## Caso real — DIGIO, janeiro/2026 (`110075 02.01.csv`)
@@ -24,3 +33,12 @@ O mesmo banco, arquivo de julho (`DIGIO - 110075 01.07.csv`), tem BOM UTF-8
 nesse arquivo — lê como 2 colunas em vez de ~29 — e ainda não foi
 corrigida. É um bug diferente deste (está em `ler_csv`, não na detecção de
 comissão), registrado aqui para não se perder.
+
+## Por que este caso específico, e não um sintético inventado
+
+O caso do DIGIO entrou neste volume porque foi reproduzido rodando o script contra o arquivo de
+produção real, não porque foi montado para ilustrar o ponto. A diferença importa: um cenário
+sintético provaria só que a lógica de desempate funciona no papel; o CSV real provou, além
+disso, que a causa raiz era mais profunda do que parecia — o problema não era só a ordem das
+colunas, era o parsing numérico brasileiro escondendo a coluna certa antes mesmo do desempate
+entrar em jogo.

@@ -1,3 +1,12 @@
+---
+volume: "54"
+volume_nome: INTEGRACAO-ERP
+tipo: ARQUITETURA
+secao: 03-Escopo
+status: RASCUNHO
+atualizado_em: 2026-08-04
+---
+
 # Escopo
 
 ## Dentro deste volume
@@ -21,11 +30,16 @@ transformar CSV bruto de banco nesse formato é deste volume, não daquele.
 `normalizar.py` é a peça que fecha essa lacuna, antes da conciliação.
 
 **Categoria contábil e centro de custo do lançamento já normalizado** é
-`43-CONTABILIDADE-BASICA`.
+`43-CONTABILIDADE-BASICA` (removido deste acervo por ser esqueleto sem
+conteúdo real; a responsabilidade continua sendo dele quando for reescrito).
 
 ## Fronteira deliberada
 
 Este volume não decide casamento nem confiança — só entrega o dado bancário
 num formato padrão e validado. Misturar as duas responsabilidades faria o
 mesmo módulo saber demais sobre formato de arquivo E sobre regra de negócio
-de conciliação, dificultando testar as duas em isolamento.
+de conciliação, dificultando testar as duas em isolamento. A mesma lógica
+vale para a segunda frente: se o conector de API de ERP algum dia for
+implementado, ele deve produzir o mesmo modelo `PROCESSADO` que
+`normalizar.py` produz hoje — o consumidor (`45-CONCILIACAO-CONTAS`) não
+deveria precisar saber qual das duas origens gerou o dado que está lendo.
