@@ -9,9 +9,9 @@ atualizado_em: 2026-08-04
 
 # Implementação
 
-<!-- exemplo: exemplos/15-context/orcamento_contexto.py -->
+<!-- exemplo: exemplos/15-context/orcamento.py -->
 
-`orcamento_contexto.py`, citado acima, formaliza C1-C6: `Orcamento` recusa `margem_compactacao` zero
+`orcamento.py`, citado acima, formaliza C1-C6: `Orcamento` recusa `margem_compactacao` zero
 (C4); `montar_janela` descarta por `ORDEM_DE_PRIORIDADE`, nunca por ordem de chegada (C2); todo
 item removido gera `Descarte` correspondente (C3); `INSTRUCAO_SISTEMA` só é recusada, nunca
 descartada silenciosamente, quando sozinha excede o orçamento total (C6).

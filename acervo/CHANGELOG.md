@@ -4,6 +4,29 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 3)
+
+### 15-CONTEXT promovido a PRONTO (18/42) — grupo 2 completo
+
+15-CONTEXT escrito do zero (18 secoes, ENGINE) — orcamento de janela de contexto, independente
+de RAG (depende_de: []): orcamento total declarado explicitamente, prioridade entre categorias
+de conteudo decidida antes da pressao de orcamento acontecer, todo descarte registrado, gatilho
+de compactacao com margem. orcamento_contexto.py, 7 testes. Auditoria 8,0.
+
+Com este volume, o grupo 2 do ROADMAP.md (11-KNOWLEDGE, 13-RAG, 14-VECTOR, 15-CONTEXT — fonte,
+pipeline, indice, janela) esta completo, seguindo exatamente as fronteiras decididas em
+2026-07-29.
+
+**Colisao real de modulo encontrada e corrigida.** `08-agent-engine/orcamento.py` e
+`15-context/orcamento.py` reivindicavam o mesmo nome — sem __init__.py em tests/, pytest importa
+por basename e o segundo colide com o primeiro ja em cache. Renomeado o de 15-context para
+orcamento_contexto.py (modulo + teste + citacao em 11-Implementacao.md). Registrado em
+ROADMAP.md como confirmacao da divida ja prevista: a verificacao de gate que reprovaria essa
+classe de colisao automaticamente continua nao implementada.
+
+449 testes do motor + 264 do acervo + 299 dos exemplos (suite inteira roda sem colisao), todos
+verdes. volumes/prontos/ regenerado.
+
 ## 2026-08-04 (lote 2)
 
 ### 06, 11, 14, 13 promovidos a PRONTO (17/42)

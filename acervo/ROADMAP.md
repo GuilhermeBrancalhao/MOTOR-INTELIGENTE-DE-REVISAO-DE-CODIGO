@@ -203,8 +203,16 @@ pacote `tests`, a colisão não se manifesta, e `python -m pytest exemplos -q` r
 `conftest.py` dos outros oito — mexer em volume selado exige reauditoria do `07`, que é o motivo
 de não ter sido feito ainda. E escrever a convenção em
 [00-INTRODUCAO/Convencoes.md](00-INTRODUCAO/Convencoes.md), com uma verificação no gate que
-reprove `__init__.py` dentro de `exemplos/*/tests/` — hoje nada impede o padrão errado de voltar,
-e a prova disso é que a suíte só passa por sorte de haver um único infrator.
+reprove `__init__.py` dentro de `exemplos/*/tests/` — hoje nada impede o padrão errado de voltar.
+
+**A previsão se confirmou em 2026-08-04.** `08-agent-engine/orcamento.py` e
+`15-context/orcamento.py` reivindicaram o mesmo nome de módulo — sem `__init__.py`, pytest
+importa cada `test_orcamento.py` pelo basename, e o segundo colide com o primeiro já em cache
+(`import file mismatch`). Corrigido renomeando o de `15-context` para `orcamento_contexto.py`
+(módulo e teste), mas a causa raiz continua: **nada além de escolha manual de nome único evita a
+colisão**, e com 9 pastas de exemplo (crescendo a cada lote de volumes promovidos), a chance de
+duas escolherem o mesmo nome genérico (`orcamento`, `modelo`, `processo`) só aumenta. A
+verificação de gate que reprovaria isso automaticamente continua não implementada.
 
 ## Fora de escopo neste ciclo
 
