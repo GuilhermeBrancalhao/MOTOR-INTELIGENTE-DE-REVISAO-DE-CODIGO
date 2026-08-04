@@ -4,6 +4,20 @@ Registro de estado do acervo. Toda mudança de status de volume passa por aqui c
 critério 4 da Definição de PRONTO é exatamente a entrada neste arquivo. Datas em ISO
 `YYYY-MM-DD`, mais recente no topo.
 
+## 2026-08-04 (lote 11)
+
+### 25-API-ARCHITECT promovido a PRONTO (26/42) — grupo 4 completo (16 vs 22-25)
+
+25-API-ARCHITECT escrito do zero (18 secoes, ARQUITETURA) — contrato exposto ao cliente dentro
+do mesmo produto: versionamento explicito sem quebra sob a mesma versao, traducao obrigatoria
+entre formato interno e externo (nunca expoe persistencia diretamente), erro consistente em
+todos os endpoints, status de trabalho assincrono como recurso consultavel, orcamento de
+latencia declarado para operacao sincrona. contrato_api.py (ContratoDeEndpoint, ErroDeAPI,
+status_do_trabalho, declarar_endpoint_sincrono), 7 testes. Auditoria 8,1.
+
+Com este volume, o grupo 4 do ROADMAP.md (16-INTEGRATION vs. 22-25, fronteira do produto vs.
+camadas internas) esta completo.
+
 ## 2026-08-04 (lote 10)
 
 ### 24-DATABASE-ARCHITECT promovido a PRONTO (25/42)
