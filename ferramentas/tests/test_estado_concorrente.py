@@ -247,36 +247,53 @@ def test_atualizar_ve_o_disco_e_nao_o_que_quem_chamou_leu(tmp_path):
 # A trava contra reintrodução
 # --------------------------------------------------------------------------
 
-#: `estado.py` é a casa do cadeado e chama `gravar` por dentro; os testes montam
-#: cenário e podem gravar direto.
-_PODEM_GRAVAR_DIRETO = {"estado.py"}
+#: As DUAS máquinas de estado da pasta `.engine/`, cada uma com a chamada insegura que
+#: nenhum módulo de produção pode conter e o módulo que é a casa dela (esse pode: é
+#: quem toma o cadeado e chama a escrita por dentro).
+#:
+#: A segunda linha nasceu de um defeito real. A trava original vigiava só o ciclo, e o
+#: `programa.json` — a máquina de estado que decide se um SISTEMA inteiro pode ser dado
+#: por concluído — ficou com oito mutações fora de qualquer cadeado, apesar de
+#: `programa.atualizar` existir, pronto e nunca chamado. Uma trava que cobre uma das
+#: duas máquinas dá a impressão de que as duas estão cobertas, e foi por isso que o
+#: defeito atravessou a revisão: ninguém procura o que o teste jura estar vigiando.
+_MAQUINAS_DE_ESTADO = [
+    ("estado.gravar(", "estado.py", "estado.atualizar"),
+    ("programa.gravar(", "programa.py", "programa.atualizar"),
+]
 
 
-def test_nenhum_gravar_fora_do_estado():
-    """Mutação de estado passa por `atualizar`, nunca por `gravar` solto.
+@pytest.mark.parametrize(
+    "chamada_insegura, casa, mutador_seguro", _MAQUINAS_DE_ESTADO
+)
+def test_nenhum_gravar_fora_do_mutador(chamada_insegura, casa, mutador_seguro):
+    """Mutação de estado passa pelo mutador sob cadeado, nunca pela escrita solta.
 
-    `gravar` continua público porque testes e ferramentas de montagem precisam
-    dele, mas em código de produção ele é a metade insegura da operação: grava sem
-    reler, que é exatamente o *lost update*. Esta trava existe porque a correção
-    de 2026-08-04 teve de encontrar os cinco sítios um a um (`cli.py` em dois
-    lugares, `engine_gate.py`, `engine_salvar.py`, `estado.registrar_diff`) — o
-    sexto que alguém acrescentar tem que aparecer sozinho.
+    A escrita continua pública porque testes e ferramentas de montagem precisam dela,
+    mas em código de produção ela é a metade insegura da operação: grava sem reler, que
+    é exatamente o *lost update*. Esta trava existe porque a correção de 2026-08-04
+    teve de encontrar os cinco sítios do CICLO um a um (`cli.py` em dois lugares,
+    `engine_gate.py`, `engine_salvar.py`, `estado.registrar_diff`), e a de 2026-08-05
+    teve de encontrar os oito do PROGRAMA — todos no `cli.py`. O próximo que alguém
+    acrescentar, em qualquer uma das duas máquinas, tem que aparecer sozinho.
+
+    Mutação alvo: devolver um sub-verbo do programa para o padrão ler-solto → gravar.
     """
     producao = [
         arquivo
         for pasta in ("ferramentas", "hooks")
         for arquivo in (RAIZ_DO_MOTOR / pasta).glob("*.py")
-        if arquivo.name not in _PODEM_GRAVAR_DIRETO
+        if arquivo.name != casa
     ]
     assert producao, "esperava encontrar módulos de produção para inspecionar"
 
     culpados = [
         arquivo.name
         for arquivo in producao
-        if "estado.gravar(" in arquivo.read_text(encoding="utf-8", errors="ignore")
+        if chamada_insegura in arquivo.read_text(encoding="utf-8", errors="ignore")
     ]
 
     assert not culpados, (
-        "módulo de produção gravando estado sem cadeado (use `estado.atualizar`): "
+        f"módulo de produção gravando sem cadeado (use `{mutador_seguro}`): "
         + ", ".join(culpados)
     )

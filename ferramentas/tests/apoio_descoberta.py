@@ -17,6 +17,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from ferramentas import descoberta
+from ferramentas.elicitacao import universo_completo
 
 #: Pedido com sinal de intenção explícito. A intenção também é passada à mão em
 #: `fechar_descoberta` para o preparo não depender do classificador de texto: mudar um
@@ -41,6 +42,22 @@ def fechar_descoberta(
     return responder_bloqueantes(raiz, agora=agora)
 
 
+def resposta_para(lacuna_id: str, intencao: str = "MATERIALIZAR") -> str:
+    """Uma resposta **admissível** para a lacuna: a primeira opção, quando ela tem opções.
+
+    Lacuna com `opcoes` declaradas só aceita uma delas — `descoberta.responder` recusa o
+    resto, porque é sobre esse conjunto que B1 prevê o que responder destrava. Texto
+    livre em `onde_roda` era gravado e não ativava plataforma nenhuma: a lacuna fechava,
+    o bloco WEB nunca entrava, e o preparo produzia um ciclo que passava no gate com um
+    ramo inteiro da entrevista por existir. O preparo tem de responder como uma sessão
+    real responderia, ou ele deixa de preparar o que promete.
+    """
+    for lacuna in universo_completo(intencao):
+        if lacuna.id == lacuna_id:
+            return lacuna.opcoes[0] if lacuna.opcoes else f"resposta de teste para {lacuna_id}"
+    return f"resposta de teste para {lacuna_id}"
+
+
 def responder_bloqueantes(raiz: Path, *, agora: str = "2026-08-05T10:00:00") -> tuple[str, ...]:
     """Responde uma bloqueante por vez, reavaliando entre cada resposta.
 
@@ -56,7 +73,8 @@ def responder_bloqueantes(raiz: Path, *, agora: str = "2026-08-05T10:00:00") -> 
         if not avaliacao.bloqueantes:
             return tuple(respondidas)
         alvo = avaliacao.bloqueantes[0]
-        descoberta.responder(raiz, alvo.id, f"resposta de teste para {alvo.id}", agora=agora)
+        intencao = avaliacao.intencao.value if avaliacao.intencao else "MATERIALIZAR"
+        descoberta.responder(raiz, alvo.id, resposta_para(alvo.id, intencao), agora=agora)
         respondidas.append(alvo.id)
     raise AssertionError(
         f"{LIMITE_DE_VOLTAS} respostas e ainda há bloqueante aberta: "

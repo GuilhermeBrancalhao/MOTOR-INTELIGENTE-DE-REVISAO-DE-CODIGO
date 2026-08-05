@@ -277,6 +277,109 @@ def test_desvio_valido_para_e_retomada_limpa_o_registro(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# A6 — replanejar a partir do desvio não desfaz trabalho aceito
+# ---------------------------------------------------------------------------
+
+
+def _ate_desvio(tmp_path):
+    """Programa em DESVIO com C1 CONCLUIDO e C2 REPROVADO — o cenário do replanejamento."""
+    dados = _ate_execucao(tmp_path)
+    dados = programa.registrar_aceite(dados, "C1", passou=True)
+    dados = programa.registrar_aceite(dados, "C2", passou=False)
+    return programa.desviar(dados, "stack-fora-do-plano", "o plano previa SQLite")
+
+
+def test_replanejar_preserva_o_status_dos_ciclos_que_permanecem(tmp_path):
+    """A6. Mutação alvo: reconstruir `ciclos` com PENDENTE para todos.
+
+    Era o comportamento até o aceite de sistema reprovar: `propor_plano` montava a lista
+    do zero, e pela aresta `DESVIO -> PLANO_MESTRE` isso apagava em silêncio o veredito
+    de todo ciclo já fechado. O `programa.json` passava a afirmar que nada tinha sido
+    feito — e o REPROVADO some junto, que é a metade pior: um vermelho apagado deixa o
+    programa elegível a concluir.
+    """
+    dados = _ate_desvio(tmp_path)
+    mesmo_plano = _plano(("C1", []), ("C2", ["C1"]), ("C3", ["C2"]))
+
+    novo = programa.propor_plano(dados, mesmo_plano, "o sistema sobe e responde")
+
+    por_id = {c["id"]: c["status"] for c in novo["ciclos"]}
+    assert por_id == {"C1": "CONCLUIDO", "C2": "REPROVADO", "C3": "PENDENTE"}
+
+
+def test_replanejar_zera_o_ciclo_cujo_criterio_de_aceite_mudou(tmp_path):
+    """A6. Mutação alvo: preservar o status só pelo `id`, ignorando o aceite.
+
+    O id é rótulo; o aceite é o enunciado falsificável que decidiu o veredito. Manter
+    CONCLUIDO sob um critério reescrito é dar por satisfeito um requisito que ninguém
+    verificou — o mesmo defeito dos "42 volumes entregues" que eram esqueletos, em
+    escala menor e mais difícil de ver.
+    """
+    dados = _ate_desvio(tmp_path)
+    plano_novo = _plano(("C1", []), ("C2", ["C1"]), ("C3", ["C2"]))
+    plano_novo[0]["aceite"] = "agora tem de responder em menos de 200ms também"
+
+    novo = programa.propor_plano(dados, plano_novo, "o sistema sobe e responde")
+
+    assert novo["ciclos"][0]["status"] == "PENDENTE"
+    assert novo["ciclos"][0]["ciclo_do_estado"] is None, (
+        "trabalho que vai ser refeito não pode ficar amarrado à execução antiga"
+    )
+    assert novo["ciclos"][1]["status"] == "REPROVADO", "só o ciclo alterado é zerado"
+
+
+def test_replanejar_preserva_a_amarracao_ao_ciclo_do_estado(tmp_path):
+    """A6. Mutação alvo: copiar só o `status` e largar `ciclo_do_estado`.
+
+    A amarração é o que permite auditar depois qual execução de ciclo produziu qual
+    entrega. Perdida no replanejamento, a trilha e o programa voltam a contar histórias
+    paralelas — exatamente o que `iniciar_ciclo` existe para impedir.
+    """
+    dados = _ate_execucao(tmp_path)
+    dados = programa.iniciar_ciclo(dados, "C1", "2026-08-05-1")
+    dados = programa.registrar_aceite(dados, "C1", passou=True)
+    dados = programa.desviar(dados, "dependencia-nao-prevista", "faltou fila")
+
+    novo = programa.propor_plano(
+        dados, _plano(("C1", []), ("C2", ["C1"])), "o sistema sobe e responde"
+    )
+
+    assert novo["ciclos"][0]["ciclo_do_estado"] == "2026-08-05-1"
+
+
+def test_replanejar_aceita_ciclos_novos_e_esquece_os_removidos(tmp_path):
+    """A6. Mutação alvo: reaproveitar por posição em vez de por id.
+
+    Replanejar é justamente mudar a decomposição: ciclo que entra nasce PENDENTE, ciclo
+    que sai do plano some. Casar por posição faria o status de C2 aterrissar no ciclo
+    novo que ocupou o lugar dele.
+    """
+    dados = _ate_desvio(tmp_path)
+    plano_novo = _plano(("C0", []), ("C1", ["C0"]), ("C9", ["C1"]))
+
+    novo = programa.propor_plano(dados, plano_novo, "o sistema sobe e responde")
+
+    por_id = {c["id"]: c["status"] for c in novo["ciclos"]}
+    assert por_id == {"C0": "PENDENTE", "C1": "CONCLUIDO", "C9": "PENDENTE"}
+
+
+def test_replanejar_fecha_o_desvio(tmp_path):
+    """A6. Mutação alvo: deixar o registro do desvio grudado após o replanejamento.
+
+    Propor o plano novo É a resposta ao conflito. Um motivo que sobrevive à aprovação
+    fica sendo impresso para sempre num programa em EXECUCAO, e ruído permanente treina
+    a ignorar o campo — o oposto do que a parada por exceção (P2) existe para produzir.
+    """
+    dados = _ate_desvio(tmp_path)
+
+    novo = programa.propor_plano(
+        dados, _plano(("C1", []), ("C2", ["C1"])), "o sistema sobe e responde"
+    )
+
+    assert novo["desvio"] is None
+
+
+# ---------------------------------------------------------------------------
 # A7 — aceite de sistema
 # ---------------------------------------------------------------------------
 

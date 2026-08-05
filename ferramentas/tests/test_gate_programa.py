@@ -72,6 +72,40 @@ def _abrir_programa(raiz: Path) -> Path:
     return arquivo
 
 
+def _ate_desvio(raiz: Path, aceitar: tuple[str, ...] = ()) -> Path:
+    """Leva o programa até DESVIO: plano proposto, aprovado, ciclos aceitos, execução parada.
+
+    É o preparo da SEGUNDA aresta de entrada em PLANO_MESTRE. Só se chega a ela
+    atravessando a primeira, então o caminho é necessariamente longo — e a descoberta
+    fica fechada no fim dele, o que obriga cada teste a declarar se quer reabri-la.
+
+    `aceitar` fecha ciclos em EXECUCAO, ANTES do desvio, que é a ordem real: o desvio
+    acontece no meio de um trabalho que já andou.
+    """
+    arquivo = _abrir_programa(raiz)
+    fechar_descoberta(raiz, OBJETIVO)
+    assert _cli(raiz, "programa", "plano", str(arquivo)).returncode == 0
+    assert _cli(raiz, "programa", "aprovar").returncode == 0
+    for cid in aceitar:
+        assert _cli(raiz, "programa", "aceite", cid, "ok").returncode == 0
+    assert _cli(
+        raiz, "programa", "desviar", "stack-fora-do-plano", "o plano previa SQLite"
+    ).returncode == 0
+    assert programa.carregar(raiz)["estado"] == "DESVIO"
+    return arquivo
+
+
+def _reabrir_a_entrevista(raiz: Path) -> None:
+    """Apaga as respostas: a descoberta volta a ter bloqueante aberta."""
+
+    def _mutar(dados):
+        dados[descoberta.CHAVE]["respostas"] = {}
+        return dados
+
+    estado.atualizar(raiz, _mutar)
+    assert descoberta.avaliar_do_disco(raiz).bloqueantes
+
+
 def _impressao_digital(raiz: Path) -> str:
     """SHA-256 dos BYTES do `programa.json`.
 
@@ -468,6 +502,110 @@ def test_erro_de_uso_do_subverbo_nao_vira_recusa_de_descoberta(tmp_path):
     assert saida.returncode == 1
     assert "não encontrado" in saida.stdout
     assert "bloqueante" not in saida.stdout
+
+
+# --- a SEGUNDA aresta de entrada: DESVIO -> PLANO_MESTRE ------------------------------
+#
+# O grafo declara `"DESVIO": ("EXECUCAO", "PLANO_MESTRE")` desde o primeiro dia, e por
+# um bom tempo o gate olhava só `CONCEPCAO`. Resultado: a macro-DESCOBERTA era exigida
+# na primeira vez e dispensada no REPLANEJAMENTO — que é o momento em que ela tem mais
+# chance de estar vencida, porque os quatro MOTIVOS_DESVIO são, um a um, a constatação
+# de que a entrevista original não previu o que apareceu.
+
+
+def test_replanejar_a_partir_de_desvio_tambem_passa_pelo_gate(tmp_path):
+    """Cai se o gate voltar a comparar o estado com uma origem fixa (`CONCEPCAO`).
+
+    É o teste central da segunda aresta. Com a entrevista reaberta e o programa em
+    DESVIO, `programa plano` tem de recusar exatamente como recusaria em CONCEPCAO —
+    mesmo código de saída, mesma exceção, e sem tocar no `programa.json`.
+    """
+    arquivo = _ate_desvio(tmp_path)
+    _reabrir_a_entrevista(tmp_path)
+    antes = _impressao_digital(tmp_path)
+
+    saida = _cli(tmp_path, "programa", "plano", str(arquivo))
+
+    assert saida.returncode == 1, saida.stdout + saida.stderr
+    assert _impressao_digital(tmp_path) == antes, (
+        "a recusa no replanejamento gravou no programa"
+    )
+    assert programa.carregar(tmp_path)["estado"] == "DESVIO"
+
+
+def test_a_recusa_do_replanejamento_nomeia_a_aresta_do_desvio(tmp_path):
+    """Cai se a mensagem trouxer `CONCEPCAO -> PLANO_MESTRE` fixo no texto.
+
+    Quem lê "CONCEPCAO -> PLANO_MESTRE recusada" com o programa em DESVIO procura o
+    defeito num estado em que o programa não está mais. A origem sai do estado real.
+    """
+    arquivo = _ate_desvio(tmp_path)
+    _reabrir_a_entrevista(tmp_path)
+
+    saida = _cli(tmp_path, "programa", "plano", str(arquivo))
+
+    assert "DESVIO -> PLANO_MESTRE" in saida.stdout
+    assert "CONCEPCAO -> PLANO_MESTRE" not in saida.stdout
+    assert "propor o plano-mestre" in saida.stdout
+
+
+def test_replanejar_com_a_descoberta_fechada_passa(tmp_path):
+    """O par obrigatório: cai se o gate na segunda aresta bloquear sempre.
+
+    Um gate que nunca abre no replanejamento prende para sempre em DESVIO todo programa
+    que precisou parar — e a única saída seria editar o JSON à mão.
+    """
+    arquivo = _ate_desvio(tmp_path)
+    assert descoberta.avaliar_do_disco(tmp_path).liberado_para_planejar
+
+    saida = _cli(tmp_path, "programa", "plano", str(arquivo))
+
+    assert saida.returncode == 0, saida.stdout + saida.stderr
+    depois = programa.carregar(tmp_path)
+    assert depois["estado"] == "PLANO_MESTRE"
+    assert depois["desvio"] is None, (
+        "replanejar É a resposta ao desvio: o motivo não pode continuar aberto"
+    )
+    assert "Porta do plano-mestre" in saida.stdout, (
+        "o replanejamento volta a passar pela porta P1, como qualquer plano-mestre"
+    )
+
+
+def test_toda_aresta_de_entrada_em_plano_mestre_tem_gate(tmp_path):
+    """Cai se alguém acrescentar uma terceira aresta para PLANO_MESTRE sem gate.
+
+    A lista de origens protegidas é DERIVADA de `programa.TRANSICOES`, e não escrita à
+    mão, justamente para que a aresta nova nasça protegida. Este teste é a trava dessa
+    derivação: escrever a lista à mão de novo o derruba no dia em que o grafo mudar.
+    """
+    do_grafo = {
+        origem
+        for origem, destinos in programa.TRANSICOES.items()
+        if "PLANO_MESTRE" in destinos
+    }
+    assert do_grafo == set(cli.ORIGENS_COM_GATE_DE_PLANO), (
+        "há aresta para PLANO_MESTRE fora do conjunto de origens com gate"
+    )
+    assert do_grafo == {"CONCEPCAO", "DESVIO"}, (
+        "o grafo mudou: confirme que a origem nova deve mesmo exigir a descoberta"
+    )
+
+
+def test_replanejar_preserva_o_veredito_dos_ciclos_pela_cli(tmp_path):
+    """Cai se `propor_plano` voltar a reconstruir `ciclos` com PENDENTE para todos.
+
+    O defeito irmão do gate ausente: pela aresta do DESVIO, reconstruir do zero apagava
+    em silêncio o CONCLUIDO de C1 e o programa passava a afirmar que nada tinha sido
+    feito. Aqui isso é medido de ponta a ponta, pela CLI, e não só na função pura.
+    """
+    arquivo = _ate_desvio(tmp_path, aceitar=("C1",))
+
+    assert _cli(tmp_path, "programa", "plano", str(arquivo)).returncode == 0
+
+    por_id = {c["id"]: c["status"] for c in programa.carregar(tmp_path)["ciclos"]}
+    assert por_id == {"C1": "CONCLUIDO", "C2": "PENDENTE"}, (
+        f"o replanejamento desfez trabalho já aceito: {por_id}"
+    )
 
 
 # --- 4. a pureza de `propor_plano` e a ordem no `cli.py` ------------------------------

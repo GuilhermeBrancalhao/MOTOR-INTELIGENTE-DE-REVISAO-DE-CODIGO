@@ -27,6 +27,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 if not __package__:  # executado como script: a raiz do plugin não está no sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -41,7 +42,8 @@ USO = (
 
 USO_DESCOBERTA = (
     'uso: py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" descoberta '
-    "{<pedido> [--intencao <INTENCAO>] [--forcar]|status|responder <ID> <resposta>}"
+    "{<pedido> [--intencao <INTENCAO>] [--forcar]|status|responder <ID> <resposta>|"
+    "confirmar <PALPITE>|recusar <PALPITE>}"
 )
 
 USO_PROGRAMA = (
@@ -207,12 +209,25 @@ def _verbo_status(raiz: Path) -> int:
 #: decisão de produto, não um ajuste de código.
 ARESTA_COM_GATE_DE_DESCOBERTA = ("DESCOBERTA", "ANALISE")
 
-#: A aresta gêmea, um andar acima: no grafo do PROGRAMA, `CONCEPCAO` é declarada pela
+#: O destino gêmeo, um andar acima: no grafo do PROGRAMA, `CONCEPCAO` é declarada pela
 #: spec da Fase 4 como a **macro-DESCOBERTA** ("objetivo real do sistema, requisitos,
-#: restrições, riscos. Papel `descobridor`"). Declarado por escrito e, até este ciclo,
-#: nunca verificado: `propor_plano` transicionava exigindo só aceite de sistema e DAG
-#: válido. O par abaixo é o que torna a declaração falsificável.
-ARESTA_DO_PROGRAMA_COM_GATE = ("CONCEPCAO", "PLANO_MESTRE")
+#: restrições, riscos. Papel `descobridor`"). Declarado por escrito e, até então, nunca
+#: verificado: `propor_plano` transicionava exigindo só aceite de sistema e DAG válido.
+DESTINO_DO_PROGRAMA_COM_GATE = "PLANO_MESTRE"
+
+#: **Todas** as origens que entram nesse destino, derivadas do grafo em vez de escritas
+#: à mão. A primeira versão do gate trazia o par `("CONCEPCAO", "PLANO_MESTRE")` fixo, e
+#: com isso ficava desligada a segunda aresta — `DESVIO -> PLANO_MESTRE`, o
+#: replanejamento —, que é justamente onde a entrevista tem mais chance de estar
+#: obsoleta: os quatro `MOTIVOS_DESVIO` são, um a um, descobertas de que o que se sabia
+#: no começo não bastava. Derivar de `programa.TRANSICOES` faz uma aresta nova nascer
+#: protegida: para escapar do gate seria preciso alterar o grafo, que é onde a decisão
+#: de produto deve mesmo aparecer.
+ORIGENS_COM_GATE_DE_PLANO = tuple(
+    origem
+    for origem, destinos in programa.TRANSICOES.items()
+    if DESTINO_DO_PROGRAMA_COM_GATE in destinos
+)
 
 
 def _gate_descoberta(
@@ -292,25 +307,35 @@ def _exigir_descoberta_para_o_plano(raiz: Path, dados_do_programa: dict) -> None
     programaticamente amanhã não tem como confundir recusa com sucesso por esquecer de
     olhar um valor de retorno.
 
-    **Só a aresta protegida.** O gate roda apenas quando o programa está em CONCEPCAO.
-    Rodar sempre trocaria a mensagem de erro de quem pede `programa plano` com o
-    programa já em EXECUCAO: aquilo é erro de grafo, `transicionar` já diz isso com
-    precisão, e o gate mentiria dizendo que o problema é a descoberta. É a mesma regra
-    que `ARESTA_COM_GATE_DE_DESCOBERTA` aplica no ciclo.
+    **Só as arestas protegidas.** O gate roda quando o programa está numa das origens
+    que o grafo liga a PLANO_MESTRE — hoje `CONCEPCAO` e `DESVIO`. Rodar sempre trocaria
+    a mensagem de erro de quem pede `programa plano` com o programa já em EXECUCAO:
+    aquilo é erro de grafo, `transicionar` já diz isso com precisão, e o gate mentiria
+    dizendo que o problema é a descoberta. É a mesma regra que
+    `ARESTA_COM_GATE_DE_DESCOBERTA` aplica no ciclo.
 
-    **Aqui a leitura do disco é legítima**, ao contrário de dentro de
-    `_gate_descoberta`: o veredito sai do `.engine/estado.json`, e neste ponto nenhum
-    cadeado está tomado — nem o do estado (só `estado.atualizar` o toma) nem o do
-    programa (o sub-verbo `plano` lê e grava `programa.json` direto, como todos os
-    outros sub-verbos). Não há cadeado para retomar, então não há o travamento não
+    **As DUAS arestas, e não só a primeira.** Comparar o estado com uma origem fixa
+    (`CONCEPCAO`) deixava `DESVIO -> PLANO_MESTRE` sem gate nenhum. O replanejamento é o
+    momento em que a macro-DESCOBERTA tem mais chance de estar vencida, não menos: um
+    desvio por `stack-fora-do-plano` ou `escopo-fora-do-declarado` é a constatação de
+    que a entrevista original não previu o que apareceu. A origem entra na mensagem
+    (`DESVIO -> PLANO_MESTRE`) porque quem lê a recusa precisa saber qual passagem foi
+    barrada — as duas exigem a mesma coisa, mas acontecem em momentos diferentes da vida
+    do programa.
+
+    **A leitura do disco aqui é a do OUTRO arquivo.** O veredito sai do
+    `.engine/estado.json`; quem grava é o `programa.json`, sob o cadeado do programa,
+    que é um arquivo de cadeado separado (`programa.lock`). Ler o estado com o cadeado
+    do programa na mão não retoma cadeado nenhum, então não há o travamento não
     reentrante que o C4 proíbe. O que continua valendo é a proibição de o **gate** ler:
     ele recebe o dicionário, e quem lê é este chamador.
     """
-    if dados_do_programa.get("estado") != ARESTA_DO_PROGRAMA_COM_GATE[0]:
+    origem = dados_do_programa.get("estado")
+    if origem not in ORIGENS_COM_GATE_DE_PLANO:
         return
     recusa = _gate_descoberta(
         estado.carregar_estrito(raiz),
-        transicao=" -> ".join(ARESTA_DO_PROGRAMA_COM_GATE),
+        transicao=f"{origem} -> {DESTINO_DO_PROGRAMA_COM_GATE}",
         antes_de="propor o plano-mestre",
     )
     if recusa is not None:
@@ -482,6 +507,11 @@ def _relatar_descoberta(avaliacao) -> str:
     O que se acrescenta é o pedido (que o `resumo` não traz, e que é o texto sobre o qual
     a entrevista inteira foi montada) e a linha do veredito — quem leu "bloqueado" quer
     saber, na mesma tela, o comando que responde.
+
+    Havendo palpite pendente, o comando que o resolve sai junto. `resumo()` os lista com
+    a evidência; sem a linha de baixo, a lista seria informação sem saída — o mesmo
+    defeito que os verbos de `descoberta` existem para não ter, porque confirmar um
+    palpite pode acrescentar um bloco inteiro de perguntas que a porta aberta não viu.
     """
     linhas = [
         "# Descoberta",
@@ -500,6 +530,13 @@ def _relatar_descoberta(avaliacao) -> str:
         linhas.append(
             "**Porta da descoberta FECHADA.** Responda cada bloqueante com "
             '`descoberta responder <ID> "<resposta>"`.'
+        )
+    if avaliacao.palpites_pendentes:
+        linhas.append(
+            "**Palpites por resolver:** `descoberta confirmar <PALPITE>` aplica o eixo "
+            "(e pode abrir perguntas novas); `descoberta recusar <PALPITE>` o descarta "
+            "sem aplicar nada. Enquanto houver palpite pendente, ninguém olhou para uma "
+            "inferência que o motor fez sobre o pedido."
         )
     return "\n".join(linhas)
 
@@ -619,12 +656,20 @@ def _pedir_a_intencao(erro, pedido: str, conhecidas: list[str]) -> str:
 
 
 def _verbo_descoberta(raiz: Path, resto: list[str]) -> int:
-    """Registrar a entrevista, ver o que falta e responder — pela CLI, sem Python solto.
+    """Registrar a entrevista, ver o que falta, responder e resolver palpite — pela CLI.
 
-    Três sub-verbos, e o resto da linha é o pedido, na mesma forma de `_verbo_programa`:
-    `status` e `responder` são palavras reservadas, e um pedido que comece por uma delas
-    precisa vir depois de `--intencao` ou ser reescrito. É o mesmo acordo que `programa`
-    já faz, e trocá-lo aqui daria duas gramáticas para a mesma CLI.
+    Quatro sub-verbos mais o registro, e o resto da linha é o pedido, na mesma forma de
+    `_verbo_programa`: `status`, `responder`, `confirmar` e `recusar` são palavras
+    reservadas, e um pedido que comece por uma delas precisa vir depois de `--intencao`
+    ou ser reescrito. É o mesmo acordo que `programa` já faz, e trocá-lo aqui daria duas
+    gramáticas para a mesma CLI.
+
+    `confirmar` e `recusar` existem porque o eixo plataforma/contexto era **inalcançável
+    daqui**: `descoberta.confirmar` e `descoberta.recusar` estavam escritos, testados e
+    sem nenhum chamador fora dos testes. Enquanto isso, um pedido como "um app de celular
+    para a equipe registrar visitas, com pagamento pelo próprio app" gravava os palpites
+    MOBILE e LOJA_PAGAMENTOS, e nenhum comando os mostrava ou resolvia — a porta abria
+    com as cinco lacunas de MOBILE e a de cobrança em dobro (peso 9) fora da entrevista.
 
     O `import` mora dentro da função pelo mesmo motivo que dentro de `_gate_descoberta`:
     importado no topo, um `ferramentas/descoberta.py` quebrado estouraria na carga do
@@ -680,6 +725,13 @@ def _verbo_descoberta(raiz: Path, resto: list[str]) -> int:
             # continuaria aberta e a pessoa lembraria de ter respondido.
             print(f"ENGINE: {_texto_do_erro(erro)}")
             return 1
+        except descoberta.RespostaForaDasOpcoes as erro:
+            # O caso que abria o portão sem destravar o ramo: "no navegador" não é
+            # nenhuma das opções de `onde_roda`, os eixos ficavam intactos e a lacuna
+            # fechava assim mesmo. A mensagem traz a lista do catálogo porque recusar
+            # sem dizer o que se aceita é outro portão sem saída.
+            print(f"ENGINE: {_texto_do_erro(erro)}. Nada foi gravado no estado.")
+            return 1
         except descoberta.DescobertaInvalida as erro:
             print(f"ENGINE: bloco de descoberta ilegível — {_texto_do_erro(erro)}")
             return 1
@@ -687,6 +739,42 @@ def _verbo_descoberta(raiz: Path, resto: list[str]) -> int:
             print(f"ENGINE: {erro}")
             return 1
         print(f"**Respondida:** [{lacuna_id}] {valor}")
+        print()
+        return _imprimir_descoberta(raiz, descoberta)
+
+    if sub in ("confirmar", "recusar"):
+        if len(args) != 1 or not args[0].strip():
+            print(
+                "ENGINE: `descoberta "
+                + sub
+                + " <PALPITE>` exige exatamente o valor do palpite (o nome que aparece "
+                "em `descoberta status`, como MOBILE ou LOJA_PAGAMENTOS).\n"
+                + USO_DESCOBERTA
+            )
+            return 1
+        alvo = args[0].strip()
+        acao = descoberta.confirmar if sub == "confirmar" else descoberta.recusar
+        try:
+            acao(raiz, alvo, agora=agora)
+        except (descoberta.DescobertaAusente, descoberta.PalpiteNaoPendente) as erro:
+            # Palpite que não está pendente não é resolvido em silêncio: sair 0 sem
+            # tirar nada da lista faria a confirmação parecer ter funcionado, que é o
+            # pior dos dois mundos — a pessoa acha que destravou o bloco.
+            print(f"ENGINE: {_texto_do_erro(erro)}. Nada foi gravado no estado.")
+            return 1
+        except descoberta.DescobertaInvalida as erro:
+            print(f"ENGINE: bloco de descoberta ilegível — {_texto_do_erro(erro)}")
+            return 1
+        except (estado.EstadoCorrompido, estado.EstadoOcupado) as erro:
+            print(f"ENGINE: {erro}")
+            return 1
+        if sub == "confirmar":
+            print(f"**Palpite confirmado:** {alvo} — o eixo foi aplicado.")
+        else:
+            print(
+                f"**Palpite recusado:** {alvo} — nada foi aplicado, e ele não deixa "
+                "rastro de valor assumido em lugar nenhum."
+            )
         print()
         return _imprimir_descoberta(raiz, descoberta)
 
@@ -782,11 +870,94 @@ def _prog_carregar(raiz: Path) -> dict | None:
         return None
 
 
+SEM_PROGRAMA = (
+    "ENGINE: nenhum programa neste projeto. Use `programa <objetivo>` primeiro."
+)
+
+
 def _prog_exigir(raiz: Path) -> dict | None:
+    """Leitura do programa para os sub-verbos que **não** mutam (`status`, `relatorio`).
+
+    Quem vai alterar o programa não passa por aqui: usa `_prog_mutar`, que relê de
+    dentro do cadeado. Ler solto continua valendo para quem só imprime — um retrato
+    ligeiramente velho num relatório é o pior que pode acontecer, e travar a leitura
+    deixaria quem esbarrou numa recusa sem conseguir olhar o programa para entender.
+    """
     dados = _prog_carregar(raiz)
     if dados is None:
-        print("ENGINE: nenhum programa neste projeto. Use `programa <objetivo>` primeiro.")
+        print(SEM_PROGRAMA)
     return dados
+
+
+#: Tudo que uma mutação do programa pode levantar e que vira mensagem legível com
+#: código 1. Nenhuma delas pode chegar ao terminal como traceback — é a regra do topo
+#: deste arquivo. `KeyError` está aqui porque `registrar_aceite`/`reabrir` a usam para
+#: id de ciclo inexistente, e `estado.*` porque o gate da macro-DESCOBERTA lê o
+#: `estado.json` de dentro da mutação.
+ERROS_PREVISTOS_DO_PROGRAMA = (
+    programa.ProgramaCorrompido,
+    programa.PlanoInvalido,
+    programa.TransicaoInvalida,
+    programa.DesvioInvalido,
+    programa.PortaNaoAtravessada,
+    programa.SemCicloElegivel,
+    estado.EstadoCorrompido,
+    estado.EstadoOcupado,
+    KeyError,
+)
+
+
+def _prog_mutar(
+    raiz: Path, mutador: Callable[[dict], dict | None]
+) -> tuple[dict | None, str | None]:
+    """Ler → decidir → gravar o programa como UMA operação, sob o cadeado do programa.
+
+    Este helper é a correção do defeito que o aceite de sistema reprovou. Todo
+    sub-verbo que altera o programa fazia três passos soltos — ler o disco, decidir,
+    escrever — e nenhum deles tomava cadeado. Duas sessões em paralelo produziam *lost
+    update*: `aceite C1 falhou` e `aceite C2 ok` disputando, e o REPROVADO de C1 sumia
+    sem erro nenhum. O estrago não para aí: com o veredito vermelho fora do disco,
+    `entrar_em_aceite` passa a ver todos os ciclos CONCLUIDO e o programa **conclui com
+    um ciclo que falhou** — que é exatamente o modo de falhar que A2 existe para tornar
+    impossível. O mutador seguro (`programa.atualizar`) já estava escrito, relendo de
+    dentro da seção crítica, e nenhum código de produção o chamava.
+
+    É o mesmo desenho de `_verbo_fase` com `estado.atualizar`, e vale para as duas
+    máquinas de estado pela mesma razão: quem grava sem reler decide sobre um retrato
+    que pode já não existir.
+
+    Devolve `(dados, recusa)`. `recusa` é a mensagem pronta para imprimir — já com o
+    prefixo `ENGINE:` quando cabe — ou `None` quando deu certo. O mutador pode devolver
+    `None` para dizer "não há nada a mudar"; nesse caso nada é gravado e `dados` volta
+    sendo o que estava no disco, para o sub-verbo imprimir. O mutador nunca recebe
+    `None`: a ausência de programa é recusada aqui, uma vez só, com a mesma frase que
+    `_prog_exigir` usa.
+    """
+    lido: list[dict] = []
+    ausente: list[str] = []
+
+    def _envolvido(dados: dict | None) -> dict | None:
+        if dados is None:
+            ausente.append(SEM_PROGRAMA)
+            return None
+        lido.append(dados)
+        return mutador(dados)
+
+    try:
+        novo = programa.atualizar(raiz, _envolvido)
+    except programa.DescobertaIncompleta as erro:
+        # Antes de `ERROS_PREVISTOS_DO_PROGRAMA` porque `DescobertaIncompleta` herda de
+        # `PlanoInvalido`, que está lá dentro — invertida, esta cláusula nunca rodaria.
+        # E sai sem prefixo: a mensagem já vem formatada pelo gate, com "ENGINE:" na
+        # frente e as perguntas inteiras dentro.
+        return None, _texto_do_erro(erro)
+    except ERROS_PREVISTOS_DO_PROGRAMA as erro:
+        return None, f"ENGINE: {_texto_do_erro(erro)}"
+    if novo is not None:
+        return novo, None
+    if ausente:
+        return None, ausente[0]
+    return (lido[0] if lido else None), None
 
 
 def _prog_imprimir(dados: dict) -> None:
@@ -810,7 +981,15 @@ def _prog_imprimir(dados: dict) -> None:
             "\n**Porta do plano-mestre.** Nada executa até o usuário rodar "
             "`programa aprovar`."
         )
-    elif r["proximo"]:
+    elif dados["estado"] == "ABORTADO":
+        # O próximo elegível existe no dicionário de um programa abortado (os ciclos
+        # PENDENTE continuam lá, e é isso que preserva a decomposição), mas anunciá-lo
+        # convidaria a seguir executando um programa que foi encerrado.
+        print(
+            "\n**Programa ABORTADO.** A decomposição e a trilha ficam preservadas; "
+            "abrir outro programa nesta pasta exige `--forcar`."
+        )
+    elif dados["estado"] == "EXECUCAO" and r["proximo"]:
         print(f"**Próximo ciclo elegível:** {r['proximo']}")
 
 
@@ -820,6 +999,14 @@ def _verbo_programa(raiz: Path, resto: list[str]) -> int:
     `aprovar` é o único verbo do motor que o modelo não pode executar por conta
     própria: é a porta P1 materializada. A skill declara essa regra; aqui a CLI
     apenas a torna um passo explícito e auditável na trilha.
+
+    **Todo sub-verbo que altera o programa passa por `_prog_mutar`** — ler, decidir e
+    gravar dentro do cadeado do programa, com o dicionário relido de dentro da seção
+    crítica. Os que só imprimem (`status`, `proximo`, `relatorio`) continuam lendo
+    solto, porque não há escrita para perder. A divisão é a mesma que `_verbo_fase` faz
+    com `estado.atualizar`, e existe pela mesma razão: duas sessões na mesma pasta são
+    o caso normal do Claude Code, e o retrato lido por fora do cadeado pode já não
+    existir quando a gravação acontece.
     """
     if not resto:
         print(USO_PROGRAMA)
@@ -859,53 +1046,37 @@ def _verbo_programa(raiz: Path, resto: list[str]) -> int:
         if not isinstance(bruto, dict):
             print("ENGINE: o plano deve ser um objeto JSON")
             return 1
-        dados = _prog_exigir(raiz)
-        if dados is None:
-            return 1
-        try:
-            # O gate da macro-DESCOBERTA vem ANTES de `propor_plano`, e é por isso que
-            # a recusa não deixa rastro: `propor_plano` sequer é chamada, então nada
-            # transiciona, e `programa.gravar` lá embaixo não é alcançado. Se viesse
+        def _mutar_plano(dados: dict) -> dict:
+            # O gate da macro-DESCOBERTA decide DENTRO da seção crítica e ANTES de
+            # `propor_plano`, e é dessa ordem que sai a propriedade de a recusa não
+            # deixar rastro: `propor_plano` sequer é chamada, nada transiciona, e o
+            # mutador levanta — e mutador que levanta não grava. Se o gate viesse
             # depois, `propor_plano` já teria devolvido o dicionário em PLANO_MESTRE, e
-            # bastaria um `return` esquecido para gravá-lo — a mesma armadilha que o C4
-            # fechou pondo o gate dentro do mutador em vez de depois de `transicionar`.
+            # bastaria um `return` esquecido para gravá-lo. Estar aqui dentro (e não
+            # antes de tomar o cadeado) é a mesma lição do C4: consultado fora, o
+            # veredito seria sobre um retrato velho, e outra sessão poderia registrar ou
+            # apagar a descoberta entre a consulta e a gravação.
             _exigir_descoberta_para_o_plano(raiz, dados)
-            novo = programa.propor_plano(
+            return programa.propor_plano(
                 dados,
                 bruto.get("ciclos") or [],
                 bruto.get("aceite_de_sistema", ""),
             )
-        except programa.DescobertaIncompleta as erro:
-            # Antes de `PlanoInvalido` porque é subclasse dela: invertida, esta cláusula
-            # nunca rodaria. E a mensagem sai sem prefixo — ela já vem no formato do
-            # gate de fase, com "ENGINE:" na frente e as perguntas inteiras dentro.
-            print(erro)
+
+        novo, recusa = _prog_mutar(raiz, _mutar_plano)
+        if recusa is not None:
+            print(recusa)
             return 1
-        except estado.EstadoCorrompido as erro:
-            # O veredito da descoberta sai do `estado.json`; ilegível, ele não vira
-            # "sem bloqueante". Falha FECHADA, com a mesma mensagem que os outros
-            # verbos dão para estado corrompido.
-            print(f"ENGINE: {erro}")
-            return 1
-        except (programa.PlanoInvalido, programa.TransicaoInvalida) as erro:
-            print(f"ENGINE: {erro}")
-            return 1
-        programa.gravar(raiz, novo)
         _prog_trilha(raiz, "plano-mestre-proposto", novo["programa"], agora)
         print("**Plano-mestre registrado e validado** (DAG e critérios de aceite).")
         _prog_imprimir(novo)
         return 0
 
     if sub == "aprovar":
-        dados = _prog_exigir(raiz)
-        if dados is None:
+        novo, recusa = _prog_mutar(raiz, lambda dados: programa.aprovar(dados, agora))
+        if recusa is not None:
+            print(recusa)
             return 1
-        try:
-            novo = programa.aprovar(dados, agora)
-        except programa.TransicaoInvalida as erro:
-            print(f"ENGINE: {erro}")
-            return 1
-        programa.gravar(raiz, novo)
         _prog_trilha(raiz, "programa-aprovado", novo["programa"], agora)
         print("**Plano-mestre aprovado.** O programa entra em EXECUCAO.")
         _prog_imprimir(novo)
@@ -939,15 +1110,18 @@ def _verbo_programa(raiz: Path, resto: list[str]) -> int:
         if len(args) < 2 or args[1] not in ("ok", "falhou"):
             print(USO_PROGRAMA)
             return 1
-        dados = _prog_exigir(raiz)
-        if dados is None:
+        # O sub-verbo que reproduzia o defeito: `aceite C1 falhou` e `aceite C2 ok` em
+        # sessões concorrentes liam o mesmo programa e a segunda gravação apagava o
+        # REPROVADO da primeira. Sob cadeado, a segunda relê o C1 já vermelho.
+        novo, recusa = _prog_mutar(
+            raiz,
+            lambda dados: programa.registrar_aceite(
+                dados, args[0], passou=args[1] == "ok"
+            ),
+        )
+        if recusa is not None:
+            print(recusa)
             return 1
-        try:
-            novo = programa.registrar_aceite(dados, args[0], passou=args[1] == "ok")
-        except KeyError as erro:
-            print(f"ENGINE: {erro}")
-            return 1
-        programa.gravar(raiz, novo)
         _prog_trilha(raiz, f"aceite-de-ciclo-{args[1]}", args[0], agora)
         _prog_imprimir(novo)
         return 0
@@ -956,15 +1130,10 @@ def _verbo_programa(raiz: Path, resto: list[str]) -> int:
         if not args:
             print(USO_PROGRAMA)
             return 1
-        dados = _prog_exigir(raiz)
-        if dados is None:
+        novo, recusa = _prog_mutar(raiz, lambda dados: programa.reabrir(dados, args[0]))
+        if recusa is not None:
+            print(recusa)
             return 1
-        try:
-            novo = programa.reabrir(dados, args[0])
-        except (KeyError, programa.TransicaoInvalida) as erro:
-            print(f"ENGINE: {erro}")
-            return 1
-        programa.gravar(raiz, novo)
         _prog_imprimir(novo)
         return 0
 
@@ -974,30 +1143,30 @@ def _verbo_programa(raiz: Path, resto: list[str]) -> int:
                 "ENGINE: motivos válidos: " + ", ".join(programa.MOTIVOS_DESVIO)
             )
             return 1
-        dados = _prog_exigir(raiz)
-        if dados is None:
+        novo, recusa = _prog_mutar(
+            raiz, lambda dados: programa.desviar(dados, args[0], " ".join(args[1:]))
+        )
+        if recusa is not None:
+            print(recusa)
             return 1
-        try:
-            novo = programa.desviar(dados, args[0], " ".join(args[1:]))
-        except (programa.DesvioInvalido, programa.TransicaoInvalida) as erro:
-            print(f"ENGINE: {erro}")
-            return 1
-        programa.gravar(raiz, novo)
         print("**Execução parada por desvio.** Apresente o conflito ao usuário.")
         _prog_imprimir(novo)
         return 0
 
     if sub == "retomar":
-        dados = _prog_exigir(raiz)
-        if dados is None:
+
+        def _mutar_retomada(dados: dict) -> dict | None:
+            # Fora de DESVIO não há o que retomar, e `None` faz o mutador sair sem
+            # gravar: `retomar` num programa em EXECUCAO continua sendo o comando de
+            # reentrada barato que só imprime o retrato, sem tocar no arquivo.
+            if dados["estado"] != "DESVIO":
+                return None
+            return programa.retomar_apos_desvio(dados)
+
+        dados, recusa = _prog_mutar(raiz, _mutar_retomada)
+        if recusa is not None:
+            print(recusa)
             return 1
-        if dados["estado"] == "DESVIO":
-            try:
-                dados = programa.retomar_apos_desvio(dados)
-            except programa.TransicaoInvalida as erro:
-                print(f"ENGINE: {erro}")
-                return 1
-            programa.gravar(raiz, dados)
         _prog_imprimir(dados)
         return 0
 
@@ -1005,17 +1174,21 @@ def _verbo_programa(raiz: Path, resto: list[str]) -> int:
         if not args or args[0] not in ("ok", "falhou"):
             print(USO_PROGRAMA)
             return 1
-        dados = _prog_exigir(raiz)
-        if dados is None:
-            return 1
-        try:
+
+        def _mutar_sistema(dados: dict) -> dict:
+            # As duas transições (`EXECUCAO -> ACEITE_SISTEMA` e o veredito) acontecem
+            # na MESMA seção crítica de propósito. Separadas, uma sessão poderia
+            # registrar um aceite de ciclo vermelho entre a checagem de
+            # `entrar_em_aceite` e a conclusão — e o programa fecharia verde por cima
+            # de um ciclo que acabou de reprovar.
             if dados["estado"] == "EXECUCAO":
                 dados = programa.entrar_em_aceite(dados)
-            novo = programa.concluir(dados, passou=args[0] == "ok", agora=agora)
-        except programa.TransicaoInvalida as erro:
-            print(f"ENGINE: {erro}")
+            return programa.concluir(dados, passou=args[0] == "ok", agora=agora)
+
+        novo, recusa = _prog_mutar(raiz, _mutar_sistema)
+        if recusa is not None:
+            print(recusa)
             return 1
-        programa.gravar(raiz, novo)
         _prog_trilha(raiz, f"aceite-de-sistema-{args[0]}", novo["programa"], agora)
         if novo["estado"] == "CONCLUIDO":
             print("**PROGRAMA CONCLUÍDO.** Aceite de sistema verde.")
@@ -1036,14 +1209,23 @@ def _verbo_programa(raiz: Path, resto: list[str]) -> int:
         return 0
 
     if sub == "abortar":
-        dados = _prog_exigir(raiz)
-        if dados is None:
+        # O verbo mais destrutivo da camada — desfaz o programa inteiro, inclusive um
+        # plano-mestre aprovado na porta P1 — e era o único que não tinha porta nenhuma:
+        # escrevia `CONCLUIDO` no dicionário na mão, de qualquer estado, sem passar pela
+        # máquina e sem registrar na trilha, apesar de a mensagem prometer que a trilha
+        # ficava preservada. Agora atravessa `programa.abortar` (que consulta o grafo e
+        # carimba o terminal próprio `ABORTADO`) e deixa a linha na trilha que a
+        # mensagem sempre afirmou existir.
+        novo, recusa = _prog_mutar(raiz, lambda dados: programa.abortar(dados, agora))
+        if recusa is not None:
+            print(recusa)
             return 1
-        novo = dict(dados)
-        novo["estado"] = "CONCLUIDO"
-        novo["abortado_em"] = agora
-        programa.gravar(raiz, novo)
-        print("Programa abortado. A trilha e a decomposição ficam preservadas.")
+        _prog_trilha(raiz, "programa-abortado", novo["programa"], agora)
+        print(
+            "**Programa ABORTADO.** Encerrado sem aceite de sistema — não é o mesmo "
+            "desfecho que CONCLUIDO, e o arquivo diz qual dos dois foi."
+        )
+        _prog_imprimir(novo)
         return 0
 
     # Sem subverbo reservado: o resto é o objetivo de um programa novo.

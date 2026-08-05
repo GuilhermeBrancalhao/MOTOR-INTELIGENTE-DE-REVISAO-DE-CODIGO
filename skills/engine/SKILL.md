@@ -21,16 +21,32 @@ quando o ciclo termina. Instrução direta do usuário sempre vence o motor.
 | `/engine relatorio` | rode `ENGINE_RAIZ="$(pwd)" bash "${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh" "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" relatorio ciclo` (ou `relatorio fase <FASE>`) e apresente a saída |
 | em DESCOBERTA, logo depois de `ligar` | rode `… cli.py descoberta "<o pedido do usuário, com as palavras dele>"` — registra a entrevista e classifica a intenção |
 | a CLI respondeu que a intenção é indeterminada | **não escolha**: apresente as candidatas ao usuário com opções clicáveis e rode de novo com `… cli.py descoberta "<pedido>" --intencao <INTENCAO>` |
-| ver o que ainda falta na entrevista | rode `… cli.py descoberta status` — intenção, bloqueantes abertas (com a pergunta inteira e o motivo) e assumíveis |
+| ver o que ainda falta na entrevista | rode `… cli.py descoberta status` — intenção, palpites pendentes (com a evidência), bloqueantes abertas (com a pergunta inteira e o motivo) e assumíveis |
 | o usuário respondeu uma bloqueante | rode `… cli.py descoberta responder <ID> "<a resposta dele>"` |
+| o `status` listou um palpite e o usuário confirmou | rode `… cli.py descoberta confirmar <PALPITE>` — aplica plataforma ou contexto, e **pode abrir um bloco inteiro de perguntas novas** |
+| o usuário disse que o palpite está errado | rode `… cli.py descoberta recusar <PALPITE>` — tira da pendência sem aplicar nada |
 | `/engine programa <objetivo>` | conduz um **sistema inteiro** como sequência de ciclos — ver a seção "O programa" |
 
-Os quatro verbos de `descoberta` são a **saída** da porta da descoberta: é por eles que a
+Os cinco verbos de `descoberta` — registrar, `status`, `responder`, `confirmar`, `recusar`
+— são a **saída** da porta da descoberta: é por eles que a
 entrevista entra no `.engine/estado.json`, e é o que está ali que o gate lê para decidir a
 transição. Nunca edite `.engine/estado.json` à mão para destravar uma fase — a recusa do
 gate diz que nada foi gravado justamente porque o conserto é responder, não remendar o
 arquivo. Registrar de novo por cima de uma entrevista já respondida é recusado; para
 recomeçar do zero, `--forcar`.
+
+**Palpite pendente não é resposta, e não some sozinho.** O que o motor infere do pedido
+("app de celular" → MOBILE, "com pagamento" → LOJA_PAGAMENTOS) fica pendente com a
+evidência que o produziu, e **não** vira eixo enquanto ninguém disser que sim. Leve cada
+palpite ao usuário com a evidência, em opções clicáveis, e só então `confirmar` ou
+`recusar`. Ignorar não é nenhuma das duas: enquanto o palpite estiver pendente, as
+perguntas que ele destravaria não existem para o motor — e a porta pode abrir sem elas.
+
+**Resposta de lacuna com opções declaradas tem de ser uma delas.** `onde_roda` aceita
+`WEB`, `MOBILE`, `DESKTOP` ou `AUTOMACAO`, e não "no navegador": ela é a única lacuna
+universal cuja resposta muda *quais outras perguntas existem*, e texto fora da lista
+fecharia a lacuna sem ativar o ramo. A CLI recusa dizendo quais são as opções — leve-as ao
+usuário, não reescreva a resposta dele por conta própria.
 
 Essa é a forma que funciona **de qualquer diretório e em qualquer plataforma**, e é a
 única que se deve usar. O diretório corrente é o do projeto do usuário, não o do plugin:
@@ -70,8 +86,9 @@ que já foi decidido. Parada que acontece fora delas deixa de ser sinal e vira r
 parada que falta entrega plano escrito sobre suposição.
 
 **1. Porta da descoberta — para quando há lacuna BLOQUEANTE aberta.** Vale em
-`DESCOBERTA → ANALISE` (no ciclo) e em `CONCEPCAO → PLANO_MESTRE` (no programa, onde a
-CONCEPCAO é a macro-DESCOBERTA). A CLI recusa a transição, imprime a pergunta inteira de
+`DESCOBERTA → ANALISE` (no ciclo) e em **toda** entrada em `PLANO_MESTRE` (no programa,
+onde a CONCEPCAO é a macro-DESCOBERTA) — tanto vindo de `CONCEPCAO` quanto de `DESVIO`,
+que é o replanejamento. A CLI recusa a transição, imprime a pergunta inteira de
 cada bloqueante com o predicado que a travou, e não grava nada. Leve essas perguntas ao
 usuário e registre cada resposta com `descoberta responder <ID> "<resposta>"`. **Sem
 bloqueante aberta esta porta não para**: a transição passa direto, sem confirmação, sem
@@ -127,6 +144,11 @@ Um ciclo entrega **um** trabalho de engenharia. Um sistema de alta complexidade 
 
 `CONCEPCAO → PLANO_MESTRE → ⟨porta⟩ → EXECUCAO → ACEITE_SISTEMA → CONCLUIDO`
 
+De `EXECUCAO` sai também `DESVIO`, e de `DESVIO` volta-se a `EXECUCAO` (retomar) ou a
+`PLANO_MESTRE` (replanejar, com as duas portas de novo). Qualquer estado vivo sai para
+`ABORTADO`, o segundo terminal — desistência declarada, que não se confunde com
+`CONCLUIDO`.
+
 Todos os comandos abaixo usam o mesmo prefixo dos demais verbos
 (`ENGINE_RAIZ="$(pwd)" bash "${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh"
 "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" …`), aqui abreviado como `CLI`.
@@ -153,9 +175,10 @@ e então `CLI programa sistema ok` (ou `falhou`). Aceite vermelho devolve o prog
 EXECUCAO — nada é dado como concluído.
 
 **As duas portas, no programa.** São as mesmas de sempre, um andar acima. A **porta da
-descoberta** guarda `CONCEPCAO → PLANO_MESTRE`: `programa plano` é recusado enquanto
-houver lacuna bloqueante aberta na macro-DESCOBERTA, com a mesma mensagem e a mesma saída
-(`descoberta status` e `descoberta responder`). A **porta do plano-mestre** vem depois: ao
+descoberta** guarda toda entrada em `PLANO_MESTRE` — `CONCEPCAO → PLANO_MESTRE` e
+`DESVIO → PLANO_MESTRE`: `programa plano` é recusado enquanto houver lacuna bloqueante
+aberta na macro-DESCOBERTA, com a mesma mensagem e a mesma saída (`descoberta status` e
+`descoberta responder`). A **porta do plano-mestre** vem depois: ao
 terminar o PLANO_MESTRE, apresente a decomposição inteira, com dependências e critérios de
 aceite, e **espere**. `programa aprovar` é o único verbo do motor que **você nunca roda por
 conta própria** — só o usuário autoriza, dizendo-o explicitamente. É a **última** parada do
@@ -166,8 +189,26 @@ programa: depois dela os ciclos encadeiam sozinhos.
 `escopo-fora-do-declarado`. Rode `CLI programa desviar <motivo> "<detalhe>"`, apresente o
 conflito e espere. Fora disso não pergunte: parada que sempre acontece deixa de ser sinal.
 
+**Depois do desvio, há dois caminhos.** `CLI programa retomar` volta a EXECUCAO com o
+mesmo plano; `CLI programa plano <arquivo.json>` **replaneja** — e replanejar volta a
+passar pelas duas portas, na ordem. Pela porta da descoberta primeiro: os quatro motivos
+de desvio são, um a um, a constatação de que a macro-DESCOBERTA não previu o que
+apareceu, então responda as bloqueantes de novo antes de propor. Pela porta do plano
+depois: a decomposição nova precisa da aprovação do usuário como qualquer outra. O
+veredito dos ciclos já fechados **sobrevive** ao replanejamento quando o `id` e o
+critério de aceite continuam os mesmos — replanejar não desfaz trabalho aceito, nem
+absolve trabalho reprovado. Reescreveu o critério de aceite de um ciclo? Ele volta a
+PENDENTE, porque o veredito antigo era sobre outra afirmação.
+
 **Um ciclo reprovado bloqueia os dependentes** — é o desenho, não um defeito. Corrija e
 rode `CLI programa reabrir <CICLO>`.
+
+**Desistir do programa inteiro.** `CLI programa abortar` encerra em `ABORTADO`, que é um
+desfecho **diferente** de `CONCLUIDO`: este último só existe depois de um aceite de
+sistema verde. A decomposição e a trilha ficam preservadas, e o abort entra na trilha.
+Abortado **não** libera a pasta: abrir outro programa por cima continua exigindo
+`--forcar`. É um verbo destrutivo — desfaz inclusive um plano-mestre que o usuário
+aprovou na porta —, então trate-o como os outros destrutivos: pergunte antes.
 
 Os gates de risco R1–R9 valem **idênticos** em modo programa. Autonomia de processo não é
 autonomia de risco: com ninguém olhando, o gate vale mais, não menos.

@@ -31,6 +31,7 @@ RAIZ_PLUGIN = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RAIZ_PLUGIN))
 
 from ferramentas import descoberta, estado  # noqa: E402
+from ferramentas.tests.apoio_descoberta import resposta_para as _resposta_para  # noqa: E402
 
 #: Pedido com sinal de intenção inequívoco ("sistema novo" é termo de confiança ALTA de
 #: MATERIALIZAR). Ele existe para que os testes que **não** são sobre classificação não
@@ -95,7 +96,10 @@ def _responder_tudo_pela_cli(raiz: Path) -> list[str]:
         if not abertas:
             return respondidas
         alvo = abertas[0]
-        resposta = _cli(raiz, "descoberta", "responder", alvo, f"resposta para {alvo}")
+        # Lacuna com `opcoes` só aceita uma delas: `onde_roda` respondida com texto livre
+        # é recusada, e é para ser mesmo — texto livre ali fechava a lacuna sem ativar o
+        # bloco da plataforma.
+        resposta = _cli(raiz, "descoberta", "responder", alvo, _resposta_para(alvo))
         assert resposta.returncode == 0, resposta.stdout + resposta.stderr
         respondidas.append(alvo)
     raise AssertionError(f"{LIMITE_DE_VOLTAS} respostas e ainda há bloqueante aberta")

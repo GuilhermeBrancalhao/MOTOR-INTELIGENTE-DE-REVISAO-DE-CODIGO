@@ -40,19 +40,54 @@ ESTADOS: tuple[str, ...] = (
     "DESVIO",
     "ACEITE_SISTEMA",
     "CONCLUIDO",
+    "ABORTADO",
 )
 
 #: O grafo. `PLANO_MESTRE -> EXECUCAO` é a porta P1: existe no grafo, mas só
 #: `aprovar()` a atravessa, e `aprovar()` é o único verbo que o modelo não pode
 #: executar por conta própria.
+#:
+#: **`ABORTADO` é um terminal próprio, e não `CONCLUIDO` reusado.** Antes, o verbo
+#: `abortar` da CLI escrevia `estado = "CONCLUIDO"` na mão, por fora de
+#: `transicionar`: funcionava a partir de qualquer estado, não deixava rastro, e
+#: produzia um programa cujo desfecho gravado ("concluído") mentia sobre o que tinha
+#: acontecido — inclusive para `novo()`, que passava a abrir outro por cima sem
+#: reclamar. Fim VERIFICADO (aceite de sistema verde) e fim DECLARADO por fiat são
+#: desfechos diferentes e precisam de nomes diferentes; com dois terminais, quem lê o
+#: `programa.json` seis meses depois distingue os dois sem consultar a trilha.
+#:
+#: Toda origem não-terminal tem aresta para `ABORTADO`: desistir é legítimo em
+#: qualquer ponto vivo do programa. O que não é legítimo é desistir **sem passar pela
+#: máquina** — e a única maneira de garantir isso é a aresta existir.
 TRANSICOES: dict[str, tuple[str, ...]] = {
-    "CONCEPCAO": ("PLANO_MESTRE",),
-    "PLANO_MESTRE": ("EXECUCAO",),
-    "EXECUCAO": ("DESVIO", "ACEITE_SISTEMA"),
-    "DESVIO": ("EXECUCAO", "PLANO_MESTRE"),
-    "ACEITE_SISTEMA": ("EXECUCAO", "CONCLUIDO"),
+    "CONCEPCAO": ("PLANO_MESTRE", "ABORTADO"),
+    "PLANO_MESTRE": ("EXECUCAO", "ABORTADO"),
+    "EXECUCAO": ("DESVIO", "ACEITE_SISTEMA", "ABORTADO"),
+    "DESVIO": ("EXECUCAO", "PLANO_MESTRE", "ABORTADO"),
+    "ACEITE_SISTEMA": ("EXECUCAO", "CONCLUIDO", "ABORTADO"),
     "CONCLUIDO": (),
+    "ABORTADO": (),
 }
+
+#: Terminais: nada sai deles. Derivado do grafo, e não escrito à mão, para que a
+#: adição de um terceiro desfecho não deixe esta lista para trás.
+TERMINAIS: tuple[str, ...] = tuple(
+    origem for origem, destinos in TRANSICOES.items() if not destinos
+)
+
+#: Os estados em que o motor abre um programa novo por cima do anterior **sem** o
+#: usuário pedir `--forcar`.
+#:
+#: Só `CONCLUIDO` está aqui, e `ABORTADO` está de fora de propósito. A regra é: a
+#: pasta se libera sozinha quando o fim foi **verificado** — `CONCLUIDO` só existe
+#: depois de um aceite de sistema verde, que é um veredito que a máquina conferiu.
+#: `ABORTADO` é fim **declarado**: alguém disse que acabou, e ninguém provou nada.
+#: Liberar por declaração daria um segundo caminho, mais silencioso, para o que
+#: `--forcar` já faz em voz alta — bastaria `abortar` seguido de `programa <objetivo>`
+#: para descartar um plano-mestre que o usuário tinha aprovado na porta P1, sem que a
+#: palavra "forçar" aparecesse em lugar nenhum. Descartar o registro de um programa
+#: continua sendo uma decisão explícita, tomada no momento em que se descarta.
+ESTADOS_QUE_LIBERAM_A_PASTA: tuple[str, ...] = ("CONCLUIDO",)
 
 #: Status de um ciclo dentro do programa.
 STATUS_CICLO: tuple[str, ...] = ("PENDENTE", "ATIVO", "CONCLUIDO", "REPROVADO")
@@ -317,9 +352,13 @@ def novo(raiz: Path, objetivo: str, agora: str, forcar: bool = False) -> dict:
     """
     with _cadeado(raiz):
         existente = carregar_estrito(raiz)
-        if existente is not None and existente.get("estado") != "CONCLUIDO" and not forcar:
+        if (
+            existente is not None
+            and existente.get("estado") not in ESTADOS_QUE_LIBERAM_A_PASTA
+            and not forcar
+        ):
             raise ProgramaJaAtivo(
-                f"já existe um programa em andamento (objetivo: "
+                f"já existe um programa neste projeto (objetivo: "
                 f"{existente.get('objetivo', '?')!r}, estado: "
                 f"{existente.get('estado', '?')}); use forcar=True para descartá-lo"
             )
@@ -401,6 +440,16 @@ def propor_plano(dados: dict, ciclos: list[dict], aceite_de_sistema: str) -> dic
     teste textual de `ferramentas/tests/test_gate_programa.py`, que lê o `cli.py` e
     reprova se o gate deixar de vir antes desta chamada — a mesma tática que o C4 usa
     para impedir que o gate de fase volte a ler o disco por fora do cadeado.
+
+    **Duas arestas entram em PLANO_MESTRE, e as duas são cobradas.** `CONCEPCAO` é a
+    primeira; `DESVIO` é a segunda, e é o replanejamento. Durante um bom tempo o gate
+    do chamador olhava só a primeira, e o resultado era o gate desligado exatamente
+    onde ele mais vale: os quatro `MOTIVOS_DESVIO` descrevem, um a um, situações em que
+    a descoberta original ficou obsoleta (stack que não serve, dependência que ninguém
+    previu, aceite inalcançável, escopo fora do declarado). Replanejar sem reabrir a
+    entrevista é assinar o mesmo plano com outro nome. O chamador deriva as origens
+    protegidas do próprio `TRANSICOES`, e não de uma lista escrita à mão: uma terceira
+    aresta para PLANO_MESTRE nasce com gate.
     """
     if not (aceite_de_sistema or "").strip():
         raise PlanoInvalido(
@@ -411,18 +460,55 @@ def propor_plano(dados: dict, ciclos: list[dict], aceite_de_sistema: str) -> dic
 
     novo_estado = transicionar(dados, "PLANO_MESTRE")
     novo_estado["aceite_de_sistema"] = aceite_de_sistema
-    novo_estado["ciclos"] = [
-        {
-            "id": c["id"],
-            "objetivo": c["objetivo"],
-            "depende_de": list(c.get("depende_de", [])),
-            "aceite": c["aceite"],
-            "status": "PENDENTE",
-            "ciclo_do_estado": None,
-        }
-        for c in ciclos
-    ]
+    anteriores = {c["id"]: c for c in dados.get("ciclos", [])}
+    novo_estado["ciclos"] = [_reaproveitar(c, anteriores.get(c["id"])) for c in ciclos]
+    # Replanejar É a resposta ao desvio: o motivo que parou a execução deixa de estar
+    # aberto no instante em que o plano novo é proposto. Sem esta limpeza, o registro
+    # do desvio sobreviveria à aprovação e o programa seguiria em EXECUCAO exibindo
+    # para sempre um conflito já resolvido — ruído que treina a ignorar o campo, que é
+    # o oposto do que a parada por exceção (P2) existe para produzir. Vindo de
+    # CONCEPCAO o campo já é `None`, então a atribuição é inócua nesse caminho.
+    novo_estado["desvio"] = None
     return novo_estado
+
+
+def _reaproveitar(novo_ciclo: dict, anterior: dict | None) -> dict:
+    """Monta o ciclo do plano novo **preservando o veredito já dado**, quando cabe.
+
+    Antes, todo ciclo nascia `PENDENTE`. Isso era inofensivo enquanto a única aresta
+    de entrada em PLANO_MESTRE fosse `CONCEPCAO -> PLANO_MESTRE`, onde não há ciclo
+    nenhum para perder. Pela segunda aresta (`DESVIO -> PLANO_MESTRE`, o
+    replanejamento) o efeito era outro: reconstruir do zero apagava em silêncio o
+    `CONCLUIDO` de todo ciclo já aceito e o `REPROVADO` de todo ciclo já reprovado, e
+    o `programa.json` passava a afirmar que nada tinha sido feito. Replanejar não
+    desfaz trabalho aceito, e muito menos absolve trabalho reprovado.
+
+    **A chave da preservação é o critério de aceite, não o id.** O id é rótulo; o
+    aceite é o enunciado falsificável que decidiu o veredito. Se o plano novo mantém o
+    id mas reescreve o aceite, o `CONCLUIDO` antigo é prova sobre uma afirmação que
+    não está mais no plano — e carimbá-lo no critério novo seria dar por satisfeito um
+    requisito que ninguém verificou. Nesse caso o ciclo volta a `PENDENTE`, junto com
+    a amarração ao ciclo real (`ciclo_do_estado`), porque o trabalho vai ser refeito.
+    A falha, quando há dúvida, é para o lado de refazer.
+    """
+    base = {
+        "id": novo_ciclo["id"],
+        "objetivo": novo_ciclo["objetivo"],
+        "depende_de": list(novo_ciclo.get("depende_de", [])),
+        "aceite": novo_ciclo["aceite"],
+        "status": "PENDENTE",
+        "ciclo_do_estado": None,
+    }
+    if anterior is None:
+        return base
+    mesmo_criterio = (anterior.get("aceite") or "").strip() == (
+        novo_ciclo["aceite"] or ""
+    ).strip()
+    if not mesmo_criterio:
+        return base
+    base["status"] = anterior.get("status", "PENDENTE")
+    base["ciclo_do_estado"] = anterior.get("ciclo_do_estado")
+    return base
 
 
 def aprovar(dados: dict, agora: str) -> dict:
@@ -596,6 +682,39 @@ def concluir(dados: dict, passou: bool, agora: str) -> dict:
         return transicionar(dados, "EXECUCAO")
     novo_estado = transicionar(dados, "CONCLUIDO")
     novo_estado["concluido_em"] = agora
+    return novo_estado
+
+
+def abortar(dados: dict, agora: str) -> dict:
+    """Encerra o programa por decisão, sem aceite — o terminal `ABORTADO`.
+
+    É o verbo mais destrutivo da camada: desfaz um programa inteiro, inclusive um
+    plano-mestre que o usuário aprovou na porta P1. Antes ele nem existia aqui — a CLI
+    escrevia `estado = "CONCLUIDO"` direto no dicionário, por fora de `transicionar`.
+    Três coisas vinham junto com esse atalho, e as três morrem com esta função:
+
+    - **funcionava a partir de qualquer estado**, inclusive de um programa já fechado,
+      porque não havia grafo nenhum a consultar;
+    - **gravava o desfecho errado**: "CONCLUIDO" é a palavra reservada para aceite de
+      sistema verde, e passou a nomear também a desistência. Quem lesse o arquivo
+      depois não teria como saber qual dos dois aconteceu;
+    - **abria a porta de trás de `novo()`**, que libera a pasta quando o estado é
+      `CONCLUIDO`: abortar e abrir outro por cima virava uma sequência de dois verbos
+      sem a palavra "forçar" em lugar nenhum.
+
+    Recusar a partir dos terminais é deliberado e não é purismo de grafo: `abortar` de
+    um programa já `CONCLUIDO` reescreveria um desfecho verificado como desistência,
+    que é perda de informação — e `abortar` de um `ABORTADO` só mexeria no carimbo.
+    Nos dois casos não há o que encerrar, e dizer isso é mais útil do que obedecer.
+    """
+    atual = dados["estado"]
+    if atual in TERMINAIS:
+        raise TransicaoInvalida(
+            f"o programa já terminou em {atual}; não há o que abortar "
+            "(abrir outro programa por cima exige `--forcar`)"
+        )
+    novo_estado = transicionar(dados, "ABORTADO")
+    novo_estado["abortado_em"] = agora
     return novo_estado
 
 

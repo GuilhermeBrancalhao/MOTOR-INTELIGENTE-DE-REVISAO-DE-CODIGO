@@ -115,9 +115,18 @@ class Lacuna:
     - `contextos`: conjunto vazio significa que nenhum contexto e exigido.
       Nao-vazio significa que a lacuna so entra quando ao menos um deles esta
       confirmado.
-    - `opcoes`: vazio significa resposta livre. Nao-vazio nao restringe a resposta
-      -- oferece caminho. Restringir a resposta as opcoes conhecidas produziria
-      especificacao que descreve o catalogo em vez do software.
+    - `opcoes`: vazio significa resposta livre -- e a maioria das lacunas e assim, de
+      proposito: "que problema isso resolve" nao tem resposta certa declarada, e
+      inventar uma produziria especificacao que descreve o catalogo em vez do
+      software. Nao-vazio e declaracao de que **estas** sao as respostas que a
+      pergunta tem, e vale como conjunto fechado em dois lugares que precisam
+      concordar: `bloqueio._b1_muda_lacunas_ativas` percorre `opcoes` para prever o
+      que responder destrava, e `bloqueio.exigir_resposta_admissivel` recusa, na hora
+      de gravar, o que estiver fora da lista. Prever sobre um conjunto e aceitar de
+      outro foi um defeito real -- `onde_roda` respondida "no navegador" fechava a
+      lacuna sem ativar plataforma nenhuma, e o ramo inteiro da entrevista sumia.
+      Escrever `opcoes` numa lacuna e, portanto, um compromisso de conteudo: so
+      declare quando a lista for mesmo exaustiva.
     """
 
     id: str

@@ -57,6 +57,7 @@ lacunas abertas e devolve o veredito de cada uma, com os predicados que disparar
 
 from __future__ import annotations
 
+import unicodedata
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
@@ -170,6 +171,26 @@ class BloqueioInvalido(ValueError):
     faz B3 nunca disparar por aquela linha, e o efeito é um plano que passa no gate sem
     ter aceite possível. Parte declarada sem nenhuma lacuna que a forneça é o mesmo
     defeito pelo outro lado: a enumeração cresce e o critério não muda.
+    """
+
+
+class RespostaForaDasOpcoes(ValueError):
+    """A resposta não é nenhuma das `opcoes` declaradas da lacuna.
+
+    Existe porque B1 mede a mudança **sobre `lacuna.opcoes`** — está escrito na
+    docstring de `_b1_muda_lacunas_ativas`: "o conjunto de respostas admissíveis é
+    `lacuna.opcoes`". Gravar resposta fora desse conjunto faz o predicado prever o efeito
+    de uma resposta que ninguém deu, e o modo de falhar é o pior possível: a lacuna sai
+    de abertas (respondida), o ramo que ela destravaria **não** entra, e o portão abre
+    sobre perguntas que nunca chegaram a existir.
+
+    O caso medido: `onde_roda` respondida com "no navegador". Nenhum membro de
+    `Plataforma` se chama assim, `aplicar_resposta` devolve os eixos inalterados, e as
+    quatro lacunas do bloco WEB nunca são ativadas, nunca perguntadas e nunca listadas
+    como assumíveis — sem uma linha de aviso em lugar nenhum.
+
+    A recusa é a mesma escolha de `LacunaDesconhecida`: aceitar em silêncio guardaria a
+    resposta num balde que não destrava nada, e a pessoa lembra de ter respondido.
     """
 
 
@@ -515,6 +536,56 @@ def exigir_origem_declarada(origem: object) -> None:
             "assumível quer dizer que o motor segue sem perguntar, não que ele decide "
             "no lugar de alguém e não conta"
         )
+
+
+def _comparavel(texto: str) -> str:
+    """O texto reduzido ao que interessa comparar: sem acento, sem caixa, sem espaço extra.
+
+    A tolerância é deliberada e tem limite. "Senha própria" e "senha propria" são a mesma
+    resposta escrita por duas pessoas — recusar uma delas seria transformar a regra numa
+    prova de digitação, e quem apanha de acento não aprende nada sobre o software. Já
+    "no navegador" continua sendo outra coisa que não "WEB", e é essa distinção que a
+    regra existe para fazer.
+    """
+    sem_acento = "".join(
+        parte
+        for parte in unicodedata.normalize("NFD", texto or "")
+        if not unicodedata.combining(parte)
+    )
+    return " ".join(sem_acento.lower().split())
+
+
+def exigir_resposta_admissivel(lacuna: Lacuna, valor: str) -> None:
+    """Recusa resposta que não é nenhuma das `opcoes` declaradas da lacuna.
+
+    Fica aqui, ao lado de `exigir_origem_declarada` e pelo mesmo motivo: é **regra**, e
+    não mecanismo. O conjunto de respostas admissíveis é `lacuna.opcoes` porque B1 já o
+    trata assim para prever o efeito de responder; a guarda apenas cobra, na hora de
+    gravar, o mesmo conjunto sobre o qual o predicado prometeu. Uma cópia dela dentro do
+    módulo de persistência divergiria de B1 no primeiro ajuste — e a divergência
+    apareceria como portão que abre sem o ramo da entrevista ter existido.
+
+    Lacuna **sem** `opcoes` é resposta livre e passa direto: "que problema isso resolve"
+    não tem lista de respostas certas, e inventar uma seria o interrogatório de múltipla
+    escolha que o catálogo recusa. A regra vale só onde o próprio catálogo declarou, por
+    escrito, quais respostas existem.
+
+    Não devolve nada e levanta `RespostaForaDasOpcoes` com as opções na mensagem. Recusar
+    sem dizer o que se aceita é o portão sem saída de novo, um andar abaixo: a pessoa
+    sabe que errou e não sabe o que escrever.
+    """
+    if not lacuna.opcoes:
+        return
+    admissiveis = {_comparavel(opcao) for opcao in lacuna.opcoes}
+    if _comparavel(valor) in admissiveis:
+        return
+    raise RespostaForaDasOpcoes(
+        f"resposta {valor!r} não é uma das opções declaradas de {lacuna.id!r}: "
+        + ", ".join(lacuna.opcoes)
+        + " - o catálogo declara quais respostas esta pergunta tem, e é sobre essa "
+        "lista que B1 prevê o que responder destrava; gravar fora dela fecharia a "
+        "lacuna sem ativar o ramo, e as perguntas do ramo nunca seriam feitas"
+    )
 
 
 def validar_bloqueio(

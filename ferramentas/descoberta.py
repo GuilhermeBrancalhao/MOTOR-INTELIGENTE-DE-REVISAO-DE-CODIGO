@@ -46,12 +46,14 @@ from ferramentas.elicitacao import (
     Origem,
     Palpite,
     Plataforma,
+    RespostaForaDasOpcoes,
     aplicar_resposta,
     classificar_lacunas,
     classificar,
     detectar_contextos,
     detectar_plataformas,
     exigir_origem_declarada,
+    exigir_resposta_admissivel,
     lacunas_do_pedido,
     universo_completo,
 )
@@ -73,6 +75,24 @@ class DescobertaAusente(KeyError):
     Herda de `KeyError` porque é isso: chave ausente. Levanta em vez de criar o bloco
     na hora porque criar exigiria inventar o pedido e a intenção — e intenção inventada
     escolhe *quais perguntas existem*, que é o erro mais caro deste motor.
+    """
+
+
+class PalpiteNaoPendente(KeyError):
+    """Confirmação (ou recusa) de um palpite que este bloco não tem pendente.
+
+    Herda de `KeyError` porque é chave ausente, como `DescobertaAusente`. Levanta em vez
+    de não fazer nada porque "não fazer nada" e "funcionou" são indistinguíveis na tela:
+    `_resolver_palpite` filtra a lista por igualdade de valor, e um nome digitado errado
+    — ou já resolvido numa passada anterior — sairia com código 0 sem tirar nada da
+    pendência e sem aplicar eixo nenhum. É o mesmo defeito de `responder` engolindo
+    resposta fora das opções, um verbo ao lado.
+
+    Também é o que impede confirmar um eixo que ninguém inferiu. Confirmar aplica
+    plataforma ou contexto **sem** gravar resposta nenhuma; se qualquer valor fosse
+    aceito, `confirmar WEB` viraria um jeito de mexer nos eixos por fora da entrevista,
+    sem evidência e sem constar de `respostas`. Quem quer declarar a plataforma responde
+    `onde_roda` — e aí fica escrito quem disse.
     """
 
 
@@ -135,6 +155,16 @@ class Avaliacao:
         travou; cada assumível sai com a pergunta inteira também. Em nenhum dos dois
         casos aparece valor adotado — a lista de assumíveis existe justamente para que
         o que o motor escolheu não perguntar fique escrito.
+
+        **Os palpites pendentes saem primeiro, e com a evidência.** Eles vinham sendo
+        gravados, carregados e nunca impressos: campo que ninguém lê é inferência que
+        ninguém confirma, e palpite não confirmado nunca vira eixo — então o bloco de
+        lacunas que ele destravaria não existe para o resto do motor. Confirmar `MOBILE`
+        acrescenta cinco perguntas; confirmar `LOJA_PAGAMENTOS` acrescenta a de cobrança
+        em dobro, que é peso 9. Nenhuma delas aparecia em lugar nenhum, e a porta abria
+        assim mesmo. A evidência vem junto porque é ela que torna o palpite discutível:
+        quem lê "por que você achou que era um aplicativo de celular?" recebe de volta o
+        próprio trecho, e não a alegação de que o motor achou.
         """
         if not self.registrada:
             return (
@@ -146,8 +176,20 @@ class Avaliacao:
             f"Intenção: {self.intencao.value if self.intencao else '(indeterminada)'}",
             f"Respondidas: {len(self.respondidas)} | "
             f"Bloqueantes abertas: {len(self.bloqueantes)} | "
-            f"Assumíveis abertas: {len(self.assumiveis)}",
+            f"Assumíveis abertas: {len(self.assumiveis)} | "
+            f"Palpites pendentes: {len(self.palpites_pendentes)}",
         ]
+        if self.palpites_pendentes:
+            linhas += [
+                "",
+                "PALPITES PENDENTES (inferidos do pedido, NÃO aplicados — confirmar um "
+                "deles muda quais perguntas existem):",
+            ]
+            for palpite in self.palpites_pendentes:
+                linhas.append(
+                    f"- {palpite.valor} (confiança {palpite.confianca or '?'}) "
+                    f"porque o pedido diz: \"{palpite.evidencia}\""
+                )
         if self.bloqueantes:
             linhas += ["", "BLOQUEANTES (o plano não anda sem estas):"]
             for decisao in self.bloqueantes:
@@ -394,17 +436,28 @@ def responder(
     Id que não está ativo para este pedido levanta `LacunaDesconhecida`, e nada é
     gravado. Aceitar em silêncio guardaria a resposta num balde que ninguém lê,
     deixaria a lacuna verdadeira aberta, e a pessoa lembraria de ter respondido.
+
+    **Resposta fora das `opcoes` declaradas levanta `RespostaForaDasOpcoes`**, pela
+    mesma razão e com um agravante. O id errado ao menos falha alto; o valor errado
+    falhava baixo: `aplicar_resposta` não acha eixo nenhum em "no navegador", devolve os
+    conjuntos intactos — e a lacuna sai de abertas do mesmo jeito. Era assim que
+    `onde_roda`, a única lacuna cuja resposta muda **quais outras perguntas existem**,
+    fechava sem ativar o bloco da plataforma: o portão abria, e as quatro lacunas do ramo
+    nunca eram perguntadas nem listadas como assumíveis. A validação é a mesma regra que
+    B1 usa para prever o efeito (`bloqueio.exigir_resposta_admissivel`), e não uma cópia
+    dela aqui dentro.
     """
     exigir_origem_declarada(origem)
 
     def _mutar(dados: dict | None) -> dict | None:
         bloco = _exigir(dados)
-        conhecidas = {lacuna.id for lacuna in ativas(bloco)}
+        conhecidas = {lacuna.id: lacuna for lacuna in ativas(bloco)}
         if lacuna_id not in conhecidas:
             raise LacunaDesconhecida(
                 f"lacuna {lacuna_id!r} não está ativa para este pedido "
                 f"({_intencao(bloco).value}); ativas agora: {len(conhecidas)}"
             )
+        exigir_resposta_admissivel(conhecidas[lacuna_id], valor)
         respostas = dict(_respostas(bloco))
         respostas[lacuna_id] = {"valor": valor, "origem": str(origem), "em": agora}
         bloco["respostas"] = respostas
@@ -440,15 +493,37 @@ def recusar(raiz: Path, valor: str, *, agora: str | None = None) -> dict:
 
 
 def _resolver_palpite(raiz: Path, valor: str, *, aplicar: bool, agora: str | None) -> dict:
+    """O miolo comum de `confirmar` e `recusar` — a diferença é só `aplicar`.
+
+    O palpite tem de estar **pendente**; se não estiver, levanta `PalpiteNaoPendente` de
+    dentro do mutador e nada é gravado. A verificação mora aqui, sob o cadeado, e não em
+    quem chama: checar antes e mutar depois deixaria a janela em que outra sessão resolve
+    o mesmo palpite no meio, e o segundo chamador acharia que resolveu.
+    """
     alvo = str(valor).strip().upper()
 
     def _mutar(dados: dict | None) -> dict | None:
         bloco = _exigir(dados)
-        bloco["palpites_pendentes"] = [
+        pendentes = list(bloco.get("palpites_pendentes", []))
+        restantes = [
             item
-            for item in bloco.get("palpites_pendentes", [])
+            for item in pendentes
             if str(item.get("valor", "")).strip().upper() != alvo
         ]
+        if len(restantes) == len(pendentes):
+            conhecidos = [str(item.get("valor", "")) for item in pendentes]
+            raise PalpiteNaoPendente(
+                f"palpite {valor!r} não está pendente neste bloco de descoberta; "
+                + (
+                    "pendentes agora: " + ", ".join(conhecidos)
+                    if conhecidos
+                    else "não há nenhum palpite pendente"
+                )
+                + " - resolver um palpite que ninguém inferiu aplicaria eixo sem "
+                "evidência e sem constar das respostas; para declarar a plataforma, "
+                "responda `onde_roda`"
+            )
+        bloco["palpites_pendentes"] = restantes
         if aplicar:
             plataformas, contextos = _eixos(bloco)
             depois_p, depois_c = aplicar_resposta(alvo, plataformas, contextos)
