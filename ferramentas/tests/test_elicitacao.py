@@ -37,11 +37,12 @@ PACOTE = Path(elicitacao.__file__).resolve().parent
 MODULOS = ("catalogo", "deteccao", "entrevista", "especificacao")
 
 #: Código novo deste repositório, que nunca existiu no exemplo e por isso não entra
-#: no `diff` que audita o port: o `__init__` do pacote e o eixo de intenção
-#: (`taxonomia`, ciclo C2). Ficam em constante separada para que a contagem abaixo
-#: continue sendo exata — uma lista que cresce sozinha deixaria de reprovar o dia em
-#: que alguém largasse um módulo a mais aqui dentro sem dizer a ninguém.
-MODULOS_LOCAIS = ("__init__", "taxonomia")
+#: no `diff` que audita o port: o `__init__` do pacote, o eixo de intenção
+#: (`taxonomia`, ciclo C2) e a regra de bloqueio (`bloqueio`, ciclo C3). Ficam em
+#: constante separada para que a contagem abaixo continue sendo exata — uma lista que
+#: cresce sozinha deixaria de reprovar o dia em que alguém largasse um módulo a mais
+#: aqui dentro sem dizer a ninguém.
+MODULOS_LOCAIS = ("__init__", "taxonomia", "bloqueio")
 
 
 # --- O pacote existe e é importável como pacote -------------------------

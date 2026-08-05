@@ -16,6 +16,7 @@ HOOK_GATE = RAIZ_PLUGIN / "hooks" / "engine_gate.py"
 
 sys.path.insert(0, str(RAIZ_PLUGIN))
 from ferramentas import estado, trilha  # noqa: E402
+from ferramentas.tests.apoio_descoberta import fechar_descoberta  # noqa: E402
 
 
 def _rodar(hook: Path, payload: dict, cwd: Path) -> subprocess.CompletedProcess:
@@ -737,7 +738,15 @@ def _cli_fase(raiz: Path, destino: str) -> tuple[subprocess.CompletedProcess, st
 
 def _caminhar_ate_build_pela_cli(raiz: Path) -> None:
     """DESCOBERTA -> ANALISE -> PLANO -> BUILD, cada passo pela CLI de verdade,
-    cada um seguido do PostToolUse sobre o próprio comando que rodou a CLI."""
+    cada um seguido do PostToolUse sobre o próprio comando que rodou a CLI.
+
+    A entrevista de descoberta é fechada antes do primeiro passo porque a passagem
+    DESCOBERTA -> ANALISE tem gate DURO (`cli._gate_descoberta`): sem as bloqueantes
+    respondidas ela sai 1, e estes dois testes — que são sobre a cobrança do Stop, não
+    sobre elicitação — parariam na primeira transição. O preparo responde de verdade,
+    pela API pública, em vez de desligar o gate.
+    """
+    fechar_descoberta(raiz)
     for destino in ("ANALISE", "PLANO", "BUILD"):
         resultado, comando = _cli_fase(raiz, destino)
         assert resultado.returncode == 0, resultado.stdout + resultado.stderr

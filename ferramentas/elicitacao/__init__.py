@@ -38,6 +38,14 @@ perguntas; `taxonomia` acrescenta as perguntas que só existem porque alguém qu
 otimizar em vez de criar, ou evoluir em vez de revisar. Ele lê `catalogo` e reusa o
 casamento por termo de `deteccao`, e nenhum dos dois sabe que ele existe.
 
+**Um sexto módulo, também local.** `bloqueio` é a regra que decide o que **trava** o
+plano: uma lacuna é bloqueante se responder muda quais outras perguntas existem (B1),
+se ela é universal (B2), ou se sem ela não se escreve critério de aceite falsificável
+(B3). Todo o resto é assumível — e assumível sai como decisão aberta com a pergunta
+inteira, nunca como valor chutado. Ele lê os outros e nenhum deles sabe que ele existe;
+a persistência do resultado mora fora do pacote, em `ferramentas/descoberta.py`, porque
+aqui dentro não se importa nada além da biblioteca padrão.
+
 **Só biblioteca padrão**, como todo o resto de `ferramentas/`: o plugin se instala
 em projeto alheio e não tem licença para arrastar dependência junto. Há teste nesta
 suíte varrendo os `import` de topo destes módulos exatamente para que a primeira
@@ -46,6 +54,23 @@ tentativa de trazer uma biblioteca de fora falhe na hora, e não na instalação
 
 from __future__ import annotations
 
+from .bloqueio import (
+    MOTIVO_DO_PREDICADO,
+    PARTES_DO_ACEITE,
+    BloqueioInvalido,
+    DecisaoAberta,
+    PadraoAssumidoProibido,
+    ParteDoAceite,
+    Predicado,
+    aplicar_resposta,
+    assumiveis_abertas,
+    avaliar_lacuna,
+    bloqueantes_abertas,
+    classificar_lacunas,
+    exigir_origem_declarada,
+    universo_completo,
+    validar_bloqueio,
+)
 from .catalogo import (
     CATALOGO,
     PESO_MAXIMO_VALIDO,
@@ -90,6 +115,22 @@ from .taxonomia import (
 )
 
 __all__ = [
+    # bloqueio
+    "BloqueioInvalido",
+    "DecisaoAberta",
+    "MOTIVO_DO_PREDICADO",
+    "PARTES_DO_ACEITE",
+    "PadraoAssumidoProibido",
+    "ParteDoAceite",
+    "Predicado",
+    "aplicar_resposta",
+    "assumiveis_abertas",
+    "avaliar_lacuna",
+    "bloqueantes_abertas",
+    "classificar_lacunas",
+    "exigir_origem_declarada",
+    "universo_completo",
+    "validar_bloqueio",
     # catalogo
     "CATALOGO",
     "CatalogoInvalido",

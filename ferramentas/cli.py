@@ -181,6 +181,68 @@ def _verbo_status(raiz: Path) -> int:
     return 0
 
 
+#: A única aresta do grafo com gate de CONTEÚDO, e não só de forma. `transicionar`
+#: valida o desenho ("existe DESCOBERTA -> ANALISE?"); este par diz que, além de
+#: existir, a passagem exige a entrevista de descoberta fechada. As outras arestas
+#: seguem valendo só pelo grafo — acrescentar uma segunda linha aqui é uma decisão de
+#: produto, não um ajuste de código.
+ARESTA_COM_GATE_DE_DESCOBERTA = ("DESCOBERTA", "ANALISE")
+
+
+def _gate_descoberta(dados: dict) -> str | None:
+    """A recusa da transição DESCOBERTA -> ANALISE, ou `None` quando ela pode seguir.
+
+    **Falha FECHADO.** Qualquer coisa que dê errado ao calcular o veredito — estado
+    sem o bloco de descoberta, bloco de versão desconhecida, eixo fora da taxonomia,
+    `ferramentas/descoberta.py` ausente numa instalação capenga, exceção que ninguém
+    previu — devolve mensagem de recusa, nunca liberação. É o oposto deliberado de
+    `hooks/engine_gate.py`, que engole erro e deixa o turno passar: aquele é rede
+    secundária no evento Stop, e derrubar o turno do usuário por um defeito do motor
+    seria pior do que deixar uma cobrança escapar. Este aqui é o caminho REAL da
+    transição, e o custo do erro é invertido — liberar por engano deixa o plano ser
+    escrito sobre suposição, que é exatamente o defeito que a elicitação existe para
+    não ter. "Não sei" e "está livre" não são a mesma coisa.
+
+    O `import` mora dentro da função, e dentro do `try`, pelo mesmo motivo: importado
+    no topo, um `ferramentas/descoberta.py` quebrado estouraria na carga do módulo —
+    antes de `principal` existir para segurar a exceção — e derrubaria a CLI inteira
+    com traceback, inclusive `status` e `desligar`, que nada têm com este gate. Aqui
+    dentro, o defeito fecha o portão e não contamina o resto.
+
+    Recebe o estado já lido (nunca o caminho da pasta) porque quem chama está com o
+    cadeado do estado na mão, e ler o disco de novo aqui tentaria retomar um cadeado
+    que não é reentrante.
+    """
+    try:
+        from ferramentas import descoberta  # noqa: PLC0415 — ver docstring
+
+        avaliacao = descoberta.avaliar(dados)
+        if avaliacao.liberado_para_planejar:
+            return None
+        if not avaliacao.registrada:
+            cabecalho = (
+                "ENGINE: transição DESCOBERTA -> ANALISE recusada — a descoberta não "
+                "foi registrada neste ciclo."
+            )
+        else:
+            cabecalho = (
+                f"ENGINE: transição DESCOBERTA -> ANALISE recusada — "
+                f"{len(avaliacao.bloqueantes)} lacuna(s) bloqueante(s) aberta(s)."
+            )
+        return (
+            f"{cabecalho}\n\n{avaliacao.resumo()}\n\n"
+            "Responda as bloqueantes acima antes de mudar de fase. "
+            "Nada foi gravado no estado."
+        )
+    except Exception as erro:  # noqa: BLE001 — predicado que libera portão falha fechado
+        return (
+            "ENGINE: transição DESCOBERTA -> ANALISE recusada — não foi possível "
+            f"avaliar a descoberta ({erro.__class__.__name__}): {erro}\n\n"
+            "O gate falha FECHADO de propósito: sem veredito confiável, a passagem "
+            "não abre. Nada foi gravado no estado."
+        )
+
+
 def _verbo_fase(raiz: Path, resto: list[str]) -> int:
     """Transição de fase — a mutação que mais doía perder.
 
@@ -189,6 +251,16 @@ def _verbo_fase(raiz: Path, resto: list[str]) -> int:
     sessão já tinha visto a transição confirmada na tela. Agora a leitura e a
     gravação acontecem dentro do mesmo cadeado, e `transicionar` valida o grafo
     contra a fase que está no disco AGORA, não contra a que se leu antes.
+
+    **O gate de descoberta é checado DE DENTRO do mutador, e não antes dele.** As duas
+    posições recusam a transição; só uma decide sobre o estado que vai ser gravado.
+    Consultando antes, a leitura aconteceria fora do cadeado e o veredito seria sobre
+    um retrato velho: outra sessão pode registrar a descoberta (ou apagá-la) entre a
+    consulta e a mutação, e o resultado seria transição liberada por uma bloqueante já
+    aberta — ou barrada por uma que acabou de ser respondida. Aqui dentro, o mesmo
+    dicionário que o gate leu é o que `transicionar` altera, e devolver `None` faz
+    `atualizar` sair sem gravar: nem a fase, nem `fases_concluidas`, nem carimbo
+    nenhum. É por isso que o `estado.json` sai byte-idêntico da recusa.
     """
     if not resto:
         print(USO)
@@ -200,6 +272,11 @@ def _verbo_fase(raiz: Path, resto: list[str]) -> int:
         if not dados:
             falha.append("ENGINE: desligado; não há fase para mudar.")
             return None
+        if (dados.get("fase"), destino) == ARESTA_COM_GATE_DE_DESCOBERTA:
+            recusa = _gate_descoberta(dados)
+            if recusa is not None:
+                falha.append(recusa)
+                return None
         return estado.transicionar(dados, destino)
 
     try:
