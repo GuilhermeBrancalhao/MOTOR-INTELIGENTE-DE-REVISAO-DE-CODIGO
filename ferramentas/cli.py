@@ -1031,7 +1031,7 @@ def _verbo_programa(raiz: Path, resto: list[str]) -> int:
             print(
                 "ENGINE: `programa plano <arquivo.json>` — o arquivo deve ter "
                 '{"aceite_de_sistema": "...", "ciclos": [{"id","objetivo",'
-                '"depende_de","aceite"}]}'
+                '"depende_de","aceite","comando_de_aceite"}]}'
             )
             return 1
         origem = Path(args[0])
@@ -1104,6 +1104,17 @@ def _verbo_programa(raiz: Path, resto: list[str]) -> int:
             return 1
         print(f"**Próximo ciclo:** {alvo['id']} — {alvo['objetivo']}")
         print(f"**Aceite:** {alvo['aceite']}")
+        # O comando sai por `programa.comando_de_aceite`, e não por `alvo[...]`, porque
+        # ciclo de plano antigo não tem o campo: indexar direto trocaria a impressão do
+        # próximo ciclo por um `KeyError` em cima de um programa que só queria ser lido.
+        comando = programa.comando_de_aceite(alvo)
+        if comando:
+            print(f"**Comando de aceite:** {comando}")
+        else:
+            print(
+                "**Comando de aceite:** (nenhum — plano anterior ao aceite executável; "
+                "o veredito deste ciclo ainda depende de digitação)"
+            )
         return 0
 
     if sub == "aceite":
@@ -1244,7 +1255,8 @@ def _verbo_programa(raiz: Path, resto: list[str]) -> int:
     print(f"**Objetivo:** {objetivo}")
     print(
         "\nConduza a macro-DESCOBERTA e o PLANO_MESTRE. A decomposição precisa de "
-        "um critério de aceite falsificável por ciclo, e de um aceite de sistema."
+        "um critério de aceite falsificável por ciclo — a prosa em `aceite` e a linha "
+        "de comando que a verifica em `comando_de_aceite` — e de um aceite de sistema."
     )
     return 0
 

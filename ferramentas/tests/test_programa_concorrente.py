@@ -69,6 +69,7 @@ def _programa_em_execucao(raiz: Path, quantos_ciclos: int = 3) -> dict:
             "objetivo": f"construir C{n}",
             "depende_de": [],
             "aceite": f"pytest tests/c{n} -q sai 0",
+            "comando_de_aceite": f"python -m pytest tests/c{n} -q",
         }
         for n in range(1, quantos_ciclos + 1)
     ]

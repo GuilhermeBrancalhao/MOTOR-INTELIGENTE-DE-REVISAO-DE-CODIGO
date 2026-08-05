@@ -160,12 +160,23 @@ Todos os comandos abaixo usam o mesmo prefixo dos demais verbos
 | `/engine programa status` | `CLI programa status` |
 | `/engine programa retomar` | `CLI programa retomar` — sessão nova, programa que já existe |
 
+**O critério de aceite de cada ciclo é COMANDO, não só prosa.** Cada item de `ciclos` traz
+`{"id", "objetivo", "depende_de", "aceite", "comando_de_aceite"}`. `aceite` é a afirmação
+falsificável que o usuário lê na porta P1; `comando_de_aceite` é a linha de comando que a
+verifica, e quem decide o veredito é o **código de saída** dela — 0 passa, qualquer outro
+reprova. Plano em que algum ciclo não traga `comando_de_aceite` é **recusado**: frase não
+se executa, e veredito sem execução é opinião. Um `programa.json` gravado antes desta
+regra continua carregando inteiro; a exigência vale para o plano novo, na hora de propô-lo
+— inclusive ao **replanejar**, e nesse caso um ciclo cujo comando mude (ou que só tinha
+prosa) volta a `PENDENTE`, porque o verde antigo prova outro critério.
+
 **Como conduzir a EXECUCAO.** Em laço, até não haver mais ciclo elegível:
 
-1. `CLI programa proximo` — diz qual ciclo ligar e qual é o critério de aceite dele.
+1. `CLI programa proximo` — diz qual ciclo ligar, qual é o critério de aceite dele e qual
+   comando o verifica.
 2. `CLI ligar "<objetivo daquele ciclo>"` e conduza o ciclo **normalmente**, com todas as
    fases, papéis e gates de sempre. O programa não muda nada dentro do ciclo.
-3. Ao chegar em ENTREGA, **rode o critério de aceite declarado** e olhe a saída.
+3. Ao chegar em ENTREGA, **rode o `comando_de_aceite` declarado** e olhe o código de saída.
 4. `CLI programa aceite <CICLO> ok` — ou `falhou`. Nunca informe `ok` sem ter rodado o
    critério e visto o resultado: é a invariante 1 aplicada ao encadeamento.
 5. `CLI desligar` e volte ao passo 1.

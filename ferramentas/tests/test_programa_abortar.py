@@ -51,6 +51,7 @@ def _plano(*ids_e_deps):
             "objetivo": f"construir {cid}",
             "depende_de": list(deps),
             "aceite": f"pytest tests/{cid.lower()} -q sai 0",
+            "comando_de_aceite": f"python -m pytest tests/{cid.lower()} -q",
         }
         for cid, deps in ids_e_deps
     ]

@@ -16,13 +16,20 @@ AGORA = "2026-08-05T10:00:00"
 
 
 def _plano(*ids_e_deps):
-    """Monta uma decomposição válida a partir de (id, [deps])."""
+    """Monta uma decomposição válida a partir de (id, [deps]).
+
+    Válida quer dizer, desde o aceite executável: prosa **e** comando. Um fixture que
+    ficasse só na prosa faria toda esta suíte medir a recusa errada — os testes de DAG
+    passariam pelo `PlanoInvalido` do comando ausente, e o detector de ciclo poderia ser
+    apagado sem ninguém notar.
+    """
     return [
         {
             "id": cid,
             "objetivo": f"construir {cid}",
             "depende_de": list(deps),
             "aceite": f"pytest tests/{cid.lower()} -q sai 0",
+            "comando_de_aceite": f"python -m pytest tests/{cid.lower()} -q",
         }
         for cid, deps in ids_e_deps
     ]

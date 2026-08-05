@@ -36,14 +36,29 @@ from ferramentas.tests.apoio_descoberta import fechar_descoberta  # noqa: E402
 
 OBJETIVO = "construir um sistema novo que soma dois numeros"
 
-#: Decomposição mínima e **válida**: DAG trivial, aceite falsificável, aceite de
-#: sistema declarado. Válida de propósito — um plano inválido faria os testes passarem
-#: pela recusa errada, e o gate poderia nem existir sem ninguém notar.
+#: Decomposição mínima e **válida**: DAG trivial, aceite falsificável **com comando
+#: executável**, aceite de sistema declarado. Válida de propósito — um plano inválido
+#: faria os testes passarem pela recusa errada, e o gate poderia nem existir sem ninguém
+#: notar. Depois do aceite executável isso ficou literal: sem `comando_de_aceite`, todo
+#: teste de recusa deste arquivo passaria pelo `PlanoInvalido` do comando ausente, e os
+#: dois testes que exigem `returncode == 0` cairiam.
 PLANO_VALIDO = {
     "aceite_de_sistema": "python -m pytest -q sai 0 e a soma de 2+2 responde 4",
     "ciclos": [
-        {"id": "C1", "objetivo": "ler os dois numeros", "depende_de": [], "aceite": "pytest tests/c1 -q sai 0"},
-        {"id": "C2", "objetivo": "somar e responder", "depende_de": ["C1"], "aceite": "pytest tests/c2 -q sai 0"},
+        {
+            "id": "C1",
+            "objetivo": "ler os dois numeros",
+            "depende_de": [],
+            "aceite": "pytest tests/c1 -q sai 0",
+            "comando_de_aceite": "python -m pytest tests/c1 -q",
+        },
+        {
+            "id": "C2",
+            "objetivo": "somar e responder",
+            "depende_de": ["C1"],
+            "aceite": "pytest tests/c2 -q sai 0",
+            "comando_de_aceite": "python -m pytest tests/c2 -q",
+        },
     ],
 }
 

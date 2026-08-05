@@ -21,6 +21,14 @@ Três propriedades foram herdadas de `estado.py` de propósito, e não reescrita
 
 O arquivo é separado (`programa.json`) por decisão P3: um `desligar` de ciclo não
 pode destruir o programa que o contém.
+
+**O critério de aceite de cada ciclo é comando, e não só prosa.** `validar_plano` exigia
+um `aceite` não-vazio e aceitava qualquer frase; frase não se executa, então o veredito
+do ciclo continuava saindo de alguém digitar `programa aceite C1 ok`. Desde este ciclo
+todo ciclo do plano-mestre declara também `comando_de_aceite` — a linha de comando que
+`ferramentas.executor` roda para decidir o veredito pelo código de saída. A exigência
+vive só no caminho de escrita (`validar_plano`), e a leitura (`comando_de_aceite`) é
+tolerante: `programa.json` gravado antes disto continua carregando inteiro.
 """
 
 from __future__ import annotations
@@ -91,6 +99,27 @@ ESTADOS_QUE_LIBERAM_A_PASTA: tuple[str, ...] = ("CONCLUIDO",)
 
 #: Status de um ciclo dentro do programa.
 STATUS_CICLO: tuple[str, ...] = ("PENDENTE", "ATIVO", "CONCLUIDO", "REPROVADO")
+
+#: Onde mora o comando executável do critério de aceite de um ciclo.
+#:
+#: **Campo NOVO, ao lado de `aceite`, e não `aceite` virando objeto
+#: `{descricao, comando}`.** As duas formas guardam a mesma informação; o que as separa é
+#: o que acontece com os arquivos que já estão no disco.
+#:
+#: - `aceite` continua sendo **string** em todo `programa.json` já gravado. Nenhum leitor
+#:   precisa saber que este campo passou a existir: `resumo`, `proximo_elegivel`,
+#:   `_prog_imprimir` e o `programa proximo` da CLI seguem lendo `aceite` como sempre
+#:   leram. Um objeto no lugar da string quebraria os quatro no mesmo instante, com
+#:   `TypeError` em cima de um arquivo que ninguém tocou.
+#: - `VERSAO` continua 1 **porque não há nada a migrar**. Subir a versão obrigaria a
+#:   escrever uma função de migração, e uma migração que ninguém escreveu é uma migração
+#:   que roda na cabeça de quem lê o arquivo. Campo ausente já tem significado exato aqui
+#:   (plano anterior a este ciclo), e esse significado é lido por `comando_de_aceite`.
+#: - A separação também é honesta quanto ao conteúdo: a **prosa** diz o que está sendo
+#:   afirmado (o enunciado falsificável do volume 04), o **comando** diz como se
+#:   verifica. Fundir os dois numa string só foi exatamente o defeito que este ciclo
+#:   corrige — o plano trazia a frase e ninguém tinha o que rodar.
+CAMPO_COMANDO = "comando_de_aceite"
 
 #: Motivos que autorizam parar a execução e perguntar (P2). Fechado de propósito:
 #: parada que acontece por qualquer coisa deixa de ser sinal — a mesma lição do
@@ -266,10 +295,48 @@ def atualizar(
 # ---------------------------------------------------------------------------
 
 
+def comando_de_aceite(ciclo: dict) -> str:
+    """O comando executável do aceite de um ciclo, ou `""` quando não há.
+
+    **Leitura tolerante, de propósito, e é aqui que mora a retrocompatibilidade.** Todo
+    ciclo gravado antes deste ciclo do motor não tem o campo, e nada que apenas *lê* um
+    programa pode quebrar por causa disso: `programa status`, `programa relatorio`,
+    `proximo_elegivel` e os hooks continuam funcionando sobre um `programa.json` antigo.
+    Valor de tipo errado também vira `""` em vez de estourar — quem lê um arquivo velho
+    não é quem pode consertá-lo, e traceback no terminal do usuário é o formato de erro
+    que a CLI proíbe.
+
+    Devolver `""` é o valor certo para "não sei": `executor.executar` recusa comando
+    vazio com REPROVADO fundamentado, e nunca aprova por omissão. A tolerância na leitura
+    não afrouxa nada — a exigência vive em `validar_plano`, do lado da escrita.
+    """
+    valor = ciclo.get(CAMPO_COMANDO)
+    return valor.strip() if isinstance(valor, str) else ""
+
+
+def _texto_do_plano(ciclo: dict, campo: str, cid: str) -> str:
+    """Lê um campo de texto do plano **estritamente**: tipo errado é plano inválido.
+
+    Na escrita a tolerância seria dano: um `comando_de_aceite` que veio como lista ou
+    dicionário no JSON passaria pela validação (não é vazio) e só apareceria lá na
+    frente, quando `executor.executar` recebesse algo que não é comando. Recusar aqui
+    devolve o erro a quem ainda está escrevendo o plano.
+    """
+    valor = ciclo.get(campo)
+    if valor is None:
+        return ""
+    if not isinstance(valor, str):
+        raise PlanoInvalido(
+            f"ciclo {cid!r}: campo {campo!r} precisa ser texto; veio "
+            f"{type(valor).__name__}"
+        )
+    return valor.strip()
+
+
 def validar_plano(ciclos: list[dict]) -> None:
     """Recusa uma decomposição que não pode ser executada. Roda ANTES da porta.
 
-    Cinco condições, todas verificáveis. Elas existem porque cada uma, se passasse,
+    Seis condições, todas verificáveis. Elas existem porque cada uma, se passasse,
     produziria uma falha tardia e obscura:
 
     - lista vazia: um programa sem ciclos "conclui" sozinho sem construir nada;
@@ -280,7 +347,58 @@ def validar_plano(ciclos: list[dict]) -> None:
       é a mesma regra que o acervo aplica a `depende_de` de volume;
     - aceite ausente ou vazio: sem critério falsificável o encadeamento não tem
       como decidir se o ciclo passou, e "concluído" viraria opinião do modelo.
-      É o volume 04 aplicado à decomposição: requisito é enunciado que pode ser falso.
+      É o volume 04 aplicado à decomposição: requisito é enunciado que pode ser falso;
+    - **`comando_de_aceite` ausente ou vazio**: um critério em prosa é falsificável em
+      tese e inexecutável na prática. `executor.executar` (P2C1) sabe rodar comando e
+      ler código de saída; não sabe rodar frase. Enquanto o plano só trouxer a frase, o
+      veredito continua saindo da boca de quem escreveu o código — que é o defeito que
+      o programa 2 inteiro existe para fechar.
+
+    **Onde fica a fronteira da retrocompatibilidade, e por que ela é exatamente aqui.**
+    Plano velho (sem comando) precisa continuar carregando; plano novo precisa ser
+    recusado sem comando. Não é preciso inventar bandeira, flag de versão nem parâmetro
+    `estrito=`: a fronteira já é estrutural, porque **esta função só é chamada no caminho
+    de ESCRITA**. Quem a chama é `propor_plano`, e mais ninguém — carregar, resumir,
+    imprimir e encadear nunca revalidam. Um `programa.json` gravado em julho passa por
+    `carregar` e por `comando_de_aceite`, jamais por aqui; o plano que alguém acabou de
+    escrever passa por aqui obrigatoriamente, porque a única porta para PLANO_MESTRE é
+    `propor_plano`. Colocar a exigência na validação, e não na leitura, é o que faz "o
+    arquivo antigo continua legível" e "o plano novo é recusado" conviverem sem
+    migração, sem `VERSAO` nova e sem um segundo modo de validar que alguém pudesse
+    desligar por engano. Um parâmetro para relaxar a checagem seria o mesmo defeito que
+    `propor_plano` já documenta: predicado que libera portão e pode ser omitido não é
+    gate, é sugestão.
+
+    **Por que NÃO se classifica o risco do comando aqui.** A tentação é óbvia — descobrir
+    na hora de planejar que `ferramentas.risco` vai travar o comando é melhor do que
+    descobrir na hora de rodar. Foi considerado e recusado, por três razões, em ordem de
+    peso:
+
+    1. *O veredito de risco não é propriedade do plano; é propriedade do projeto no
+       instante da execução.* `risco.classificar` precisa de `raiz` e da configuração
+       efetiva (`engine.config.json`, cujas famílias o projeto ajusta). O mesmo plano
+       classificado hoje aqui e amanhã ali dá respostas diferentes, e com razão. Um
+       "aprovado pelo risco" carimbado no PLANO_MESTRE seria um carimbo que vence sozinho
+       — e carimbo vencido é pior que carimbo nenhum, porque convida o executor a confiar
+       nele em vez de reclassificar.
+    2. *Custaria a pureza deste módulo.* `programa.py` não tem `raiz`, não abre arquivo e
+       não toma cadeado, e a suíte inteira depende disso (há teste textual guardando).
+       Trazer `risco` para cá arrastaria `raiz` e `config` para dentro de uma função pura,
+       ou faria a checagem depender de um argumento opcional — de novo, gate que se pode
+       omitir.
+    3. *Não há furo a fechar.* `executor.executar` classifica o risco ANTES de executar e
+       recusa o comando travado com REPROVADO fundamentado, sem rodar nada. A falha já é
+       FECHADA no ponto em que ela importa. O preço de só descobrir na execução é um
+       ciclo REPROVADO com o motivo escrito na trilha — que é diagnóstico, não vazamento.
+
+    Pelo mesmo motivo não há aqui nenhuma heurística sobre o TEXTO do comando (procurar
+    `pytest`, exigir um executável conhecido, adivinhar se "aquilo parece prosa"):
+    interpretar texto é o julgamento do modelo que o executor documenta ter eliminado, e
+    reintroduzi-lo do lado do plano o traria de volta pela porta dos fundos. O que esta
+    função garante é estrutural e verificável — **existe um comando não-vazio, e ele é
+    texto**. Se o comando prova a coisa certa, quem decide é o humano na porta P1, lendo
+    a prosa do `aceite` ao lado do comando que a verifica. É para isso que os dois campos
+    são dois.
     """
     if not ciclos:
         raise PlanoInvalido("plano-mestre sem nenhum ciclo — nada a construir")
@@ -293,12 +411,19 @@ def validar_plano(ciclos: list[dict]) -> None:
         if cid in vistos:
             raise PlanoInvalido(f"id de ciclo repetido: {cid!r}")
         vistos.add(cid)
-        if not (c.get("objetivo") or "").strip():
+        if not _texto_do_plano(c, "objetivo", cid):
             raise PlanoInvalido(f"ciclo {cid!r} sem objetivo")
-        if not (c.get("aceite") or "").strip():
+        if not _texto_do_plano(c, "aceite", cid):
             raise PlanoInvalido(
                 f"ciclo {cid!r} sem critério de aceite — sem ele o encadeamento "
                 "não tem como decidir se o ciclo passou"
+            )
+        if not _texto_do_plano(c, CAMPO_COMANDO, cid):
+            raise PlanoInvalido(
+                f"ciclo {cid!r} sem comando executável de aceite: declare "
+                f"{CAMPO_COMANDO!r} com a linha de comando que verifica o critério "
+                f"(quem decide o veredito é o código de saída dela, não a prosa do "
+                f"campo 'aceite')"
             )
 
     for c in ciclos:
@@ -490,25 +615,50 @@ def _reaproveitar(novo_ciclo: dict, anterior: dict | None) -> dict:
     requisito que ninguém verificou. Nesse caso o ciclo volta a `PENDENTE`, junto com
     a amarração ao ciclo real (`ciclo_do_estado`), porque o trabalho vai ser refeito.
     A falha, quando há dúvida, é para o lado de refazer.
+
+    **E o critério agora são DOIS campos: a prosa e o comando.** Mudar só o comando, com
+    a frase intacta, muda o critério tanto quanto reescrever a frase — passou a ser outra
+    verificação. Comparar apenas a prosa deixaria um `CONCLUIDO` de pé sob um comando que
+    ninguém rodou, que é a mesma mentira do parágrafo anterior escrita no campo novo.
+
+    O caso mais comum disso é a **primeira** migração de um plano antigo: o ciclo no
+    disco não tem comando, o plano novo tem, o critério difere, e todo ciclo já fechado
+    volta a `PENDENTE`. É deliberado, e o preço é menor do que parece — refazer aqui
+    quer dizer *rodar o comando uma vez*. Se o trabalho estava mesmo pronto, o comando
+    sai 0 e o ciclo fecha de novo em segundos, agora com a evidência que faltava. A
+    alternativa (herdar o verde de um veredito digitado para dentro de um critério que
+    exige execução) seria carimbar como verificado exatamente o que nunca foi.
     """
     base = {
         "id": novo_ciclo["id"],
         "objetivo": novo_ciclo["objetivo"],
         "depende_de": list(novo_ciclo.get("depende_de", [])),
         "aceite": novo_ciclo["aceite"],
+        CAMPO_COMANDO: comando_de_aceite(novo_ciclo),
         "status": "PENDENTE",
         "ciclo_do_estado": None,
     }
     if anterior is None:
         return base
-    mesmo_criterio = (anterior.get("aceite") or "").strip() == (
-        novo_ciclo["aceite"] or ""
-    ).strip()
-    if not mesmo_criterio:
+    if _criterio(anterior) != _criterio(novo_ciclo):
         return base
     base["status"] = anterior.get("status", "PENDENTE")
     base["ciclo_do_estado"] = anterior.get("ciclo_do_estado")
     return base
+
+
+def _criterio(ciclo: dict) -> tuple[str, str]:
+    """O par que decide o veredito: a afirmação e o comando que a verifica.
+
+    Tolerante a tipo (o `anterior` vem do disco, e disco velho tem de tudo): campo que
+    não é texto vira `""`, e `""` nunca é igual a um critério de verdade — o ciclo cai
+    para o lado de refazer, que é o lado seguro.
+    """
+    aceite = ciclo.get("aceite")
+    return (
+        aceite.strip() if isinstance(aceite, str) else "",
+        comando_de_aceite(ciclo),
+    )
 
 
 def aprovar(dados: dict, agora: str) -> dict:
