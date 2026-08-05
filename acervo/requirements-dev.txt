@@ -12,6 +12,21 @@
 pytest>=8.0
 
 # chatgpt_app/server.py e o seu teste.
+#
+# `mcp` faltava aqui, e a CI da estreia (2026-08-04) ficou vermelha por causa
+# disso. A causa raiz nao foi esquecimento: este arquivo foi escrito a partir do
+# erro que a maquina limpa deu PRIMEIRO (`starlette`), e nao da lista real de
+# imports de `server.py`. Resolver so o que o traceback aponta esconde o proximo
+# import faltante ate a rodada seguinte -- a correcao de 2026-08-05 foi feita
+# lendo os imports do modulo.
+#
+# O TETO `<2.0` nao e cautela generica: `server.py` importa
+# `mcp.server.fastmcp.FastMCP`, e o modulo `fastmcp` deixou de existir na 2.0
+# (virou `mcp.server.mcpserver`). Sem o teto, `mcp>=1.0` resolve para 2.0.0 numa
+# maquina limpa e a coleta quebra com `No module named 'mcp.server.fastmcp'` --
+# exatamente o erro que a maquina do autor nao mostrava, porque la esta a 1.28.1.
+# Subir para a 2.x exige portar `server.py`, nao mexer neste arquivo.
+mcp>=1.0,<2.0
 starlette>=0.37
 pydantic>=2.0
 uvicorn>=0.30

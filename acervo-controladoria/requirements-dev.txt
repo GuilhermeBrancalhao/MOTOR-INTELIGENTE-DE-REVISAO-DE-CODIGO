@@ -1,0 +1,18 @@
+# Dependencias dos exemplos do acervo de Controladoria.
+#
+# Existe pelo mesmo motivo que `acervo/requirements-dev.txt`: ate 2026-08-05 os 33
+# testes daqui passavam por causa de pacotes instalados na maquina do autor. Quando
+# a CI passou a roda-los num ambiente limpo, a coleta quebrou em
+# `54-integracao-erp/tests/test_normalizar.py`, que importa `pandas`.
+#
+# Isso e uma versao mais sutil da divida que o ESTADO.md ja registrava: os testes
+# tinham deixado de ser orfaos (a CI passou a coleta-los), mas ainda nao eram
+# executados de verdade -- trocaram "ninguem roda" por "roda e falha no import".
+#
+# `pandas` e dependencia REAL do exemplo, nao de conveniencia: `normalizar.py`
+# constroi a normalizacao de CSV de banco sobre DataFrame. Declarar aqui e melhor
+# que marcar o teste com `importorskip`, porque pular deixaria sem cobertura
+# justamente o unico codigo executavel do volume 54.
+
+pytest>=8.0
+pandas>=2.0
