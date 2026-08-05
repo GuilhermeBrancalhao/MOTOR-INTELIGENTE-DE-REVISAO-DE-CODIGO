@@ -282,8 +282,13 @@ def _impressao_digital(raiz: Path) -> str:
 #: Um comando por sub-verbo que ALTERA o programa. `status`, `proximo` e `relatorio`
 #: ficam de fora de propósito: são leitura, e travar leitura deixaria quem esbarrou
 #: numa recusa sem conseguir olhar o programa para entender por quê.
+#:
+#: `verificar` está aqui e é o caso mais delicado: ele **executa fora** do cadeado e só
+#: **registra dentro**. Com o cadeado tomado, o comando de aceite roda (é o desenho), e
+#: o veredito não pode ser gravado — que é o que este teste cobra pelos bytes.
 VERBOS_QUE_MUTAM = [
-    ("aceite", ("programa", "aceite", "C1", "falhou")),
+    ("verificar", ("programa", "verificar", "C1")),
+    ("aceite", ("programa", "aceite", "C1", "falhou", "--porque", "teste do cadeado")),
     ("reabrir", ("programa", "reabrir", "C1")),
     ("desviar", ("programa", "desviar", "stack-fora-do-plano", "precisa de Redis")),
     ("retomar", ("programa", "retomar")),

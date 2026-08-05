@@ -158,6 +158,7 @@ Todos os comandos abaixo usam o mesmo prefixo dos demais verbos
 | `/engine programa <objetivo>` | `CLI programa "<objetivo em uma frase>"` — abre em CONCEPCAO |
 | decompor | escreva o plano num JSON e rode `CLI programa plano <arquivo.json>` |
 | `/engine programa status` | `CLI programa status` |
+| fechar um ciclo | `CLI programa verificar <CICLO>` — roda o comando de aceite e registra o veredito do código de saída |
 | `/engine programa retomar` | `CLI programa retomar` — sessão nova, programa que já existe |
 
 **O critério de aceite de cada ciclo é COMANDO, não só prosa.** Cada item de `ciclos` traz
@@ -176,10 +177,20 @@ prosa) volta a `PENDENTE`, porque o verde antigo prova outro critério.
    comando o verifica.
 2. `CLI ligar "<objetivo daquele ciclo>"` e conduza o ciclo **normalmente**, com todas as
    fases, papéis e gates de sempre. O programa não muda nada dentro do ciclo.
-3. Ao chegar em ENTREGA, **rode o `comando_de_aceite` declarado** e olhe o código de saída.
-4. `CLI programa aceite <CICLO> ok` — ou `falhou`. Nunca informe `ok` sem ter rodado o
-   critério e visto o resultado: é a invariante 1 aplicada ao encadeamento.
-5. `CLI desligar` e volte ao passo 1.
+3. Ao chegar em ENTREGA, `CLI programa verificar <CICLO>`. **Você não digita veredito
+   nenhum**: o motor roda o `comando_de_aceite` declarado, imprime o comando, o código de
+   saída e a saída, e registra `CONCLUIDO` se o código for 0 e `REPROVADO` se não for. O
+   verbo sai 0 quando aprova e 1 quando reprova, e comando e código de saída ficam na
+   trilha.
+4. `CLI desligar` e volte ao passo 1.
+
+**O veredito digitado só resta ao plano antigo.** `CLI programa aceite <CICLO> ok` (ou
+`falhou`) continua existindo porque um `programa.json` gravado antes do aceite executável
+não tem comando a rodar — mas agora exige `--porque "<motivo>"`, e o motivo vai para a
+trilha. Se o ciclo tem `comando_de_aceite`, use `verificar`: digitar veredito onde há
+comando declarado é justamente a opinião do modelo que o motor existe para não aceitar.
+`programa verificar` sobre um ciclo sem comando é **recusado** — o motor não inventa a
+linha que ninguém declarou.
 
 Quando `proximo` disser que todos concluíram, rode o aceite de sistema declarado no plano,
 e então `CLI programa sistema ok` (ou `falhou`). Aceite vermelho devolve o programa para
@@ -211,8 +222,9 @@ critério de aceite continuam os mesmos — replanejar não desfaz trabalho acei
 absolve trabalho reprovado. Reescreveu o critério de aceite de um ciclo? Ele volta a
 PENDENTE, porque o veredito antigo era sobre outra afirmação.
 
-**Um ciclo reprovado bloqueia os dependentes** — é o desenho, não um defeito. Corrija e
-rode `CLI programa reabrir <CICLO>`.
+**Um ciclo reprovado bloqueia os dependentes** — é o desenho, não um defeito. Corrija,
+rode `CLI programa reabrir <CICLO>` e verifique de novo: só o comando saindo 0 fecha o
+ciclo.
 
 **Desistir do programa inteiro.** `CLI programa abortar` encerra em `ABORTADO`, que é um
 desfecho **diferente** de `CONCLUIDO`: este último só existe depois de um aceite de

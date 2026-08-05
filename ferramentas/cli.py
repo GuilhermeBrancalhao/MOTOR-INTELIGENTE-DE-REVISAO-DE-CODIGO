@@ -32,7 +32,15 @@ from typing import Callable
 if not __package__:  # executado como script: a raiz do plugin não está no sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ferramentas import config, detectar, estado, programa, relatorio, trilha  # noqa: E402
+from ferramentas import (  # noqa: E402
+    config,
+    detectar,
+    estado,
+    executor,
+    programa,
+    relatorio,
+    trilha,
+)
 
 USO = (
     'uso: py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" '
@@ -49,9 +57,14 @@ USO_DESCOBERTA = (
 USO_PROGRAMA = (
     'uso: py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" programa '
     "{<objetivo> [--forcar]|plano <arquivo.json>|status|aprovar|proximo|"
-    "aceite <CICLO> {ok|falhou}|"
+    "verificar <CICLO>|"
+    'aceite <CICLO> {ok|falhou} --porque "<motivo>"|'
     "reabrir <CICLO>|desviar <MOTIVO> <detalhe>|retomar|sistema {ok|falhou}|"
-    "relatorio|abortar}"
+    "relatorio|abortar}\n"
+    "  `verificar` roda o comando de aceite do ciclo e registra o veredito que o "
+    "CÓDIGO DE SAÍDA decidir — é o caminho normal.\n"
+    "  `aceite` é o veredito DIGITADO, que só resta a plano antigo (sem "
+    "`comando_de_aceite`) e por isso exige `--porque`."
 )
 
 
@@ -889,12 +902,25 @@ def _prog_exigir(raiz: Path) -> dict | None:
     return dados
 
 
+class CriterioMudouDuranteAVerificacao(Exception):
+    """Entre executar o comando e registrar o veredito, o critério do ciclo mudou.
+
+    Só acontece porque `programa verificar` roda o comando FORA do cadeado (ver
+    `_prog_verificar`), e nessa janela outra sessão pode replanejar. O veredito na mão
+    seria então prova sobre um comando que não é mais o critério do ciclo — carimbar
+    verde ali é a mesma mentira que `_reaproveitar` documenta ao devolver a PENDENTE o
+    ciclo cujo critério mudou. Falha FECHADA: recusa registrar, não grava nada, e a
+    evidência do que rodou continua impressa e na trilha.
+    """
+
+
 #: Tudo que uma mutação do programa pode levantar e que vira mensagem legível com
 #: código 1. Nenhuma delas pode chegar ao terminal como traceback — é a regra do topo
 #: deste arquivo. `KeyError` está aqui porque `registrar_aceite`/`reabrir` a usam para
 #: id de ciclo inexistente, e `estado.*` porque o gate da macro-DESCOBERTA lê o
 #: `estado.json` de dentro da mutação.
 ERROS_PREVISTOS_DO_PROGRAMA = (
+    CriterioMudouDuranteAVerificacao,
     programa.ProgramaCorrompido,
     programa.PlanoInvalido,
     programa.TransicaoInvalida,
@@ -993,6 +1019,179 @@ def _prog_imprimir(dados: dict) -> None:
         print(f"**Próximo ciclo elegível:** {r['proximo']}")
 
 
+def _prog_achar_ciclo(dados: dict, id_ciclo: str) -> dict | None:
+    """O ciclo do plano com aquele id, ou `None`.
+
+    Existe para que `verificar` descubra o comando ANTES de executar qualquer coisa:
+    id errado tem de virar recusa barata, e não um comando rodado à toa cujo veredito
+    depois não tem onde ser registrado. `programa._achar` faria o mesmo trabalho, mas é
+    privado e levanta — aqui a ausência é resposta, não erro.
+    """
+    for c in dados.get("ciclos", []):
+        if c.get("id") == id_ciclo:
+            return c
+    return None
+
+
+def _prog_justificativa(args: list[str]) -> tuple[list[str], str | None]:
+    """Separa os argumentos posicionais da justificativa de `--porque`.
+
+    Devolve `(posicionais, justificativa)`, com `None` quando a bandeira não veio e
+    `""` quando veio vazia — os dois são recusados no chamador, e distingui-los aqui
+    seria trabalho sem uso.
+
+    Tudo que vem depois de `--porque` é a justificativa, junto: o motivo é uma frase,
+    e exigir aspas do usuário para uma frase com espaço é o tipo de atrito que faz
+    aparecer motivo de uma palavra só.
+    """
+    if "--porque" not in args:
+        return args, None
+    corte = args.index("--porque")
+    return args[:corte], " ".join(args[corte + 1 :]).strip()
+
+
+#: A recusa do veredito digitado. Explica o que fazer nos dois casos, porque quem
+#: esbarra nela pode estar em qualquer um: com comando declarado (então não há motivo
+#: para digitar) ou sem (plano antigo, e aí a justificativa é o que resta de auditável).
+_ACEITE_EXIGE_PORQUE = (
+    "ENGINE: veredito digitado exige justificativa desde que existe `programa "
+    "verificar <CICLO>`, que roda o comando de aceite e decide pelo CÓDIGO DE SAÍDA.\n"
+    "  - o ciclo tem `comando_de_aceite`? use `programa verificar <CICLO>` — é o "
+    "caminho normal, e nele ninguém digita veredito;\n"
+    '  - é plano antigo, sem comando? repita com `--porque "<motivo>"`, e o motivo '
+    "vai para a trilha junto do veredito."
+)
+
+
+def _prog_verificar(raiz: Path, id_ciclo: str, agora: str) -> int:
+    """`programa verificar <CICLO>`: roda o comando de aceite e registra o que ele decidir.
+
+    É o verbo que tira o veredito da boca de quem escreveu o código. Ninguém digita
+    `ok`: `executor.executar` roda o `comando_de_aceite` declarado no plano, e o código
+    de saída vira `CONCLUIDO` (0) ou `REPROVADO` (qualquer outro) por
+    `programa.registrar_aceite`.
+
+    **A ordem — executar FORA do cadeado, registrar DENTRO — é a decisão de desenho
+    deste verbo, e ela é obrigatória nos dois sentidos.**
+
+    *Por que a execução não pode ficar dentro.* O cadeado do programa espera 2 s
+    (`estado.ESPERA_PADRAO`) e é considerado abandonado aos 30 s
+    (`estado.IDADE_MAXIMA_CADEADO`). Um comando de aceite real é uma suíte inteira — a
+    deste motor leva ~114 s, e o teto do executor é de 600 s. Segurar o cadeado durante
+    a execução faria toda outra sessão da mesma pasta bater em "ocupado" pelo tempo da
+    suíte, e faria o próprio cadeado passar da idade máxima e ser tomado como órfão por
+    quem chegasse depois — isto é: a seção crítica seria invadida no meio, que é
+    exatamente o que ela existe para impedir. Cadeado longo não protege mais, protege
+    menos.
+
+    *Por que o registro não pode ficar fora.* Gravar sem cadeado é o *lost update* que
+    `_prog_mutar` documenta: duas sessões verificando ciclos diferentes, e o REPROVADO
+    de uma sumindo por cima do CONCLUIDO da outra — com o programa concluindo verde por
+    cima de um ciclo que falhou. Por isso a mutação passa por `_prog_mutar`, que relê o
+    programa de dentro da seção crítica.
+
+    *O preço da ordem, e como ele é pago.* Entre a execução e o registro existe uma
+    janela em que outra sessão pode replanejar. Se ela mudar o `comando_de_aceite` do
+    ciclo, o veredito na mão passa a ser prova sobre um comando que já não é o critério
+    — e o mutador recusa com `CriterioMudouDuranteAVerificacao`, relendo o comando de
+    dentro do cadeado e comparando com o que foi executado. Falha fechada: a dúvida não
+    vira CONCLUIDO, vira recusa com a evidência impressa.
+
+    **O código de saída do verbo espelha o veredito** (0 aprovado, 1 reprovado). Uma
+    verificação que reprova e sai 0 é indistinguível de sucesso para quem automatiza —
+    o mesmo defeito que a recusa do plano já não comete —, e este é justamente o verbo
+    cujo assunto é "o código de saída decide".
+    """
+    dados = _prog_exigir(raiz)
+    if dados is None:
+        return 1
+
+    alvo = _prog_achar_ciclo(dados, id_ciclo)
+    if alvo is None:
+        conhecidos = ", ".join(c.get("id", "?") for c in dados.get("ciclos", []))
+        print(
+            f"ENGINE: ciclo {id_ciclo!r} não existe neste programa. Ciclos do plano: "
+            f"{conhecidos or '(nenhum)'}"
+        )
+        return 1
+
+    comando = programa.comando_de_aceite(alvo)
+    if not comando:
+        # Plano anterior ao aceite executável. Inventar um comando aqui (chutar
+        # `pytest`, deduzir do texto do `aceite`) seria fabricar o critério que o
+        # usuário não declarou e depois carimbar o ciclo com ele — veredito sobre
+        # afirmação nenhuma. Recusar e dizer qual é o outro caminho é o honesto.
+        print(
+            f"ENGINE: o ciclo {id_ciclo!r} não declara `{programa.CAMPO_COMANDO}` "
+            "(plano anterior ao aceite executável), e não há o que rodar — o veredito "
+            "dele só existe digitado.\n"
+            f'  - registre-o com `programa aceite {id_ciclo} '
+            '{ok|falhou} --porque "<motivo>"`; ou\n'
+            "  - replaneje com `programa plano <arquivo.json>` declarando o comando, e "
+            "aí este verbo passa a valer para ele."
+        )
+        return 1
+
+    print(f"**Verificando {id_ciclo}** — {alvo.get('aceite', '(sem prosa de aceite)')}")
+    print(f"**Comando de aceite:** {comando}")
+
+    # --- fora do cadeado: pode demorar o tempo de uma suíte inteira ---
+    veredito = executor.executar(
+        comando,
+        raiz=raiz,
+        fase="PROGRAMA",
+        ciclo=id_ciclo,
+        quando=agora,
+    )
+
+    codigo = veredito.codigo_saida
+    print(
+        f"**Código de saída:** {codigo if codigo is not None else '(nenhum)'}"
+        f"  ·  **Veredito:** {veredito.resultado}"
+        f"  ·  **Duração:** {veredito.duracao_s:g}s"
+    )
+    if veredito.motivo:
+        print(f"**Motivo:** {veredito.motivo}")
+    print(f"--- saída do comando (redigida, teto de {executor.TETO_SAIDA} caracteres) ---")
+    print(veredito.saida if veredito.saida.strip() else "(vazia)")
+    print("--- fim da saída ---")
+
+    def _mutar(relido: dict) -> dict:
+        atual = _prog_achar_ciclo(relido, id_ciclo)
+        if atual is not None and programa.comando_de_aceite(atual) != comando:
+            raise CriterioMudouDuranteAVerificacao(
+                f"o critério do ciclo {id_ciclo!r} mudou enquanto o comando rodava: "
+                f"executado {comando!r}, no plano agora está "
+                f"{programa.comando_de_aceite(atual)!r}. Nada foi registrado — "
+                "rode `programa verificar` de novo, agora sobre o critério vigente."
+            )
+        # `passou` sai do veredito, e o veredito saiu do código de saída. Não existe
+        # neste caminho nenhum literal a digitar: é isso que o verbo é.
+        return programa.registrar_aceite(relido, id_ciclo, passou=veredito.aprovado)
+
+    # --- dentro do cadeado: a escrita é curta e não pode perder corrida ---
+    novo, recusa = _prog_mutar(raiz, _mutar)
+    if recusa is not None:
+        print(recusa)
+        return 1
+
+    _prog_trilha(
+        raiz,
+        f"verificacao-de-aceite-{id_ciclo}",
+        f"veredito={veredito.resultado} codigo_saida={codigo} :: {comando}",
+        agora,
+    )
+    if veredito.aprovado:
+        print(f"\n**{id_ciclo} CONCLUIDO** pelo código de saída do comando de aceite.")
+    else:
+        print(
+            f"\n**{id_ciclo} REPROVADO** pelo código de saída do comando de aceite. "
+            "Os dependentes seguem bloqueados até `programa reabrir` e nova verificação."
+        )
+    _prog_imprimir(novo)
+    return 0 if veredito.aprovado else 1
+
+
 def _verbo_programa(raiz: Path, resto: list[str]) -> int:
     """Verbos da camada de PROGRAMA (Fase 4).
 
@@ -1007,6 +1206,12 @@ def _verbo_programa(raiz: Path, resto: list[str]) -> int:
     com `estado.atualizar`, e existe pela mesma razão: duas sessões na mesma pasta são
     o caso normal do Claude Code, e o retrato lido por fora do cadeado pode já não
     existir quando a gravação acontece.
+
+    `verificar` é o único que faz as duas coisas, e por isso mora em `_prog_verificar`:
+    lê solto para descobrir o comando, **executa fora do cadeado** (uma suíte inteira
+    dentro da seção crítica travaria as outras sessões e envelheceria o próprio cadeado
+    além do limite de órfão) e **registra dentro**, com o critério reconferido na
+    releitura. A justificativa completa está no docstring de lá.
     """
     if not resto:
         print(USO_PROGRAMA)
@@ -1110,16 +1315,55 @@ def _verbo_programa(raiz: Path, resto: list[str]) -> int:
         comando = programa.comando_de_aceite(alvo)
         if comando:
             print(f"**Comando de aceite:** {comando}")
+            print(
+                f"**Para fechar:** `programa verificar {alvo['id']}` — roda o comando "
+                "acima e registra o veredito que o código de saída decidir."
+            )
         else:
             print(
                 "**Comando de aceite:** (nenhum — plano anterior ao aceite executável; "
                 "o veredito deste ciclo ainda depende de digitação)"
             )
+            print(
+                f"**Para fechar:** `programa aceite {alvo['id']} "
+                '{ok|falhou} --porque "<motivo>"` — sem comando declarado não há '
+                "verificação a rodar."
+            )
         return 0
 
-    if sub == "aceite":
-        if len(args) < 2 or args[1] not in ("ok", "falhou"):
+    if sub == "verificar":
+        if not args:
             print(USO_PROGRAMA)
+            return 1
+        return _prog_verificar(raiz, args[0], agora)
+
+    if sub == "aceite":
+        # **O caminho MANUAL, que continua existindo e deixou de ser o caminho fácil.**
+        #
+        # Ele não foi removido porque plano antigo não tem `comando_de_aceite`: um
+        # `programa.json` gravado antes do aceite executável não tem o que rodar, e
+        # apagar este verbo deixaria esses programas sem nenhuma forma de fechar um
+        # ciclo — quebrando a retrocompatibilidade que `comando_de_aceite` foi escrito
+        # para garantir. O que ele ganhou foi atrito: `--porque` obrigatório, com a
+        # justificativa indo para a trilha. Dois efeitos, e os dois são o ponto:
+        #
+        # 1. digitar veredito passa a custar mais do que verificá-lo (`programa
+        #    verificar` não pede nada além do id), então o PADRÃO vira a verificação
+        #    real — que é o que este ciclo existe para produzir;
+        # 2. quando o caminho manual for mesmo o certo, fica na trilha POR QUE foi.
+        #    Um "CONCLUIDO" sem autoria nem razão é indistinguível de um chute; com a
+        #    justificativa, quem auditar seis meses depois sabe o que foi afirmado e em
+        #    cima de quê.
+        #
+        # A justificativa mora só na trilha, e não em `programa.json`: o registro
+        # auditável é a trilha, e um campo novo no ciclo entraria em `_criterio`/
+        # `_reaproveitar` sem ter nada a dizer sobre o critério.
+        posicionais, porque = _prog_justificativa(args)
+        if len(posicionais) < 2 or posicionais[1] not in ("ok", "falhou"):
+            print(USO_PROGRAMA)
+            return 1
+        if not porque:
+            print(_ACEITE_EXIGE_PORQUE)
             return 1
         # O sub-verbo que reproduzia o defeito: `aceite C1 falhou` e `aceite C2 ok` em
         # sessões concorrentes liam o mesmo programa e a segunda gravação apagava o
@@ -1127,13 +1371,22 @@ def _verbo_programa(raiz: Path, resto: list[str]) -> int:
         novo, recusa = _prog_mutar(
             raiz,
             lambda dados: programa.registrar_aceite(
-                dados, args[0], passou=args[1] == "ok"
+                dados, posicionais[0], passou=posicionais[1] == "ok"
             ),
         )
         if recusa is not None:
             print(recusa)
             return 1
-        _prog_trilha(raiz, f"aceite-de-ciclo-{args[1]}", args[0], agora)
+        _prog_trilha(
+            raiz,
+            f"aceite-de-ciclo-{posicionais[1]}",
+            f"{posicionais[0]} :: veredito digitado, porque: {porque}",
+            agora,
+        )
+        print(
+            f"**Veredito DIGITADO** para {posicionais[0]} ({posicionais[1]}) — "
+            f"justificativa na trilha: {porque}"
+        )
         _prog_imprimir(novo)
         return 0
 

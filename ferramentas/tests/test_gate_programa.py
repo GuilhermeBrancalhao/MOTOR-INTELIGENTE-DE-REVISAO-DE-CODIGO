@@ -96,13 +96,21 @@ def _ate_desvio(raiz: Path, aceitar: tuple[str, ...] = ()) -> Path:
 
     `aceitar` fecha ciclos em EXECUCAO, ANTES do desvio, que é a ordem real: o desvio
     acontece no meio de um trabalho que já andou.
+
+    O fechamento é pelo veredito DIGITADO (com `--porque`, obrigatório desde que existe
+    `programa verificar`) de propósito: o que estes testes medem é o que o
+    replanejamento faz com um veredito **já dado**, e rodar comando de aceite de
+    verdade aqui trocaria isso pela verificação de outro ciclo do motor.
     """
     arquivo = _abrir_programa(raiz)
     fechar_descoberta(raiz, OBJETIVO)
     assert _cli(raiz, "programa", "plano", str(arquivo)).returncode == 0
     assert _cli(raiz, "programa", "aprovar").returncode == 0
     for cid in aceitar:
-        assert _cli(raiz, "programa", "aceite", cid, "ok").returncode == 0
+        assert _cli(
+            raiz, "programa", "aceite", cid, "ok",
+            "--porque", "preparo do teste de replanejamento",
+        ).returncode == 0
     assert _cli(
         raiz, "programa", "desviar", "stack-fora-do-plano", "o plano previa SQLite"
     ).returncode == 0
