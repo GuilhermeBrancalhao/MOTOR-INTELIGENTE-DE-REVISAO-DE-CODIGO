@@ -49,9 +49,13 @@ USO = (
 )
 
 USO_DESCOBERTA = (
-    'uso: py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" descoberta '
+    'uso: py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" descoberta [--programa] '
     "{<pedido> [--intencao <INTENCAO>] [--forcar]|status|responder <ID> <resposta>|"
-    "confirmar <PALPITE>|recusar <PALPITE>}"
+    "confirmar <PALPITE>|recusar <PALPITE>}\n"
+    "  sem `--programa`: a entrevista do CICLO, em .engine/estado.json, que abre "
+    "`fase ANALISE`.\n"
+    "  com `--programa`: a macro-DESCOBERTA do SISTEMA, em .engine/programa.json, que "
+    "abre `programa plano` — e que não exige ciclo ligado."
 )
 
 USO_PROGRAMA = (
@@ -248,6 +252,7 @@ def _gate_descoberta(
     *,
     transicao: str = "DESCOBERTA -> ANALISE",
     antes_de: str = "mudar de fase",
+    escopo: str = "ciclo",
 ) -> str | None:
     """A recusa de uma transição protegida pela descoberta, ou `None` para seguir.
 
@@ -258,6 +263,16 @@ def _gate_descoberta(
     predicado, a política de falha e o texto da recusa são um só. Uma segunda cópia
     divergiria no primeiro ajuste, e a divergência apareceria como um gate mais frouxo
     que o outro sem ninguém decidir isso.
+
+    **`escopo` diz de qual das duas entrevistas o `dados` veio** — e, desde que elas
+    passaram a morar em arquivos diferentes, quem chama tem de ler o arquivo certo antes
+    de chamar. Ele não muda o predicado; muda o rótulo do retrato e o comando que a
+    recusa manda rodar (`descoberta responder` no ciclo, `descoberta --programa
+    responder` no programa). Vem como TEXTO, e não como o objeto `descoberta.Escopo`,
+    porque o módulo `descoberta` é importado aqui dentro, tarde e dentro do `try`: um
+    argumento tipado obrigaria a importá-lo no topo, e é justamente isso que o parágrafo
+    seguinte proíbe. Nome desconhecido levanta `KeyError` no `ESCOPOS[...]` e cai no
+    `except` que fecha o portão — o lado seguro.
 
     **Falha FECHADO.** Qualquer coisa que dê errado ao calcular o veredito — estado
     sem o bloco de descoberta, bloco de versão desconhecida, eixo fora da taxonomia,
@@ -284,13 +299,14 @@ def _gate_descoberta(
     try:
         from ferramentas import descoberta  # noqa: PLC0415 — ver docstring
 
-        avaliacao = descoberta.avaliar(dados)
+        alvo = descoberta.ESCOPOS[escopo]
+        avaliacao = descoberta.avaliar(dados, escopo=alvo)
         if avaliacao.liberado_para_planejar:
             return None
         if not avaliacao.registrada:
             cabecalho = (
                 f"ENGINE: transição {transicao} recusada — a descoberta não "
-                "foi registrada neste ciclo."
+                f"foi registrada neste {alvo.nome} ({alvo.arquivo})."
             )
         else:
             cabecalho = (
@@ -299,7 +315,8 @@ def _gate_descoberta(
             )
         return (
             f"{cabecalho}\n\n{avaliacao.resumo()}\n\n"
-            f"Responda as bloqueantes acima antes de {antes_de}. "
+            f"Responda as bloqueantes acima antes de {antes_de}, com "
+            f"`descoberta {alvo.sufixo_cli}responder <ID> \"<resposta>\"`. "
             "Nada foi gravado no estado."
         )
     except Exception as erro:  # noqa: BLE001 — predicado que libera portão falha fechado
@@ -311,7 +328,7 @@ def _gate_descoberta(
         )
 
 
-def _exigir_descoberta_para_o_plano(raiz: Path, dados_do_programa: dict) -> None:
+def _exigir_descoberta_para_o_plano(dados_do_programa: dict) -> None:
     """Gate gêmeo do C4, um andar acima: `CONCEPCAO -> PLANO_MESTRE`.
 
     Levanta `programa.DescobertaIncompleta` — exceção nomeada, subclasse de
@@ -336,20 +353,26 @@ def _exigir_descoberta_para_o_plano(raiz: Path, dados_do_programa: dict) -> None
     barrada — as duas exigem a mesma coisa, mas acontecem em momentos diferentes da vida
     do programa.
 
-    **A leitura do disco aqui é a do OUTRO arquivo.** O veredito sai do
-    `.engine/estado.json`; quem grava é o `programa.json`, sob o cadeado do programa,
-    que é um arquivo de cadeado separado (`programa.lock`). Ler o estado com o cadeado
-    do programa na mão não retoma cadeado nenhum, então não há o travamento não
-    reentrante que o C4 proíbe. O que continua valendo é a proibição de o **gate** ler:
-    ele recebe o dicionário, e quem lê é este chamador.
+    **Não há leitura de disco nenhuma aqui — e isso é a correção de R4.** Até
+    2026-08-05 esta função lia o `.engine/estado.json` para achar a macro-DESCOBERTA,
+    porque era lá que ela morava. Duas coisas vinham daí, e as duas apareceram em uso: o
+    `ligar` do primeiro ciclo do programa apagava a entrevista do sistema (o estado é
+    montado do zero a cada ciclo), e a entrevista da CONCEPCAO satisfazia o gate de fase
+    do próprio ciclo em que fora feita — dois gates lendo a mesma chave. Agora a
+    macro-DESCOBERTA mora no `programa.json`, e o dicionário que a contém é **o mesmo**
+    que este gate já recebe pronto, relido de dentro do cadeado do programa por
+    `_prog_mutar`. Sumiu a segunda leitura, sumiu a janela entre ela e a gravação, e
+    sumiu o `raiz` da assinatura: um parâmetro que ninguém usa é um convite a voltar a
+    ler o disco daqui.
     """
     origem = dados_do_programa.get("estado")
     if origem not in ORIGENS_COM_GATE_DE_PLANO:
         return
     recusa = _gate_descoberta(
-        estado.carregar_estrito(raiz),
+        dados_do_programa,
         transicao=f"{origem} -> {DESTINO_DO_PROGRAMA_COM_GATE}",
         antes_de="propor o plano-mestre",
+        escopo="programa",
     )
     if recusa is not None:
         raise programa.DescobertaIncompleta(recusa)
@@ -509,7 +532,7 @@ def _verbo_relatorio(raiz: Path, resto: list[str]) -> int:
 # de recusa manda não fazer. Os três verbos abaixo são a saída.
 
 
-def _relatar_descoberta(avaliacao) -> str:
+def _relatar_descoberta(avaliacao, escopo) -> str:
     """O retrato da entrevista: intenção, bloqueantes e assumíveis, com a pergunta inteira.
 
     O miolo é `Avaliacao.resumo()`, o **mesmo** texto que a recusa do gate imprime. Um
@@ -525,10 +548,19 @@ def _relatar_descoberta(avaliacao) -> str:
     a evidência; sem a linha de baixo, a lista seria informação sem saída — o mesmo
     defeito que os verbos de `descoberta` existem para não ter, porque confirmar um
     palpite pode acrescentar um bloco inteiro de perguntas que a porta aberta não viu.
+
+    **O escopo aparece no título e em cada comando sugerido.** As duas entrevistas
+    imprimem o mesmo formato, e um retrato sem escopo obrigaria quem lê a lembrar qual
+    dos dois comandos digitou — com o agravante de que a saída de uma e de outra
+    conviveria na mesma tela durante a condução de um programa. Pior: o comando sugerido
+    sem `--programa` responderia a lacuna da entrevista errada, ou levantaria
+    `DescobertaAusente` num projeto onde nem há ciclo ligado.
     """
+    titulo = f"# Descoberta do {escopo.nome.upper()}"
     linhas = [
-        "# Descoberta",
+        titulo,
         "",
+        f"**Onde:** {escopo.arquivo}",
         f"**Pedido:** {avaliacao.pedido or '(nenhum)'}",
         "",
         avaliacao.resumo(),
@@ -537,25 +569,26 @@ def _relatar_descoberta(avaliacao) -> str:
     if avaliacao.liberado_para_planejar:
         linhas.append(
             "**Porta da descoberta ABERTA:** nenhuma bloqueante em aberto — "
-            "`fase ANALISE` passa."
+            f"`{escopo.porta}` passa."
         )
     else:
         linhas.append(
             "**Porta da descoberta FECHADA.** Responda cada bloqueante com "
-            '`descoberta responder <ID> "<resposta>"`.'
+            f'`descoberta {escopo.sufixo_cli}responder <ID> "<resposta>"`.'
         )
     if avaliacao.palpites_pendentes:
         linhas.append(
-            "**Palpites por resolver:** `descoberta confirmar <PALPITE>` aplica o eixo "
-            "(e pode abrir perguntas novas); `descoberta recusar <PALPITE>` o descarta "
-            "sem aplicar nada. Enquanto houver palpite pendente, ninguém olhou para uma "
-            "inferência que o motor fez sobre o pedido."
+            f"**Palpites por resolver:** `descoberta {escopo.sufixo_cli}confirmar "
+            "<PALPITE>` aplica o eixo (e pode abrir perguntas novas); `descoberta "
+            f"{escopo.sufixo_cli}recusar <PALPITE>` o descarta sem aplicar nada. "
+            "Enquanto houver palpite pendente, ninguém olhou para uma inferência que o "
+            "motor fez sobre o pedido."
         )
     return "\n".join(linhas)
 
 
-def _imprimir_descoberta(raiz: Path, descoberta) -> int:
-    """Lê o estado, imprime o retrato da descoberta e devolve o código de saída.
+def _imprimir_descoberta(raiz: Path, descoberta, escopo) -> int:
+    """Lê o arquivo do escopo, imprime o retrato da descoberta e devolve o código de saída.
 
     **A leitura do disco é legítima aqui**, ao contrário de dentro de
     `_gate_descoberta`: neste ponto nenhum cadeado está tomado — os três verbos leem e
@@ -563,14 +596,18 @@ def _imprimir_descoberta(raiz: Path, descoberta) -> int:
     cadeado por conta própria antes de voltar. O que continua proibido é o **gate** ler
     por caminho, porque ele roda com o cadeado na mão e ele não é reentrante.
 
-    `carregar_estrito`, e não `avaliar_do_disco` (que usa o leniente): estado ilegível
-    devolveria `None` no leniente e a avaliação sairia `registrada=False` — "o arquivo
-    está corrompido" contado como "nunca houve descoberta". São diagnósticos opostos e o
-    conserto de cada um é diferente.
+    `carregar_estrito` do escopo, e não `avaliar_do_disco` (que usa o leniente): arquivo
+    ilegível devolveria `None` no leniente e a avaliação sairia `registrada=False` — "o
+    arquivo está corrompido" contado como "nunca houve descoberta". São diagnósticos
+    opostos e o conserto de cada um é diferente.
+
+    Os erros do continente vêm do próprio escopo (`erros_do_continente`) porque as duas
+    máquinas levantam tipos distintos para a mesma desgraça: capturar só
+    `estado.EstadoCorrompido` faria um `programa.json` ilegível sair como traceback.
     """
     try:
-        avaliacao = descoberta.avaliar(estado.carregar_estrito(raiz))
-    except estado.EstadoCorrompido as erro:
+        avaliacao = descoberta.avaliar(escopo.carregar_estrito(raiz), escopo=escopo)
+    except escopo.erros_do_continente as erro:
         print(f"ENGINE: {erro}")
         return 1
     except descoberta.DescobertaInvalida as erro:
@@ -578,11 +615,12 @@ def _imprimir_descoberta(raiz: Path, descoberta) -> int:
         return 1
     if not avaliacao.registrada:
         print(
-            "ENGINE: nenhuma descoberta registrada neste projeto. Rode "
-            '`descoberta "<o que o usuário pediu>"` primeiro.'
+            f"ENGINE: nenhuma descoberta de {escopo.nome} registrada neste projeto "
+            f"({escopo.arquivo}). Rode `descoberta {escopo.sufixo_cli}"
+            '"<o que o usuário pediu>"` primeiro.'
         )
         return 1
-    print(_relatar_descoberta(avaliacao))
+    print(_relatar_descoberta(avaliacao, escopo))
     return 0
 
 
@@ -626,7 +664,7 @@ def _pedido_e_sinalizadores(resto: list[str]) -> tuple[str | None, str, str | No
     return intencao, " ".join(palavras).strip(), None
 
 
-def _pedir_a_intencao(erro, pedido: str, conhecidas: list[str]) -> str:
+def _pedir_a_intencao(erro, pedido: str, conhecidas: list[str], sufixo: str = "") -> str:
     """A pergunta de desempate — o único caminho em que a CLI devolve a decisão inteira.
 
     `classificar` levanta `IntencaoIndeterminada` em dois casos: sinal ausente/fraco e
@@ -659,7 +697,7 @@ def _pedir_a_intencao(erro, pedido: str, conhecidas: list[str]) -> str:
         "é chutada aqui: a classe errada não produz uma pergunta ruim, produz uma "
         "entrevista inteira sobre outro trabalho.",
         "",
-        f'  descoberta "{pedido}" --intencao <INTENCAO>',
+        f'  descoberta {sufixo}"{pedido}" --intencao <INTENCAO>',
         "",
         "Intenções conhecidas: " + ", ".join(conhecidas),
         "",
@@ -677,6 +715,28 @@ def _verbo_descoberta(raiz: Path, resto: list[str]) -> int:
     ou ser reescrito. É o mesmo acordo que `programa` já faz, e trocá-lo aqui daria duas
     gramáticas para a mesma CLI.
 
+    **`--programa` escolhe QUAL das duas entrevistas, e a escolha é explícita de
+    propósito.** Foram consideradas três formas:
+
+    - *inferir pelo estado* ("se há programa em CONCEPCAO, é a do programa") é cômoda e
+      ambígua exatamente onde custa caro. Ela acerta no começo, quando ainda não há
+      ciclo, e erra no replanejamento: em `DESVIO` o programa quer a entrevista do
+      sistema reaberta enquanto pode haver um ciclo vivo em `DESCOBERTA` querendo a
+      dele — as duas plausíveis, no mesmo instante, na mesma pasta. Errar aqui não dá
+      erro: grava a entrevista certa no arquivo errado, sobrescrevendo a outra (que
+      `registrar` reescreve inteira), e o defeito só aparece adiante como um gate que
+      abre sem entrevista ou que recusa uma entrevista feita. Regra que acerta às vezes
+      e falha em silêncio é pior do que uma palavra a digitar;
+    - *um verbo separado* (`macrodescoberta …`) duplicaria a gramática inteira — os
+      quatro sub-verbos, `--intencao`, `--forcar`, as mensagens — para variar só o
+      arquivo de destino, e as duas cópias divergiriam no primeiro ajuste;
+    - *uma bandeira* é o que está feito. Uma palavra, no mesmo verbo, que aparece no
+      comando que o usuário lê e na trilha do shell.
+
+    A bandeira é retirada da linha ANTES de separar o sub-verbo, para que
+    `descoberta --programa status` funcione tanto quanto `descoberta status --programa`:
+    a ordem em que se digita uma bandeira não é assunto de quem a lê.
+
     `confirmar` e `recusar` existem porque o eixo plataforma/contexto era **inalcançável
     daqui**: `descoberta.confirmar` e `descoberta.recusar` estavam escritos, testados e
     sem nenhum chamador fora dos testes. Enquanto isso, um pedido como "um app de celular
@@ -691,9 +751,9 @@ def _verbo_descoberta(raiz: Path, resto: list[str]) -> int:
     elicitação.
 
     **Nenhum destes verbos grava estado por conta própria.** Todos passam por
-    `descoberta.registrar`/`descoberta.responder`, que mutam de dentro do cadeado por
-    `estado.atualizar`. É a mesma trava textual que `test_nenhum_gravar_fora_do_estado`
-    varre neste arquivo.
+    `descoberta.registrar`/`descoberta.responder`, que mutam de dentro do cadeado do
+    escopo — o do estado no ciclo, o do programa no programa. É a mesma trava textual
+    que `test_nenhum_gravar_fora_do_mutador` varre neste arquivo, para as duas máquinas.
     """
     if not resto:
         print(USO_DESCOBERTA)
@@ -712,11 +772,19 @@ def _verbo_descoberta(raiz: Path, resto: list[str]) -> int:
         )
         return 1
 
-    sub, *args = resto
+    # A bandeira sai da linha antes de tudo: ela não é sub-verbo nem palavra do pedido,
+    # e um `--programa` sobrando viraria "descoberta com pedido `--programa`".
+    escopo = descoberta.PROGRAMA if "--programa" in resto else descoberta.CICLO
+    argumentos = [palavra for palavra in resto if palavra != "--programa"]
+    if not argumentos:
+        print(USO_DESCOBERTA)
+        return 1
+
+    sub, *args = argumentos
     agora = _agora()
 
     if sub == "status":
-        return _imprimir_descoberta(raiz, descoberta)
+        return _imprimir_descoberta(raiz, descoberta, escopo)
 
     if sub == "responder":
         if len(args) < 2:
@@ -731,7 +799,7 @@ def _verbo_descoberta(raiz: Path, resto: list[str]) -> int:
             )
             return 1
         try:
-            descoberta.responder(raiz, lacuna_id, valor, agora=agora)
+            descoberta.responder(raiz, lacuna_id, valor, agora=agora, escopo=escopo)
         except (descoberta.DescobertaAusente, descoberta.LacunaDesconhecida) as erro:
             # Id que não está ativo para este pedido não é aceito em silêncio: a
             # resposta iria para um balde que ninguém lê, a lacuna verdadeira
@@ -748,12 +816,12 @@ def _verbo_descoberta(raiz: Path, resto: list[str]) -> int:
         except descoberta.DescobertaInvalida as erro:
             print(f"ENGINE: bloco de descoberta ilegível — {_texto_do_erro(erro)}")
             return 1
-        except (estado.EstadoCorrompido, estado.EstadoOcupado) as erro:
+        except escopo.erros_do_continente as erro:
             print(f"ENGINE: {erro}")
             return 1
         print(f"**Respondida:** [{lacuna_id}] {valor}")
         print()
-        return _imprimir_descoberta(raiz, descoberta)
+        return _imprimir_descoberta(raiz, descoberta, escopo)
 
     if sub in ("confirmar", "recusar"):
         if len(args) != 1 or not args[0].strip():
@@ -761,14 +829,15 @@ def _verbo_descoberta(raiz: Path, resto: list[str]) -> int:
                 "ENGINE: `descoberta "
                 + sub
                 + " <PALPITE>` exige exatamente o valor do palpite (o nome que aparece "
-                "em `descoberta status`, como MOBILE ou LOJA_PAGAMENTOS).\n"
+                f"em `descoberta {escopo.sufixo_cli}status`, como MOBILE ou "
+                "LOJA_PAGAMENTOS).\n"
                 + USO_DESCOBERTA
             )
             return 1
         alvo = args[0].strip()
         acao = descoberta.confirmar if sub == "confirmar" else descoberta.recusar
         try:
-            acao(raiz, alvo, agora=agora)
+            acao(raiz, alvo, agora=agora, escopo=escopo)
         except (descoberta.DescobertaAusente, descoberta.PalpiteNaoPendente) as erro:
             # Palpite que não está pendente não é resolvido em silêncio: sair 0 sem
             # tirar nada da lista faria a confirmação parecer ter funcionado, que é o
@@ -778,7 +847,7 @@ def _verbo_descoberta(raiz: Path, resto: list[str]) -> int:
         except descoberta.DescobertaInvalida as erro:
             print(f"ENGINE: bloco de descoberta ilegível — {_texto_do_erro(erro)}")
             return 1
-        except (estado.EstadoCorrompido, estado.EstadoOcupado) as erro:
+        except escopo.erros_do_continente as erro:
             print(f"ENGINE: {erro}")
             return 1
         if sub == "confirmar":
@@ -789,10 +858,10 @@ def _verbo_descoberta(raiz: Path, resto: list[str]) -> int:
                 "rastro de valor assumido em lugar nenhum."
             )
         print()
-        return _imprimir_descoberta(raiz, descoberta)
+        return _imprimir_descoberta(raiz, descoberta, escopo)
 
-    forcar = "--forcar" in resto
-    intencao, pedido, erro_de_uso = _pedido_e_sinalizadores(resto)
+    forcar = "--forcar" in argumentos
+    intencao, pedido, erro_de_uso = _pedido_e_sinalizadores(argumentos)
     if erro_de_uso is not None:
         print(erro_de_uso)
         return 1
@@ -804,8 +873,8 @@ def _verbo_descoberta(raiz: Path, resto: list[str]) -> int:
         return 1
 
     try:
-        anterior = descoberta.do_estado(estado.carregar_estrito(raiz))
-    except estado.EstadoCorrompido as erro:
+        anterior = descoberta.do_estado(escopo.carregar_estrito(raiz))
+    except escopo.erros_do_continente as erro:
         print(f"ENGINE: {erro}")
         return 1
     except descoberta.DescobertaInvalida as erro:
@@ -818,19 +887,24 @@ def _verbo_descoberta(raiz: Path, resto: list[str]) -> int:
         # que é o motivo mais natural de repetir o verbo — apagaria a entrevista já
         # respondida sem dizer nada, e a pessoa lembra de ter respondido.
         print(
-            f"ENGINE: já existe descoberta registrada neste ciclo, com {len(respostas)} "
-            "resposta(s). Registrar de novo recomeça a entrevista do zero e apaga o que "
-            "foi respondido. Use `descoberta status` para ver o que falta, ou repita com "
-            "`--forcar` se a intenção é mesmo recomeçar. Nada foi gravado no estado."
+            f"ENGINE: já existe descoberta de {escopo.nome} registrada neste projeto, "
+            f"com {len(respostas)} resposta(s). Registrar de novo recomeça a entrevista "
+            f"do zero e apaga o que foi respondido. Use `descoberta "
+            f"{escopo.sufixo_cli}status` para ver o que falta, ou repita com `--forcar` "
+            "se a intenção é mesmo recomeçar. Nada foi gravado no estado."
         )
         return 1
 
     try:
-        descoberta.registrar(raiz, pedido, intencao=intencao, agora=agora)
+        descoberta.registrar(raiz, pedido, intencao=intencao, agora=agora, escopo=escopo)
     except IntencaoIndeterminada as erro:
         # Antes de `ValueError` porque é subclasse dela: invertida, esta cláusula nunca
         # rodaria e a pergunta de desempate viraria uma mensagem de intenção inválida.
-        print(_pedir_a_intencao(erro, pedido, [alvo.value for alvo in Intencao]))
+        print(
+            _pedir_a_intencao(
+                erro, pedido, [alvo.value for alvo in Intencao], escopo.sufixo_cli
+            )
+        )
         return 1
     except ValueError as erro:
         if intencao is None:
@@ -844,13 +918,13 @@ def _verbo_descoberta(raiz: Path, resto: list[str]) -> int:
     except descoberta.DescobertaAusente as erro:
         print(f"ENGINE: {_texto_do_erro(erro)}")
         return 1
-    except (estado.EstadoCorrompido, estado.EstadoOcupado) as erro:
+    except escopo.erros_do_continente as erro:
         print(f"ENGINE: {erro}")
         return 1
 
-    print("**Descoberta registrada.**")
+    print(f"**Descoberta do {escopo.nome.upper()} registrada** em {escopo.arquivo}.")
     print()
-    return _imprimir_descoberta(raiz, descoberta)
+    return _imprimir_descoberta(raiz, descoberta, escopo)
 
 
 def _prog_trilha(raiz: Path, acao: str, alvo: str, agora: str) -> None:
@@ -1260,8 +1334,10 @@ def _verbo_programa(raiz: Path, resto: list[str]) -> int:
             # bastaria um `return` esquecido para gravá-lo. Estar aqui dentro (e não
             # antes de tomar o cadeado) é a mesma lição do C4: consultado fora, o
             # veredito seria sobre um retrato velho, e outra sessão poderia registrar ou
-            # apagar a descoberta entre a consulta e a gravação.
-            _exigir_descoberta_para_o_plano(raiz, dados)
+            # apagar a descoberta entre a consulta e a gravação. Desde que a
+            # macro-DESCOBERTA mora no `programa.json`, o gate julga o MESMO dicionário
+            # que vai ser gravado — o retrato e o alvo da escrita são um só objeto.
+            _exigir_descoberta_para_o_plano(dados)
             return programa.propor_plano(
                 dados,
                 bruto.get("ciclos") or [],
@@ -1507,9 +1583,12 @@ def _verbo_programa(raiz: Path, resto: list[str]) -> int:
     print(f"**PROGRAMA aberto:** {dados['programa']}  ·  **Estado:** CONCEPCAO")
     print(f"**Objetivo:** {objetivo}")
     print(
-        "\nConduza a macro-DESCOBERTA e o PLANO_MESTRE. A decomposição precisa de "
-        "um critério de aceite falsificável por ciclo — a prosa em `aceite` e a linha "
-        "de comando que a verifica em `comando_de_aceite` — e de um aceite de sistema."
+        "\nConduza a macro-DESCOBERTA e o PLANO_MESTRE. A entrevista do SISTEMA se "
+        'registra com `descoberta --programa "<o pedido do usuário>"` — ela mora no '
+        "`.engine/programa.json`, não exige ciclo ligado e **sobrevive a todo `ligar`**. "
+        "A decomposição precisa de um critério de aceite falsificável por ciclo — a "
+        "prosa em `aceite` e a linha de comando que a verifica em `comando_de_aceite` — "
+        "e de um aceite de sistema."
     )
     return 0
 

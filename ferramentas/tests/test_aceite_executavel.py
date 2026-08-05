@@ -33,7 +33,7 @@ import pytest
 RAIZ_PLUGIN = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RAIZ_PLUGIN))
 
-from ferramentas import executor, programa  # noqa: E402
+from ferramentas import descoberta, executor, programa  # noqa: E402
 from ferramentas.tests.apoio_descoberta import fechar_descoberta  # noqa: E402
 
 AGORA = "2026-08-05T10:00:00"
@@ -111,10 +111,16 @@ def _preparar_para_o_plano(raiz: Path, plano: dict) -> Path:
     A descoberta é fechada porque o gate de `CONCEPCAO -> PLANO_MESTRE` vem ANTES da
     validação do plano: sem fechá-la, todo teste deste arquivo mediria a recusa do gate
     da descoberta e nunca chegaria a exercitar `validar_plano`.
+
+    A que se fecha é a do **PROGRAMA** (`escopo=descoberta.PROGRAMA`), que é a que esse
+    gate lê desde que as duas entrevistas passaram a morar em arquivos separados. Fechar
+    a do ciclo aqui deixaria todo teste deste arquivo parando na recusa do gate — e o
+    diagnóstico seria confuso, porque a entrevista *estaria* fechada, só que na outra
+    máquina.
     """
     assert _cli(raiz, "ligar", OBJETIVO).returncode == 0
     assert _cli(raiz, "programa", OBJETIVO).returncode == 0
-    fechar_descoberta(raiz, OBJETIVO)
+    fechar_descoberta(raiz, OBJETIVO, escopo=descoberta.PROGRAMA)
     arquivo = raiz / "plano.json"
     arquivo.write_text(json.dumps(plano, ensure_ascii=False), encoding="utf-8")
     return arquivo

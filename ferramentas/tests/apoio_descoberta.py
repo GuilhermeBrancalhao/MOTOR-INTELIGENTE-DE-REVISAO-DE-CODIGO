@@ -36,10 +36,19 @@ def fechar_descoberta(
     *,
     intencao: str = "MATERIALIZAR",
     agora: str = "2026-08-05T10:00:00",
+    escopo: descoberta.Escopo = descoberta.CICLO,
 ) -> tuple[str, ...]:
-    """Registra a descoberta e responde todas as bloqueantes. Devolve os ids respondidos."""
-    descoberta.registrar(raiz, pedido, intencao=intencao, agora=agora)
-    return responder_bloqueantes(raiz, agora=agora)
+    """Registra a descoberta e responde todas as bloqueantes. Devolve os ids respondidos.
+
+    `escopo` diz em qual das duas entrevistas — a do ciclo (`.engine/estado.json`, que
+    abre `fase ANALISE`) ou a do programa (`.engine/programa.json`, que abre `programa
+    plano`). O padrão é a do ciclo, e não uma inferência do que existe em disco: preparo
+    de teste que adivinha o alvo esconde justamente o defeito que a separação corrige —
+    um teste do gate do ciclo passaria fechando a entrevista do programa, e ninguém
+    notaria que o gate estava lendo a chave errada.
+    """
+    descoberta.registrar(raiz, pedido, intencao=intencao, agora=agora, escopo=escopo)
+    return responder_bloqueantes(raiz, agora=agora, escopo=escopo)
 
 
 def resposta_para(lacuna_id: str, intencao: str = "MATERIALIZAR") -> str:
@@ -58,7 +67,12 @@ def resposta_para(lacuna_id: str, intencao: str = "MATERIALIZAR") -> str:
     return f"resposta de teste para {lacuna_id}"
 
 
-def responder_bloqueantes(raiz: Path, *, agora: str = "2026-08-05T10:00:00") -> tuple[str, ...]:
+def responder_bloqueantes(
+    raiz: Path,
+    *,
+    agora: str = "2026-08-05T10:00:00",
+    escopo: descoberta.Escopo = descoberta.CICLO,
+) -> tuple[str, ...]:
     """Responde uma bloqueante por vez, reavaliando entre cada resposta.
 
     Reavaliar a cada volta não é preciosismo: B3 muda o veredito das outras lacunas
@@ -69,14 +83,19 @@ def responder_bloqueantes(raiz: Path, *, agora: str = "2026-08-05T10:00:00") -> 
     """
     respondidas: list[str] = []
     for _ in range(LIMITE_DE_VOLTAS):
-        avaliacao = descoberta.avaliar_do_disco(raiz)
+        avaliacao = descoberta.avaliar_do_disco(raiz, escopo=escopo)
         if not avaliacao.bloqueantes:
             return tuple(respondidas)
         alvo = avaliacao.bloqueantes[0]
         intencao = avaliacao.intencao.value if avaliacao.intencao else "MATERIALIZAR"
-        descoberta.responder(raiz, alvo.id, resposta_para(alvo.id, intencao), agora=agora)
+        descoberta.responder(
+            raiz, alvo.id, resposta_para(alvo.id, intencao), agora=agora, escopo=escopo
+        )
         respondidas.append(alvo.id)
     raise AssertionError(
         f"{LIMITE_DE_VOLTAS} respostas e ainda há bloqueante aberta: "
-        f"{[decisao.id for decisao in descoberta.avaliar_do_disco(raiz).bloqueantes]}"
+        + str([
+            decisao.id
+            for decisao in descoberta.avaliar_do_disco(raiz, escopo=escopo).bloqueantes
+        ])
     )

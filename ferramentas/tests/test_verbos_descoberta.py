@@ -329,7 +329,10 @@ def test_status_sem_descoberta_registrada_sai_1_sem_traceback(tmp_path):
 
     assert saida.returncode == 1
     assert "Traceback" not in saida.stderr + saida.stdout
-    assert "nenhuma descoberta registrada" in saida.stdout
+    # O escopo entra na frase desde que existem duas entrevistas: "nenhuma descoberta
+    # registrada", sem dizer qual, mandaria registrar a do ciclo quando o que falta é a
+    # do programa — e o comando sugerido gravaria no arquivo errado.
+    assert "nenhuma descoberta de ciclo registrada" in saida.stdout
 
 
 def test_status_nao_grava_nada(tmp_path):

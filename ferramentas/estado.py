@@ -326,6 +326,19 @@ def _novo_ciclo_sem_cadeado(
     mesmo mecanismo de renomeação do `desligar` (`estado.corrompido-<carimbo>.json`)
     ANTES de o ciclo novo ser gravado. O `historico` dentro dele estava ilegível de
     qualquer forma — mas continua recuperável no arquivo preservado.
+
+    **O dicionário é montado do zero, e só `historico` atravessa. Isso é o desenho, e
+    depende de nada do PROGRAMA morar aqui.** Entre 2026-08-04 e 2026-08-05 a
+    macro-DESCOBERTA do programa foi gravada sob a chave `descoberta` deste arquivo, e
+    esta construção a apagava a cada `ligar`: a entrevista do SISTEMA inteiro sumia ao
+    abrir o primeiro ciclo dele, e um replanejamento posterior era recusado com
+    "descoberta não registrada". A correção não foi abrir exceção aqui — uma chave a
+    preservar teria de ser lembrada por todo código que reconstrói o estado, para sempre
+    —, e sim mudar a entrevista do programa de arquivo: ela vive em `programa.json`
+    (`descoberta.PROGRAMA`), que `ligar` não toca. A chave `descoberta` que ainda pode
+    aparecer AQUI é a do ciclo, e essa deve mesmo morrer com ele: pedido novo, entrevista
+    nova. Antes de acrescentar uma chave a esta montagem, pergunte de quem é a vida dela
+    — se for mais longa que a do ciclo, o lugar não é este arquivo.
     """
     try:
         existente = carregar_estrito(raiz)

@@ -1,16 +1,49 @@
-"""A entrevista de descoberta gravada no estado — para o gate poder lê-la depois.
+"""A entrevista de descoberta gravada ao lado do que ela bloqueia — no ciclo ou no programa.
 
 O pacote `ferramentas/elicitacao` sabe perguntar, classificar e decidir o que bloqueia,
 e não sabe onde nada disso mora: ele só importa biblioteca padrão e não conhece
 `estado.py`. Este módulo é a costura entre os dois. Ele guarda, sob a chave
-`descoberta` do `.engine/estado.json`, o que foi perguntado e respondido, e devolve a
+`descoberta` do arquivo do ESCOPO, o que foi perguntado e respondido, e devolve a
 avaliação — bloqueantes e assumíveis — recalculada a partir do que está no disco.
 
-**Por que no estado, e não num arquivo próprio.** O gate de fase (C4) e o gate do
-programa (C5) já leem o estado, sob o mesmo cadeado, no mesmo instante em que decidem.
-Um segundo arquivo criaria um segundo momento de leitura e a possibilidade de os dois
+**Duas descobertas, dois arquivos, um só código.** São duas entrevistas de vidas
+diferentes, e por muito tempo elas dividiram a mesma chave do mesmo arquivo:
+
+- a do **CICLO** (`DESCOBERTA -> ANALISE`) mora em `.engine/estado.json`, que nasce e
+  morre com o ciclo;
+- a do **PROGRAMA** (a macro-DESCOBERTA, que guarda toda entrada em `PLANO_MESTRE`)
+  mora em `.engine/programa.json`, que sobrevive a N ciclos.
+
+Enquanto as duas dividiram o `estado.json`, dois defeitos conviviam, e os dois
+apareceram em uso real. O primeiro: `ligar` monta um estado novo do zero
+(`estado._novo_ciclo_sem_cadeado`), e com isso **apagava a macro-DESCOBERTA** — quem
+replanejasse depois de um desvio recebia "descoberta não registrada" e não tinha saída
+senão refazer a entrevista do sistema inteiro. O segundo, mais silencioso: como os dois
+gates liam a MESMA chave, a entrevista feita para a CONCEPCAO satisfazia também o gate
+do primeiro ciclo do programa, e esse ciclo nunca fazia descoberta própria. Nenhum
+alarme tocava — o portão simplesmente abria.
+
+Separar os arquivos resolve os dois **por construção**, e não por remendo: `ligar` não
+toca no `programa.json`, e o gate do ciclo não enxerga a chave do programa. Não há
+exceção a escrever em `_novo_ciclo_sem_cadeado`, e é por isso que esta foi a correção
+escolhida em vez de "preservar a chave `descoberta` ao abrir ciclo" — uma exceção assim
+teria de ser lembrada por todo código que reconstrói o estado, para sempre.
+
+**Por que dentro do arquivo que a transição já lê, e não num terceiro arquivo.** O gate
+de fase (C4) lê o estado do ciclo, e o gate do plano (C5) lê o programa, cada um sob o
+cadeado da sua máquina, no mesmo instante em que decide. Um arquivo próprio da
+descoberta criaria um segundo momento de leitura e a possibilidade de os dois
 discordarem — e o modo de falhar seria o pior possível: a transição passa porque o
 outro arquivo ainda não tinha a bloqueante.
+
+**Uma implementação só, parametrizada por `Escopo`.** Registrar, responder, confirmar,
+recusar e avaliar são a mesma lógica nos dois casos: o que muda é o arquivo, o cadeado e
+a frase de quem não tem continente. Duas versões divergiriam no primeiro ajuste, e a
+divergência apareceria como um gate mais frouxo que o outro sem ninguém decidir isso —
+exatamente o que `cli._gate_descoberta` já evita do lado do gate. Por isso o `Escopo`
+carrega as três funções de persistência (`carregar`, `carregar_estrito`, `atualizar`) em
+vez de este módulo ramificar em `if`: acrescentar um terceiro escopo é declarar um
+objeto, não editar seis funções.
 
 **Só o que foi dito é gravado.** O bloco guarda pedido, intenção, eixos confirmados,
 respostas e palpites pendentes. As decisões abertas e a lista de bloqueantes **não**
@@ -26,17 +59,20 @@ lê e avalia sem levantar — a avaliação apenas responde `registrada=False`. 
 diferentes, e é o gate que decide o que fazer com a diferença (fechado, se seguir a
 doutrina do motor).
 
-**Quem muta usa `estado.atualizar()`, nunca `gravar()` direto.** Toda função de escrita
-daqui passa por um mutador dentro do cadeado, e `test_nenhum_gravar_fora_do_estado`
-varre este arquivo junto com os outros de produção — por texto, o que significa que nem
-esta documentação pode escrever a chamada proibida por extenso.
+**Quem muta usa o `atualizar()` do escopo, nunca a escrita direta.** Toda função de
+escrita daqui passa por um mutador dentro do cadeado — o do estado no ciclo, o do
+programa no programa, que são arquivos de cadeado distintos de propósito —, e
+`test_nenhum_gravar_fora_do_mutador` varre este arquivo junto com os outros de produção,
+para as DUAS máquinas. É varredura por texto, o que significa que nem esta documentação
+pode escrever a chamada proibida por extenso.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
-from ferramentas import estado
+from ferramentas import estado, programa
 from ferramentas.elicitacao import (
     Contexto,
     DecisaoAberta,
@@ -58,8 +94,16 @@ from ferramentas.elicitacao import (
     universo_completo,
 )
 
-#: A chave própria dentro do `estado.json`, ao lado de `pendencias`. Nome curto e
-#: estável: ele viaja em arquivo de estado de projeto alheio e renomear custa migração.
+#: A chave própria dentro do arquivo do escopo — ao lado de `pendencias` no estado do
+#: ciclo, ao lado de `ciclos` no programa. Nome curto e estável: ele viaja em arquivo de
+#: estado de projeto alheio e renomear custa migração.
+#:
+#: **A MESMA chave nos dois arquivos, de propósito.** O que separa as duas entrevistas é
+#: o arquivo, não o nome: `avaliar` e `do_estado` continuam funções puras sobre
+#: dicionário, sem precisar saber de qual das duas máquinas ele veio. Chaves diferentes
+#: obrigariam todo leitor a receber também o escopo só para achar o bloco, e o primeiro
+#: que esquecesse leria `None` — que este motor trata como "não registrada", isto é,
+#: recusa. Fecharia portão à toa, e por um detalhe de nomenclatura.
 CHAVE = "descoberta"
 
 #: Versão do formato **deste bloco**, independente de `estado.VERSAO`. Separada porque
@@ -67,6 +111,87 @@ CHAVE = "descoberta"
 #: versão do estado inteiro — com a migração de tudo junto — para acrescentar um campo
 #: aqui dentro.
 VERSAO_BLOCO = 1
+
+
+@dataclass(frozen=True, slots=True)
+class Escopo:
+    """Onde uma entrevista mora e o que ela destrava. O único eixo de variação do módulo.
+
+    Congelado porque é declaração, não estado: os dois escopos são constantes de módulo
+    (`CICLO`, `PROGRAMA`) e nada os altera em runtime.
+
+    As três funções de persistência entram como **campos**, e não como um `if` dentro de
+    cada função de escrita, por duas razões. A primeira é que assim não existe caminho
+    parcialmente convertido: quem escreve num escopo usa as três funções DELE, e um
+    esquecimento vira `AttributeError` na hora, não uma gravação no arquivo errado. A
+    segunda é que o `if` teria de ser repetido em `ler`, `registrar`, `responder`,
+    `_resolver_palpite` e `avaliar_do_disco` — cinco lugares para manter em acordo, que é
+    onde a divergência nasce.
+
+    `erros_do_continente` existe porque as duas máquinas levantam exceções de tipos
+    diferentes para a mesma desgraça (`estado.EstadoCorrompido` ×
+    `programa.ProgramaCorrompido`), e a CLI precisa capturá-las sem repetir o par em cada
+    `except` — capturar só as do ciclo faria um `programa.json` ilegível sair como
+    traceback no terminal, que é o formato de erro que a CLI proíbe.
+    """
+
+    nome: str
+    arquivo: str
+    #: O que a descoberta deste escopo destrava, para a mensagem dizer o que fazer depois.
+    porta: str
+    #: O sufixo que a CLI usa para falar deste escopo (`descoberta --programa status`).
+    sufixo_cli: str
+    #: A frase de `DescobertaAusente` quando o continente não existe em disco.
+    ausencia: str
+    carregar: Callable[[Path], dict | None]
+    carregar_estrito: Callable[[Path], dict | None]
+    atualizar: Callable[[Path, Callable[[dict | None], dict | None]], dict | None]
+    erros_do_continente: tuple[type[BaseException], ...] = ()
+
+
+#: A entrevista do CICLO: mora no estado, morre com ele, e guarda `DESCOBERTA -> ANALISE`.
+CICLO = Escopo(
+    nome="ciclo",
+    arquivo=".engine/estado.json",
+    porta="fase ANALISE",
+    sufixo_cli="",
+    ausencia=(
+        "não há estado nesta pasta: ligue o ENGINE antes de registrar a descoberta do "
+        "ciclo - descoberta de ciclo sem ciclo não tem a quem bloquear (a do PROGRAMA "
+        "não precisa de ciclo: use `descoberta --programa \"<pedido>\"`)"
+    ),
+    carregar=estado.carregar,
+    carregar_estrito=estado.carregar_estrito,
+    atualizar=estado.atualizar,
+    erros_do_continente=(estado.EstadoCorrompido, estado.EstadoOcupado),
+)
+
+#: A macro-DESCOBERTA do PROGRAMA: mora no `programa.json` e sobrevive a N `ligar`.
+#:
+#: Ela **não** exige ciclo ligado, e essa é a segunda coisa que a separação conserta. Com
+#: a entrevista do sistema morando no estado do ciclo, registrar a macro-DESCOBERTA
+#: obrigava a `ligar` um ciclo só para ter onde gravar — um ciclo que não correspondia a
+#: trabalho nenhum e que, ao ser aberto, apagava justamente o que se queria guardar.
+PROGRAMA = Escopo(
+    nome="programa",
+    arquivo=".engine/programa.json",
+    porta="programa plano",
+    sufixo_cli="--programa ",
+    ausencia=(
+        "não há programa nesta pasta: abra um com `programa \"<objetivo do sistema>\"` "
+        "antes de registrar a macro-DESCOBERTA - descoberta de programa sem programa "
+        "não tem a quem bloquear"
+    ),
+    carregar=programa.carregar,
+    carregar_estrito=programa.carregar_estrito,
+    atualizar=programa.atualizar,
+    erros_do_continente=(programa.ProgramaCorrompido, estado.EstadoOcupado),
+)
+
+#: Os escopos por nome, para quem recebe a escolha como texto (a CLI, que importa este
+#: módulo tarde e de dentro de um `try`). Nome desconhecido levanta `KeyError` em vez de
+#: cair no ciclo por omissão: escrever no arquivo errado é pior do que falhar.
+ESCOPOS: dict[str, Escopo] = {CICLO.nome: CICLO, PROGRAMA.nome: PROGRAMA}
 
 
 class DescobertaAusente(KeyError):
@@ -122,6 +247,12 @@ class Avaliacao:
     respondidas: tuple[str, ...]
     palpites_pendentes: tuple[Palpite, ...]
     abertas: tuple[DecisaoAberta, ...]
+    #: De qual entrevista este retrato é — só para o texto de `resumo`. Vem por último e
+    #: com padrão porque `Avaliacao` é construída em dois pontos e lida em muitos, e um
+    #: campo obrigatório no meio quebraria qualquer construção posicional já escrita.
+    #: "neste ciclo" numa recusa de `programa plano` manda procurar o defeito na máquina
+    #: errada, que é o mesmo motivo pelo qual o gate já não copia o rótulo da aresta.
+    escopo: str = CICLO.nome
 
     @property
     def bloqueantes(self) -> tuple[DecisaoAberta, ...]:
@@ -168,8 +299,8 @@ class Avaliacao:
         """
         if not self.registrada:
             return (
-                "Descoberta não registrada neste ciclo: não se sabe que trabalho foi "
-                "pedido, nem quais lacunas estão abertas."
+                f"Descoberta não registrada neste {self.escopo}: não se sabe que "
+                "trabalho foi pedido, nem quais lacunas estão abertas."
             )
 
         linhas = [
@@ -215,10 +346,15 @@ class Avaliacao:
 
 
 def do_estado(dados: dict | None) -> dict | None:
-    """O bloco de descoberta de dentro de um estado já lido, ou `None`.
+    """O bloco de descoberta de dentro de um continente já lido, ou `None`.
 
-    Estado ausente e estado sem a chave dão o mesmo `None`: os dois significam "esta
-    pasta nunca registrou descoberta", e distingui-los aqui só produziria dois ramos
+    Serve os dois escopos sem saber de qual veio: recebe o dicionário do `estado.json`
+    ou o do `programa.json`, e a chave é a mesma nos dois. O nome ficou por
+    retrocompatibilidade de chamador (o `cli.py` a usa), e "estado" aqui vale no sentido
+    largo — o retrato persistido de uma máquina.
+
+    Continente ausente e continente sem a chave dão o mesmo `None`: os dois significam
+    "aqui nunca se registrou descoberta", e distingui-los aqui só produziria dois ramos
     idênticos em quem chama. O que **não** é tolerado é bloco de versão desconhecida,
     que levanta.
     """
@@ -229,7 +365,7 @@ def do_estado(dados: dict | None) -> dict | None:
         return None
     if not isinstance(bloco, dict):
         raise DescobertaInvalida(
-            f"chave {CHAVE!r} do estado não é um objeto JSON: {type(bloco).__name__}"
+            f"chave {CHAVE!r} não é um objeto JSON: {type(bloco).__name__}"
         )
     versao = bloco.get("versao")
     if versao != VERSAO_BLOCO:
@@ -241,9 +377,9 @@ def do_estado(dados: dict | None) -> dict | None:
     return bloco
 
 
-def ler(raiz: Path) -> dict | None:
-    """O bloco de descoberta gravado nesta pasta, ou `None`."""
-    return do_estado(estado.carregar(raiz))
+def ler(raiz: Path, *, escopo: Escopo = CICLO) -> dict | None:
+    """O bloco de descoberta daquele escopo nesta pasta, ou `None`."""
+    return do_estado(escopo.carregar(raiz))
 
 
 def _eixos(bloco: dict) -> tuple[tuple[Plataforma, ...], tuple[Contexto, ...]]:
@@ -288,15 +424,22 @@ def ativas(bloco: dict) -> tuple[Lacuna, ...]:
     )
 
 
-def avaliar(dados: dict | None) -> Avaliacao:
-    """A avaliação da descoberta a partir de um estado já lido. Nunca escreve.
+def avaliar(dados: dict | None, *, escopo: Escopo = CICLO) -> Avaliacao:
+    """A avaliação da descoberta a partir de um continente já lido. Nunca escreve.
 
-    Pura de propósito: o gate a chama de dentro do mutador de `estado.atualizar`, com o
-    cadeado na mão, e uma função que fizesse E/S ali dentro tentaria pegar o cadeado de
-    novo — que não é reentrante e travaria até o timeout.
+    Pura de propósito: o gate a chama de dentro do mutador (`estado.atualizar` no ciclo,
+    `programa.atualizar` no programa), com o cadeado na mão, e uma função que fizesse E/S
+    ali dentro tentaria pegar o cadeado de novo — que não é reentrante e travaria até o
+    timeout.
 
-    Estado sem descoberta devolve `registrada=False` com todos os campos vazios, e não
-    levanta: é o caso do estado antigo, anterior a este ciclo, e ele tem de carregar.
+    `escopo` aqui é **só o rótulo** do retrato: o dicionário já veio de quem leu o
+    arquivo certo, e nada nesta função depende do arquivo. Recebê-lo mesmo assim é o que
+    faz a recusa de `programa plano` dizer "neste programa" em vez de "neste ciclo" — e
+    o padrão é `CICLO` para que toda chamada de um argumento já escrita continue valendo.
+
+    Continente sem descoberta devolve `registrada=False` com todos os campos vazios, e
+    não levanta: é o caso do arquivo antigo, anterior a este ciclo, e ele tem de
+    carregar. Carregar não é passar — `liberado_para_planejar` continua `False`.
     """
     bloco = do_estado(dados)
     if bloco is None:
@@ -309,6 +452,7 @@ def avaliar(dados: dict | None) -> Avaliacao:
             respondidas=(),
             palpites_pendentes=(),
             abertas=(),
+            escopo=escopo.nome,
         )
 
     intencao = _intencao(bloco)
@@ -342,12 +486,13 @@ def avaliar(dados: dict | None) -> Avaliacao:
             for item in bloco.get("palpites_pendentes", [])
         ),
         abertas=decisoes,
+        escopo=escopo.nome,
     )
 
 
-def avaliar_do_disco(raiz: Path) -> Avaliacao:
-    """`avaliar` sobre o estado desta pasta. Conveniência para quem só quer olhar."""
-    return avaliar(estado.carregar(raiz))
+def avaliar_do_disco(raiz: Path, *, escopo: Escopo = CICLO) -> Avaliacao:
+    """`avaliar` sobre o arquivo do escopo nesta pasta. Conveniência para quem só olha."""
+    return avaliar(escopo.carregar(raiz), escopo=escopo)
 
 
 # ---------------------------------------------------------------------------
@@ -363,8 +508,9 @@ def registrar(
     plataformas: tuple[Plataforma | str, ...] = (),
     contextos: tuple[Contexto | str, ...] = (),
     agora: str | None = None,
+    escopo: Escopo = CICLO,
 ) -> dict:
-    """Abre a descoberta do ciclo: classifica o pedido e guarda os palpites.
+    """Abre a descoberta daquele escopo: classifica o pedido e guarda os palpites.
 
     `intencao` explícita existe para depois de uma pergunta de desempate; sem ela, o
     pedido é classificado aqui e `IntencaoIndeterminada` **sobe**, sem gravar nada.
@@ -376,8 +522,11 @@ def registrar(
     enquanto estiver pendente ela consta do bloco como palpite, com a evidência.
 
     Só a chave `descoberta` é tocada. O mutador devolve o mesmo dicionário do disco com
-    uma chave a mais — `cartoes`, `decisoes`, `pendencias` e o resto do ciclo passam
-    intactos, e é por isso que isto usa `atualizar` e não monta um estado novo.
+    uma chave a mais — `cartoes`, `decisoes`, `pendencias` e o resto do ciclo (ou
+    `ciclos`, `aceite_de_sistema` e o resto do programa) passam intactos, e é por isso
+    que isto usa `atualizar` e não monta um dicionário novo. É a diferença exata entre
+    esta função e `estado._novo_ciclo_sem_cadeado`, que monta do zero — e era por montar
+    do zero que `ligar` apagava a macro-DESCOBERTA quando ela morava no estado.
     """
     alvo = Intencao(str(intencao).strip().upper()) if intencao is not None else classificar(pedido)
     palpites = [*detectar_plataformas(pedido), *detectar_contextos(pedido)]
@@ -386,10 +535,7 @@ def registrar(
 
     def _mutar(dados: dict | None) -> dict | None:
         if dados is None:
-            raise DescobertaAusente(
-                "não há estado nesta pasta: ligue o ENGINE antes de registrar a "
-                "descoberta - descoberta sem ciclo não tem a quem bloquear"
-            )
+            raise DescobertaAusente(escopo.ausencia)
         dados[CHAVE] = {
             "versao": VERSAO_BLOCO,
             "pedido": pedido,
@@ -410,7 +556,7 @@ def registrar(
         }
         return dados
 
-    return _bloco_apos(estado.atualizar(raiz, _mutar))
+    return _bloco_apos(escopo.atualizar(raiz, _mutar), escopo)
 
 
 def responder(
@@ -420,6 +566,7 @@ def responder(
     *,
     origem: Origem | str = Origem.RESPONDIDO,
     agora: str | None = None,
+    escopo: Escopo = CICLO,
 ) -> dict:
     """Grava a resposta de uma lacuna, preservando todo o resto do bloco.
 
@@ -450,7 +597,7 @@ def responder(
     exigir_origem_declarada(origem)
 
     def _mutar(dados: dict | None) -> dict | None:
-        bloco = _exigir(dados)
+        bloco = _exigir(dados, escopo)
         conhecidas = {lacuna.id: lacuna for lacuna in ativas(bloco)}
         if lacuna_id not in conhecidas:
             raise LacunaDesconhecida(
@@ -469,30 +616,36 @@ def responder(
         bloco["atualizado_em"] = agora
         return dados
 
-    return _bloco_apos(estado.atualizar(raiz, _mutar))
+    return _bloco_apos(escopo.atualizar(raiz, _mutar), escopo)
 
 
-def confirmar(raiz: Path, valor: str, *, agora: str | None = None) -> dict:
+def confirmar(
+    raiz: Path, valor: str, *, agora: str | None = None, escopo: Escopo = CICLO
+) -> dict:
     """Aceita um palpite: tira da pendência e aplica o eixo que ele nomeia.
 
     Aplicar pode destravar um bloco inteiro de lacunas — é o mesmo efeito de responder
     `onde_roda` —, e por isso confirmar palpite vem antes de perguntar no laço da
     entrevista.
     """
-    return _resolver_palpite(raiz, valor, aplicar=True, agora=agora)
+    return _resolver_palpite(raiz, valor, aplicar=True, agora=agora, escopo=escopo)
 
 
-def recusar(raiz: Path, valor: str, *, agora: str | None = None) -> dict:
+def recusar(
+    raiz: Path, valor: str, *, agora: str | None = None, escopo: Escopo = CICLO
+) -> dict:
     """Rejeita um palpite: tira da pendência e **não** aplica nada.
 
     Recusar é diferente de ignorar. Ignorado, o palpite continua pendente e a
     especificação corretamente não se declara completa. Recusado, ele sai sem deixar
     rastro de valor assumido em lugar nenhum.
     """
-    return _resolver_palpite(raiz, valor, aplicar=False, agora=agora)
+    return _resolver_palpite(raiz, valor, aplicar=False, agora=agora, escopo=escopo)
 
 
-def _resolver_palpite(raiz: Path, valor: str, *, aplicar: bool, agora: str | None) -> dict:
+def _resolver_palpite(
+    raiz: Path, valor: str, *, aplicar: bool, agora: str | None, escopo: Escopo = CICLO
+) -> dict:
     """O miolo comum de `confirmar` e `recusar` — a diferença é só `aplicar`.
 
     O palpite tem de estar **pendente**; se não estiver, levanta `PalpiteNaoPendente` de
@@ -503,7 +656,7 @@ def _resolver_palpite(raiz: Path, valor: str, *, aplicar: bool, agora: str | Non
     alvo = str(valor).strip().upper()
 
     def _mutar(dados: dict | None) -> dict | None:
-        bloco = _exigir(dados)
+        bloco = _exigir(dados, escopo)
         pendentes = list(bloco.get("palpites_pendentes", []))
         restantes = [
             item
@@ -532,23 +685,25 @@ def _resolver_palpite(raiz: Path, valor: str, *, aplicar: bool, agora: str | Non
         bloco["atualizado_em"] = agora
         return dados
 
-    return _bloco_apos(estado.atualizar(raiz, _mutar))
+    return _bloco_apos(escopo.atualizar(raiz, _mutar), escopo)
 
 
-def _exigir(dados: dict | None) -> dict:
+def _exigir(dados: dict | None, escopo: Escopo = CICLO) -> dict:
     bloco = do_estado(dados)
     if bloco is None:
         raise DescobertaAusente(
-            f"o estado desta pasta não tem a chave {CHAVE!r}: registre a descoberta "
-            "antes de responder - criar o bloco aqui exigiria inventar o pedido e a "
-            "intenção, e intenção inventada escolhe quais perguntas existem"
+            f"{escopo.arquivo} não tem a chave {CHAVE!r}: registre a descoberta do "
+            f"{escopo.nome} antes de responder - criar o bloco aqui exigiria inventar o "
+            "pedido e a intenção, e intenção inventada escolhe quais perguntas existem"
         )
     return bloco
 
 
-def _bloco_apos(dados: dict | None) -> dict:
+def _bloco_apos(dados: dict | None, escopo: Escopo = CICLO) -> dict:
     """O bloco recém-gravado, para quem chamou não ter de reler o disco."""
     bloco = do_estado(dados)
     if bloco is None:  # pragma: no cover - `atualizar` só devolve `None` se o mutador devolver
-        raise DescobertaAusente("a gravação não produziu bloco de descoberta")
+        raise DescobertaAusente(
+            f"a gravação não produziu bloco de descoberta em {escopo.arquivo}"
+        )
     return bloco

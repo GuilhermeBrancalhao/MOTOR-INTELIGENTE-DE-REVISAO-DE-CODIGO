@@ -77,14 +77,29 @@ def _cli(raiz: Path, *args: str) -> subprocess.CompletedProcess:
 def _abrir_programa(raiz: Path) -> Path:
     """Liga o ciclo, abre o programa em CONCEPCAO e escreve o plano em disco.
 
-    O ciclo é ligado porque a descoberta mora no `.engine/estado.json`: sem estado não
-    há onde registrar a entrevista, e o gate teria só um caminho a exercitar.
+    O ciclo continua sendo ligado, mesmo depois de a macro-DESCOBERTA ter mudado de
+    arquivo: é o cenário real (um programa é conduzido com ciclos), e é ele que garante
+    que o gate do plano lê o `programa.json` e **não** o estado do ciclo que está ao
+    lado. Sem o ciclo ligado, um gate que voltasse a ler o `estado.json` recusaria por
+    ausência de arquivo e todos os testes de recusa passariam pelo motivo errado.
     """
     assert _cli(raiz, "ligar", OBJETIVO).returncode == 0
     assert _cli(raiz, "programa", OBJETIVO).returncode == 0
     arquivo = raiz / "plano.json"
     arquivo.write_text(json.dumps(PLANO_VALIDO, ensure_ascii=False), encoding="utf-8")
     return arquivo
+
+
+def _descoberta_do_programa(raiz: Path) -> None:
+    """Registra a macro-DESCOBERTA **sem** responder nada: o gate tem de recusar."""
+    descoberta.registrar(
+        raiz, OBJETIVO, intencao="MATERIALIZAR", escopo=descoberta.PROGRAMA
+    )
+
+
+def _fechar_a_do_programa(raiz: Path) -> None:
+    """Fecha a macro-DESCOBERTA — a entrevista que o gate do plano lê."""
+    fechar_descoberta(raiz, OBJETIVO, escopo=descoberta.PROGRAMA)
 
 
 def _ate_desvio(raiz: Path, aceitar: tuple[str, ...] = ()) -> Path:
@@ -103,7 +118,7 @@ def _ate_desvio(raiz: Path, aceitar: tuple[str, ...] = ()) -> Path:
     verdade aqui trocaria isso pela verificação de outro ciclo do motor.
     """
     arquivo = _abrir_programa(raiz)
-    fechar_descoberta(raiz, OBJETIVO)
+    _fechar_a_do_programa(raiz)
     assert _cli(raiz, "programa", "plano", str(arquivo)).returncode == 0
     assert _cli(raiz, "programa", "aprovar").returncode == 0
     for cid in aceitar:
@@ -119,14 +134,19 @@ def _ate_desvio(raiz: Path, aceitar: tuple[str, ...] = ()) -> Path:
 
 
 def _reabrir_a_entrevista(raiz: Path) -> None:
-    """Apaga as respostas: a descoberta volta a ter bloqueante aberta."""
+    """Apaga as respostas da macro-DESCOBERTA: ela volta a ter bloqueante aberta.
+
+    Muta o `programa.json` pelo mutador do programa — que é onde a entrevista do sistema
+    mora. Apagar as respostas do `estado.json` aqui não reabriria nada para este gate, e
+    o teste passaria a medir a recusa por um motivo que não existe.
+    """
 
     def _mutar(dados):
         dados[descoberta.CHAVE]["respostas"] = {}
         return dados
 
-    estado.atualizar(raiz, _mutar)
-    assert descoberta.avaliar_do_disco(raiz).bloqueantes
+    programa.atualizar(raiz, _mutar)
+    assert descoberta.avaliar_do_disco(raiz, escopo=descoberta.PROGRAMA).bloqueantes
 
 
 def _impressao_digital(raiz: Path) -> str:
@@ -149,7 +169,7 @@ def test_plano_com_bloqueante_aberta_sai_1(tmp_path):
     — e o passo seguinte do orquestrador seria `programa aprovar`.
     """
     arquivo = _abrir_programa(tmp_path)
-    descoberta.registrar(tmp_path, OBJETIVO, intencao="MATERIALIZAR")
+    _descoberta_do_programa(tmp_path)
 
     saida = _cli(tmp_path, "programa", "plano", str(arquivo))
 
@@ -165,7 +185,7 @@ def test_a_recusa_nao_transiciona_nem_grava_a_decomposicao(tmp_path):
     ter uma decomposição que ninguém aprovou, atrás de um estado que diz CONCEPCAO.
     """
     arquivo = _abrir_programa(tmp_path)
-    descoberta.registrar(tmp_path, OBJETIVO, intencao="MATERIALIZAR")
+    _descoberta_do_programa(tmp_path)
     antes = _impressao_digital(tmp_path)
 
     saida = _cli(tmp_path, "programa", "plano", str(arquivo))
@@ -187,11 +207,13 @@ def test_a_recusa_e_a_excecao_nomeada_do_programa(tmp_path, monkeypatch, capsys)
     distinguir pelo texto da mensagem — e texto não é contrato.
     """
     arquivo = _abrir_programa(tmp_path)
-    descoberta.registrar(tmp_path, OBJETIVO, intencao="MATERIALIZAR")
+    _descoberta_do_programa(tmp_path)
     monkeypatch.setenv("ENGINE_RAIZ", str(tmp_path))
 
+    # Um argumento só, e é o dicionário do programa: o gate deixou de ler um segundo
+    # arquivo quando a macro-DESCOBERTA passou a morar no que ele já recebe.
     with pytest.raises(programa.DescobertaIncompleta):
-        cli._exigir_descoberta_para_o_plano(tmp_path, programa.carregar(tmp_path))
+        cli._exigir_descoberta_para_o_plano(programa.carregar(tmp_path))
 
     capsys.readouterr()
     assert cli.principal(["programa", "plano", str(arquivo)]) == 1
@@ -219,8 +241,8 @@ def test_a_recusa_nomeia_as_lacunas_e_traz_a_pergunta_inteira(tmp_path):
     de um rótulo. É a mesma exigência do gate de fase, e o gate é o mesmo.
     """
     arquivo = _abrir_programa(tmp_path)
-    descoberta.registrar(tmp_path, OBJETIVO, intencao="MATERIALIZAR")
-    abertas = descoberta.avaliar_do_disco(tmp_path).bloqueantes
+    _descoberta_do_programa(tmp_path)
+    abertas = descoberta.avaliar_do_disco(tmp_path, escopo=descoberta.PROGRAMA).bloqueantes
     assert abertas, "o preparo deste teste precisa de pelo menos uma bloqueante"
 
     saida = _cli(tmp_path, "programa", "plano", str(arquivo))
@@ -238,7 +260,7 @@ def test_a_recusa_nomeia_a_aresta_do_programa_e_nao_a_do_ciclo(tmp_path):
     propósito; o que não podem compartilhar é o rótulo da aresta.
     """
     arquivo = _abrir_programa(tmp_path)
-    descoberta.registrar(tmp_path, OBJETIVO, intencao="MATERIALIZAR")
+    _descoberta_do_programa(tmp_path)
 
     saida = _cli(tmp_path, "programa", "plano", str(arquivo))
 
@@ -256,7 +278,7 @@ def test_a_recusa_nao_sai_com_prefixo_duplicado(tmp_path):
     código de saída.
     """
     arquivo = _abrir_programa(tmp_path)
-    descoberta.registrar(tmp_path, OBJETIVO, intencao="MATERIALIZAR")
+    _descoberta_do_programa(tmp_path)
 
     saida = _cli(tmp_path, "programa", "plano", str(arquivo))
 
@@ -273,8 +295,8 @@ def test_sem_bloqueante_aberta_o_plano_passa(tmp_path):
     em CONCEPCAO. Este é o par obrigatório de todos os testes de recusa acima.
     """
     arquivo = _abrir_programa(tmp_path)
-    fechar_descoberta(tmp_path, OBJETIVO)
-    assert descoberta.avaliar_do_disco(tmp_path).liberado_para_planejar
+    _fechar_a_do_programa(tmp_path)
+    assert descoberta.avaliar_do_disco(tmp_path, escopo=descoberta.PROGRAMA).liberado_para_planejar
 
     saida = _cli(tmp_path, "programa", "plano", str(arquivo))
 
@@ -289,12 +311,12 @@ def test_o_mesmo_plano_recusado_passa_apos_as_respostas(tmp_path):
     contador, o que for). A sequência recusa -> responde -> passa é o caminho real de
     uma sessão, e tem de funcionar no MESMO programa, sem reabrir."""
     arquivo = _abrir_programa(tmp_path)
-    descoberta.registrar(tmp_path, OBJETIVO, intencao="MATERIALIZAR")
+    _descoberta_do_programa(tmp_path)
     assert _cli(tmp_path, "programa", "plano", str(arquivo)).returncode == 1
 
     from ferramentas.tests.apoio_descoberta import responder_bloqueantes
 
-    responder_bloqueantes(tmp_path)
+    responder_bloqueantes(tmp_path, escopo=descoberta.PROGRAMA)
 
     assert _cli(tmp_path, "programa", "plano", str(arquivo)).returncode == 0
     assert programa.carregar(tmp_path)["estado"] == "PLANO_MESTRE"
@@ -309,7 +331,7 @@ def test_o_gate_nao_substitui_a_porta_p1(tmp_path):
     parada garantida do programa.
     """
     arquivo = _abrir_programa(tmp_path)
-    fechar_descoberta(tmp_path, OBJETIVO)
+    _fechar_a_do_programa(tmp_path)
 
     saida = _cli(tmp_path, "programa", "plano", str(arquivo))
 
@@ -330,10 +352,10 @@ def test_predicado_que_estoura_bloqueia_o_plano(tmp_path, monkeypatch, capsys):
     saída de um processo de verdade, e por isso os outros testes usam subprocesso.
     """
     arquivo = _abrir_programa(tmp_path)
-    fechar_descoberta(tmp_path, OBJETIVO)
+    _fechar_a_do_programa(tmp_path)
     antes = _impressao_digital(tmp_path)
 
-    def _explodir(_dados):
+    def _explodir(_dados, **_):
         raise RuntimeError("catálogo inválido, estado corrompido, o que for")
 
     monkeypatch.setattr(descoberta, "avaliar", _explodir)
@@ -355,13 +377,13 @@ def test_bloco_de_descoberta_em_versao_desconhecida_bloqueia_o_plano(tmp_path):
     produziria uma avaliação plausível — e avaliação plausível abre portão.
     """
     arquivo = _abrir_programa(tmp_path)
-    fechar_descoberta(tmp_path, OBJETIVO)
+    _fechar_a_do_programa(tmp_path)
 
     def _envelhecer(dados):
         dados[descoberta.CHAVE]["versao"] = descoberta.VERSAO_BLOCO + 99
         return dados
 
-    estado.atualizar(tmp_path, _envelhecer)
+    programa.atualizar(tmp_path, _envelhecer)
     antes = _impressao_digital(tmp_path)
 
     saida = _cli(tmp_path, "programa", "plano", str(arquivo))
@@ -371,17 +393,24 @@ def test_bloco_de_descoberta_em_versao_desconhecida_bloqueia_o_plano(tmp_path):
     assert _impressao_digital(tmp_path) == antes
 
 
-def test_estado_corrompido_bloqueia_o_plano_sem_traceback(tmp_path):
-    """Cai se o `estado.json` ilegível virar "descoberta ausente e pronto" — ou pior,
-    se `EstadoCorrompido` escapar como traceback.
+def test_programa_corrompido_bloqueia_o_plano_sem_traceback(tmp_path):
+    """Cai se o `programa.json` ilegível virar "descoberta ausente e pronto" — ou pior,
+    se `ProgramaCorrompido` escapar como traceback.
 
-    O veredito sai do estado. Estado ilegível é ausência de veredito, e ausência de
-    veredito fecha o portão. A mensagem tem de dizer que o arquivo está quebrado, e não
-    culpar a entrevista: quem lê "descoberta não registrada" vai registrá-la de novo por
-    cima de um arquivo corrompido.
+    O veredito sai do arquivo que a entrevista habita. Arquivo ilegível é ausência de
+    veredito, e ausência de veredito fecha o portão. A mensagem tem de dizer que o
+    arquivo está quebrado, e não culpar a entrevista: quem lê "descoberta não
+    registrada" vai registrá-la de novo por cima de um arquivo corrompido.
+
+    Era o `estado.json` que este teste quebrava, enquanto a macro-DESCOBERTA morava lá.
+    Trocar o arquivo aqui não é enfraquecer o teste — é apontá-lo para o arquivo de que
+    o veredito agora depende. Que o `estado.json` quebrado tenha deixado de barrar
+    `programa plano` é comportamento novo e deliberado, e está coberto em
+    `test_descoberta_do_programa.py`.
     """
     arquivo = _abrir_programa(tmp_path)
-    estado.caminho(tmp_path).write_text("{ isto não é json", encoding="utf-8")
+    _fechar_a_do_programa(tmp_path)
+    programa.caminho(tmp_path).write_text("{ isto não é json", encoding="utf-8")
     antes = _impressao_digital(tmp_path)
 
     saida = _cli(tmp_path, "programa", "plano", str(arquivo))
@@ -390,20 +419,19 @@ def test_estado_corrompido_bloqueia_o_plano_sem_traceback(tmp_path):
     assert "Traceback" not in saida.stdout + saida.stderr
     assert "ilegível" in saida.stdout
     assert _impressao_digital(tmp_path) == antes
-    assert programa.carregar(tmp_path)["estado"] == "CONCEPCAO"
 
 
 def test_projeto_sem_descoberta_registrada_recusa_sem_quebrar(tmp_path):
     """Cai se o gate exigir a chave `descoberta` (levantaria `KeyError`) ou se tratar a
     ausência como "nada bloqueia".
 
-    Retrocompatibilidade: programa aberto antes deste ciclo não tem a chave, e
-    `estado.VERSAO` não subiu — o arquivo tem de carregar. Carregar não é passar. "Não
+    Retrocompatibilidade: `programa.json` gravado antes deste ciclo não tem a chave, e
+    `programa.VERSAO` não subiu — o arquivo tem de carregar. Carregar não é passar. "Não
     sei quais lacunas existem" e "não há lacuna" são frases opostas, e é a confusão
     entre as duas que este teste cobra.
     """
     arquivo = _abrir_programa(tmp_path)
-    assert descoberta.CHAVE not in estado.carregar(tmp_path)
+    assert descoberta.CHAVE not in programa.carregar(tmp_path)
     antes = _impressao_digital(tmp_path)
 
     saida = _cli(tmp_path, "programa", "plano", str(arquivo))
@@ -415,11 +443,12 @@ def test_projeto_sem_descoberta_registrada_recusa_sem_quebrar(tmp_path):
 
 
 def test_programa_sem_ciclo_ligado_recusa_sem_quebrar(tmp_path):
-    """Cai se o gate assumir que existe `.engine/estado.json`.
+    """Cai se o gate voltar a exigir `.engine/estado.json` para julgar o plano.
 
-    `programa <objetivo>` não exige ciclo ligado; sem estado nenhum, `carregar_estrito`
-    devolve `None` e o gate recebe `None`. Isso é ausência de descoberta — recusa —, não
-    `AttributeError` no terminal do usuário.
+    `programa <objetivo>` não exige ciclo ligado, e a macro-DESCOBERTA também não desde
+    que mudou de arquivo. Sem estado nenhum na pasta, a recusa tem de sair da entrevista
+    do programa que não foi registrada — não de um `AttributeError` sobre um arquivo que
+    não é mais consultado.
     """
     assert _cli(tmp_path, "programa", OBJETIVO).returncode == 0
     arquivo = tmp_path / "plano.json"
@@ -449,16 +478,16 @@ def test_nenhum_caminho_do_gate_do_plano_termina_em_traceback(tmp_path, preparo)
     if preparo != "sem_programa":
         _abrir_programa(tmp_path)
     if preparo == "com_bloqueante":
-        descoberta.registrar(tmp_path, OBJETIVO, intencao="MATERIALIZAR")
+        _descoberta_do_programa(tmp_path)
     if preparo in ("liberado", "bloco_quebrado"):
-        fechar_descoberta(tmp_path, OBJETIVO)
+        _fechar_a_do_programa(tmp_path)
     if preparo == "bloco_quebrado":
 
         def _quebrar(dados):
             dados[descoberta.CHAVE]["contextos"] = ["ISTO_NAO_E_UM_CONTEXTO"]
             return dados
 
-        estado.atualizar(tmp_path, _quebrar)
+        programa.atualizar(tmp_path, _quebrar)
 
     saida = _cli(tmp_path, "programa", "plano", str(arquivo))
 
@@ -479,7 +508,7 @@ def test_outros_subverbos_do_programa_seguem_sem_gate(tmp_path):
     esbarrou na recusa sem conseguir nem olhar o programa para entender por quê.
     """
     _abrir_programa(tmp_path)
-    assert descoberta.CHAVE not in estado.carregar(tmp_path)
+    assert descoberta.CHAVE not in programa.carregar(tmp_path)
 
     assert _cli(tmp_path, "programa", "status").returncode == 0
     assert _cli(tmp_path, "programa", "relatorio").returncode == 0
@@ -494,15 +523,15 @@ def test_plano_fora_de_concepcao_continua_reprovando_pelo_grafo(tmp_path):
     problema.
     """
     arquivo = _abrir_programa(tmp_path)
-    fechar_descoberta(tmp_path, OBJETIVO)
+    _fechar_a_do_programa(tmp_path)
     assert _cli(tmp_path, "programa", "plano", str(arquivo)).returncode == 0
 
-    def _reabrir_a_entrevista(dados):
+    def _apagar_as_respostas(dados):
         dados[descoberta.CHAVE]["respostas"] = {}
         return dados
 
-    estado.atualizar(tmp_path, _reabrir_a_entrevista)
-    assert descoberta.avaliar_do_disco(tmp_path).bloqueantes
+    programa.atualizar(tmp_path, _apagar_as_respostas)
+    assert descoberta.avaliar_do_disco(tmp_path, escopo=descoberta.PROGRAMA).bloqueantes
 
     saida = _cli(tmp_path, "programa", "plano", str(arquivo))
 
@@ -579,7 +608,7 @@ def test_replanejar_com_a_descoberta_fechada_passa(tmp_path):
     que precisou parar — e a única saída seria editar o JSON à mão.
     """
     arquivo = _ate_desvio(tmp_path)
-    assert descoberta.avaliar_do_disco(tmp_path).liberado_para_planejar
+    assert descoberta.avaliar_do_disco(tmp_path, escopo=descoberta.PROGRAMA).liberado_para_planejar
 
     saida = _cli(tmp_path, "programa", "plano", str(arquivo))
 

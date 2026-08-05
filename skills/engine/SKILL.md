@@ -25,15 +25,31 @@ quando o ciclo termina. Instrução direta do usuário sempre vence o motor.
 | o usuário respondeu uma bloqueante | rode `… cli.py descoberta responder <ID> "<a resposta dele>"` |
 | o `status` listou um palpite e o usuário confirmou | rode `… cli.py descoberta confirmar <PALPITE>` — aplica plataforma ou contexto, e **pode abrir um bloco inteiro de perguntas novas** |
 | o usuário disse que o palpite está errado | rode `… cli.py descoberta recusar <PALPITE>` — tira da pendência sem aplicar nada |
+| a entrevista é do SISTEMA (macro-DESCOBERTA), e não de um ciclo | acrescente `--programa` a qualquer um dos verbos acima: `… cli.py descoberta --programa "<pedido>"`, `… descoberta --programa status`, `… descoberta --programa responder <ID> "<resposta>"` |
 | `/engine programa <objetivo>` | conduz um **sistema inteiro** como sequência de ciclos — ver a seção "O programa" |
 
 Os cinco verbos de `descoberta` — registrar, `status`, `responder`, `confirmar`, `recusar`
-— são a **saída** da porta da descoberta: é por eles que a
-entrevista entra no `.engine/estado.json`, e é o que está ali que o gate lê para decidir a
-transição. Nunca edite `.engine/estado.json` à mão para destravar uma fase — a recusa do
-gate diz que nada foi gravado justamente porque o conserto é responder, não remendar o
-arquivo. Registrar de novo por cima de uma entrevista já respondida é recusado; para
-recomeçar do zero, `--forcar`.
+— são a **saída** da porta da descoberta. Nunca edite `.engine/estado.json` nem
+`.engine/programa.json` à mão para destravar uma fase — a recusa do gate diz que nada foi
+gravado justamente porque o conserto é responder, não remendar o arquivo. Registrar de novo
+por cima de uma entrevista já respondida é recusado; para recomeçar do zero, `--forcar`.
+
+**São DUAS entrevistas, em dois arquivos, e `--programa` diz qual.** Elas têm vidas
+diferentes e por isso não moram juntas:
+
+| | sem `--programa` | com `--programa` |
+|---|---|---|
+| de quem é | do **ciclo** em andamento | do **sistema** inteiro (a macro-DESCOBERTA da CONCEPCAO) |
+| onde mora | `.engine/estado.json` | `.engine/programa.json` |
+| que porta abre | `fase ANALISE` | `programa plano` (toda entrada em PLANO_MESTRE) |
+| exige ciclo ligado | sim | **não** |
+| sobrevive a `ligar` | não — cada ciclo faz a sua | **sim**, a todos eles |
+
+Escolher errado não dá erro: grava a entrevista certa no arquivo errado e sobrescreve a que
+estava lá. Antes de digitar, decida de quem é o pedido — do sistema ou do ciclo. **Cada
+ciclo do programa faz a descoberta DELE**, mesmo o primeiro: a entrevista do sistema não
+abre `fase ANALISE` de ciclo nenhum, e é assim de propósito — ela fala do todo, o ciclo
+precisa do que é específico daquele pedaço.
 
 **Palpite pendente não é resposta, e não some sozinho.** O que o motor infere do pedido
 ("app de celular" → MOBILE, "com pagamento" → LOJA_PAGAMENTOS) fica pendente com a
@@ -90,7 +106,10 @@ parada que falta entrega plano escrito sobre suposição.
 onde a CONCEPCAO é a macro-DESCOBERTA) — tanto vindo de `CONCEPCAO` quanto de `DESVIO`,
 que é o replanejamento. A CLI recusa a transição, imprime a pergunta inteira de
 cada bloqueante com o predicado que a travou, e não grava nada. Leve essas perguntas ao
-usuário e registre cada resposta com `descoberta responder <ID> "<resposta>"`. **Sem
+usuário e registre cada resposta com `descoberta responder <ID> "<resposta>"` — **com
+`--programa` quando a recusa for de `programa plano`**, e a própria mensagem de recusa já
+imprime o comando com a bandeira certa. Cada uma das duas portas cobra a SUA entrevista:
+a do sistema não abre a fase de um ciclo, e a de um ciclo não abre o plano-mestre. **Sem
 bloqueante aberta esta porta não para**: a transição passa direto, sem confirmação, sem
 "posso seguir?". Ela não é uma parada por fase — é uma parada por dúvida que decide o
 resto da entrevista.
@@ -156,6 +175,7 @@ Todos os comandos abaixo usam o mesmo prefixo dos demais verbos
 | Pedido | O que fazer |
 |---|---|
 | `/engine programa <objetivo>` | `CLI programa "<objetivo em uma frase>"` — abre em CONCEPCAO |
+| conduzir a macro-DESCOBERTA | `CLI descoberta --programa "<o pedido do usuário, com as palavras dele>"` e responda as bloqueantes com `CLI descoberta --programa responder <ID> "<resposta>"` — **não** precisa de ciclo ligado |
 | decompor | escreva o plano num JSON e rode `CLI programa plano <arquivo.json>` |
 | `/engine programa status` | `CLI programa status` |
 | fechar um ciclo | `CLI programa verificar <CICLO>` — roda o comando de aceite e registra o veredito do código de saída |
@@ -176,7 +196,10 @@ prosa) volta a `PENDENTE`, porque o verde antigo prova outro critério.
 1. `CLI programa proximo` — diz qual ciclo ligar, qual é o critério de aceite dele e qual
    comando o verifica.
 2. `CLI ligar "<objetivo daquele ciclo>"` e conduza o ciclo **normalmente**, com todas as
-   fases, papéis e gates de sempre. O programa não muda nada dentro do ciclo.
+   fases, papéis e gates de sempre. O programa não muda nada dentro do ciclo — inclusive a
+   DESCOBERTA: cada ciclo faz a sua, com `CLI descoberta "<o que este ciclo entrega>"` (sem
+   `--programa`). A entrevista do sistema continua guardada e intacta no
+   `.engine/programa.json`; `ligar` não a toca.
 3. Ao chegar em ENTREGA, `CLI programa verificar <CICLO>`. **Você não digita veredito
    nenhum**: o motor roda o `comando_de_aceite` declarado, imprime o comando, o código de
    saída e a saída, e registra `CONCLUIDO` se o código for 0 e `REPROVADO` se não for. O
@@ -199,8 +222,8 @@ EXECUCAO — nada é dado como concluído.
 **As duas portas, no programa.** São as mesmas de sempre, um andar acima. A **porta da
 descoberta** guarda toda entrada em `PLANO_MESTRE` — `CONCEPCAO → PLANO_MESTRE` e
 `DESVIO → PLANO_MESTRE`: `programa plano` é recusado enquanto houver lacuna bloqueante
-aberta na macro-DESCOBERTA, com a mesma mensagem e a mesma saída (`descoberta status` e
-`descoberta responder`). A **porta do plano-mestre** vem depois: ao
+aberta na macro-DESCOBERTA, com a mesma mensagem e a mesma saída (`descoberta --programa
+status` e `descoberta --programa responder`). A **porta do plano-mestre** vem depois: ao
 terminar o PLANO_MESTRE, apresente a decomposição inteira, com dependências e critérios de
 aceite, e **espere**. `programa aprovar` é o único verbo do motor que **você nunca roda por
 conta própria** — só o usuário autoriza, dizendo-o explicitamente. É a **última** parada do
@@ -215,7 +238,11 @@ conflito e espere. Fora disso não pergunte: parada que sempre acontece deixa de
 mesmo plano; `CLI programa plano <arquivo.json>` **replaneja** — e replanejar volta a
 passar pelas duas portas, na ordem. Pela porta da descoberta primeiro: os quatro motivos
 de desvio são, um a um, a constatação de que a macro-DESCOBERTA não previu o que
-apareceu, então responda as bloqueantes de novo antes de propor. Pela porta do plano
+apareceu, então reveja a entrevista do sistema (`CLI descoberta --programa status`) e
+responda o que o desvio abriu antes de propor. Ela **continua lá**, com as respostas de
+quando o programa começou, por mais ciclos que tenham sido ligados no meio; se algum
+motivo do desvio a tornou obsoleta, reabra com `CLI descoberta --programa "<pedido
+revisto>" --forcar` e refaça — mas isso é decisão, não obrigação da máquina. Pela porta do plano
 depois: a decomposição nova precisa da aprovação do usuário como qualquer outra. O
 veredito dos ciclos já fechados **sobrevive** ao replanejamento quando o `id` e o
 critério de aceite continuam os mesmos — replanejar não desfaz trabalho aceito, nem

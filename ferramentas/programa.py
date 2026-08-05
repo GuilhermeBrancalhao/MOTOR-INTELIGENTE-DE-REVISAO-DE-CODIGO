@@ -22,6 +22,25 @@ Três propriedades foram herdadas de `estado.py` de propósito, e não reescrita
 O arquivo é separado (`programa.json`) por decisão P3: um `desligar` de ciclo não
 pode destruir o programa que o contém.
 
+**E é aqui que mora a macro-DESCOBERTA**, sob a chave `descoberta`, escrita e lida por
+`ferramentas/descoberta.py` (que importa este módulo; a dependência é de mão única, e
+este arquivo continua sem saber que a elicitação existe). Ela morou no
+`.engine/estado.json` até 2026-08-05, e a mesma decisão P3 dizia por que aquilo não
+podia dar certo: o que é do programa não sobrevive num arquivo cuja vida é a do ciclo.
+`estado._novo_ciclo_sem_cadeado` monta um dicionário novo a cada `ligar`, e com ele
+apagava a entrevista do SISTEMA — descoberto em uso, quando um replanejamento pós-desvio
+foi recusado por "descoberta não registrada" com a entrevista feita e aprovada dias
+antes. Junto ia um segundo defeito, mais quieto: os dois gates liam a mesma chave, então
+a entrevista da CONCEPCAO satisfazia também o `DESCOBERTA -> ANALISE` do primeiro ciclo,
+que assim nunca fazia descoberta própria.
+
+Este módulo **não** ganhou função nenhuma por causa disso: a chave é gravada pelo
+mutador seguro (`atualizar`) a partir de `descoberta.registrar(..., escopo=PROGRAMA)`, e
+tudo aqui continua puro sobre dicionário. Duas consequências que valem estar escritas:
+`novo()` não copia a chave de um programa anterior (programa novo é sistema novo — ver o
+docstring de lá), e nenhuma função de leitura daqui exige a chave, porque
+`programa.json` gravado antes desta mudança não a tem.
+
 **O critério de aceite de cada ciclo é comando, e não só prosa.** `validar_plano` exigia
 um `aceite` não-vazio e aceitava qualquer frase; frase não se executa, então o veredito
 do ciclo continuava saindo de alguém digitar `programa aceite C1 ok`. Desde este ciclo
@@ -474,6 +493,16 @@ def novo(raiz: Path, objetivo: str, agora: str, forcar: bool = False) -> dict:
 
     Sob cadeado: a checagem de "já existe" e a gravação são uma operação só, senão
     duas sessões abrindo ao mesmo tempo passariam ambas pela checagem.
+
+    **O dicionário é montado do zero, e a chave `descoberta` do programa anterior NÃO
+    é copiada** — só o `historico` atravessa, como sempre. É a mesma construção que, no
+    ciclo, era o defeito (`estado._novo_ciclo_sem_cadeado` apagando a macro-DESCOBERTA a
+    cada `ligar`), e aqui é o comportamento certo: `ligar` abre mais uma etapa DENTRO do
+    programa vigente, enquanto `novo` abre outro programa — outro sistema, outro objetivo,
+    outra entrevista. Herdar a entrevista do sistema anterior seria dar por respondidas,
+    para um sistema que ninguém descreveu, perguntas feitas sobre outro; e como o gate lê
+    exatamente essa chave, `programa plano` passaria de primeira sem entrevista nenhuma.
+    Quem abre programa novo por cima de um vivo já teve de digitar `--forcar`.
     """
     with _cadeado(raiz):
         existente = carregar_estrito(raiz)
