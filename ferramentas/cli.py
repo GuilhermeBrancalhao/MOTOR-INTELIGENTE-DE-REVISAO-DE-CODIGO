@@ -33,10 +33,12 @@ if not __package__:  # executado como script: a raiz do plugin não está no sys
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ferramentas import (  # noqa: E402
+    conhecimento,
     config,
     detectar,
     estado,
     executor,
+    merge_cartoes,
     programa,
     relatorio,
     trilha,
@@ -45,7 +47,13 @@ from ferramentas import (  # noqa: E402
 USO = (
     'uso: py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" '
     "{ligar <objetivo> [--forcar] [--dry]|desligar|status|fase <DESTINO>|"
-    "retomar|relatorio [ciclo|fase <FASE>]|descoberta <subverbo>|programa <subverbo>}"
+    "retomar|relatorio [ciclo|fase <FASE>]|conhecimento <subverbo>|"
+    "descoberta <subverbo>|programa <subverbo>}"
+)
+
+USO_CONHECIMENTO = (
+    'uso: py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" conhecimento '
+    "{atualizar|status|revisar [ID]|pipeline|aprovar <ID>|rejeitar <ID> [motivo]|editar <ID> <novo_texto>}"
 )
 
 USO_DESCOBERTA = (
@@ -412,6 +420,16 @@ def _verbo_fase(raiz: Path, resto: list[str]) -> int:
             if recusa is not None:
                 falha.append(recusa)
                 return None
+        if (dados.get("fase"), destino) == ("DOC", "ENTREGA"):
+            criticas = conhecimento.lacunas_criticas_do_estado(dados)
+            if criticas:
+                falha.append(
+                    "ENGINE: transição DOC -> ENTREGA recusada — há lacuna(s) crítica(s) "
+                    "aberta(s) no ciclo atual:\n"
+                    + "\n".join(f"- {item}" for item in criticas)
+                    + "\n\nRode `conhecimento atualizar`, trate as lacunas e tente de novo."
+                )
+                return None
         return estado.transicionar(dados, destino)
 
     try:
@@ -430,6 +448,139 @@ def _verbo_fase(raiz: Path, resto: list[str]) -> int:
         return 1
     print(_relatar(dados))
     return 0
+
+
+def _relatar_conhecimento(raiz: Path, resumo: dict) -> str:
+    return "\n".join(
+        [
+            "# Atualização de conhecimento",
+            "",
+            f"**Lacunas novas:** {resumo.get('novas', 0)}",
+            f"**Lacunas abertas:** {resumo.get('abertas', 0)}",
+            f"**Lacunas críticas abertas:** {resumo.get('criticas', 0)}",
+            f"**Backlog:** {conhecimento.caminho_backlog(raiz)}",
+            f"**Trilha de lacunas:** {conhecimento.caminho_lacunas(raiz)}",
+        ]
+    )
+
+
+def _verbo_conhecimento(raiz: Path, resto: list[str]) -> int:
+    if not resto:
+        print(USO_CONHECIMENTO)
+        return 1
+    sub = resto[0]
+
+    if sub == "status":
+        caminho = conhecimento.caminho_backlog(raiz)
+        if not caminho.is_file():
+            print("ENGINE: backlog de conhecimento ainda não existe. Rode `conhecimento atualizar`.")
+            return 1
+        try:
+            dados = json.loads(caminho.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError) as erro:
+            print(f"ENGINE: backlog de conhecimento ilegível ({caminho}): {erro}")
+            return 1
+        resumo = dados.get("resumo") or {}
+        print("# Backlog de conhecimento")
+        print("")
+        print(f"**Gerado em:** {dados.get('gerado_em', '?')}")
+        print(f"**Ciclo:** {dados.get('ciclo', '(sem ciclo)')}")
+        print(f"**Crítico:** {resumo.get('critico', 0)}")
+        print(f"**Alto:** {resumo.get('alto', 0)}")
+        print(f"**Médio:** {resumo.get('medio', 0)}")
+        print(f"**Baixo:** {resumo.get('baixo', 0)}")
+        return 0
+
+    if sub == "atualizar":
+        dados = estado.carregar(raiz) or {}
+        resumo = conhecimento.atualizar_por_relatorio(raiz, dados)
+        print(_relatar_conhecimento(raiz, resumo))
+        return 0
+
+    if sub == "revisar":
+        if len(resto) > 1:
+            ok, detalhe = merge_cartoes.detalhar(raiz, resto[1])
+            if not ok:
+                print(f"ENGINE: {detalhe}")
+                return 1
+            item = detalhe
+            print("# Detalhe da proposta")
+            print("")
+            print(f"**ID:** {item.get('id')}")
+            print(f"**Status:** {item.get('status')}")
+            print(f"**Tecnologia:** {item.get('tecnologia')}")
+            print(f"**Seção alvo:** {item.get('secao')}")
+            print(f"**Confiança:** {item.get('confianca')}")
+            print(f"**Cartão:** {item.get('cartao')}")
+            print("\n## Trecho atual")
+            print(item.get("trecho", ""))
+            print("\n## Inserção proposta")
+            print(f"- {item.get('texto', '')}")
+            return 0
+
+        resumo = merge_cartoes.gerar_propostas(raiz)
+        pendentes = resumo.get("propostas") or []
+        print("# Propostas de conhecimento")
+        print("")
+        print(f"**Novas propostas:** {resumo.get('novas', 0)}")
+        print(f"**Pendentes:** {resumo.get('pendentes', 0)}")
+        if not pendentes:
+            print("\n(nenhuma proposta pendente)")
+            return 0
+        print("")
+        for item in pendentes[:20]:
+            print(
+                f"- {item.get('id')} | {item.get('tecnologia')} | "
+                f"{item.get('secao')} | conf={item.get('confianca', 0)}"
+            )
+            print(f"  sugestao: {item.get('texto', '')}")
+        return 0
+
+    if sub == "pipeline":
+        dados = estado.carregar(raiz) or {}
+        resumo_lacunas = conhecimento.atualizar_por_relatorio(raiz, dados)
+        resumo_propostas = merge_cartoes.gerar_propostas(raiz)
+        pendentes = resumo_propostas.get("pendentes", 0)
+        print("# Pipeline de conhecimento")
+        print("")
+        print(f"**Lacunas novas:** {resumo_lacunas.get('novas', 0)}")
+        print(f"**Lacunas abertas:** {resumo_lacunas.get('abertas', 0)}")
+        print(f"**Lacunas criticas:** {resumo_lacunas.get('criticas', 0)}")
+        print(f"**Propostas novas:** {resumo_propostas.get('novas', 0)}")
+        print(f"**Propostas pendentes:** {pendentes}")
+        if pendentes:
+            print("\nProximo passo: `conhecimento revisar` e depois `conhecimento aprovar <ID>`." )
+        else:
+            print("\nNenhuma proposta pendente.")
+        return 0
+
+    if sub == "aprovar":
+        if len(resto) < 2:
+            print(USO_CONHECIMENTO)
+            return 1
+        ok, msg = merge_cartoes.aprovar(raiz, resto[1])
+        print(f"ENGINE: {msg}")
+        return 0 if ok else 1
+
+    if sub == "rejeitar":
+        if len(resto) < 2:
+            print(USO_CONHECIMENTO)
+            return 1
+        motivo = " ".join(resto[2:]).strip()
+        ok, msg = merge_cartoes.rejeitar(raiz, resto[1], motivo)
+        print(f"ENGINE: {msg}")
+        return 0 if ok else 1
+
+    if sub == "editar":
+        if len(resto) < 3:
+            print(USO_CONHECIMENTO)
+            return 1
+        ok, msg = merge_cartoes.editar(raiz, resto[1], " ".join(resto[2:]))
+        print(f"ENGINE: {msg}")
+        return 0 if ok else 1
+
+    print(USO_CONHECIMENTO)
+    return 1
 
 
 def _relatar_retomada(raiz: Path, dados: dict) -> str:
@@ -1633,6 +1784,8 @@ def principal(argumentos: list[str]) -> int:
             return _verbo_retomar(raiz)
         if verbo == "relatorio":
             return _verbo_relatorio(raiz, resto)
+        if verbo == "conhecimento":
+            return _verbo_conhecimento(raiz, resto)
         if verbo == "descoberta":
             return _verbo_descoberta(raiz, resto)
         if verbo == "programa":

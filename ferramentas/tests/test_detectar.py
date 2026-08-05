@@ -71,8 +71,8 @@ def test_todos_os_cartoes_reais_sao_lidos_sem_erro():
         assert esperada in tecnologias, f"cartão {esperada!r} não encontrado/lido"
 
 
-def test_os_doze_cartoes_do_elenco_completo_sao_validos():
-    """Elenco completo da Fase 2: os 3 cartões da Fase 1 + os 9 novos, todos com
+def test_os_quinze_cartoes_do_elenco_completo_sao_validos():
+    """Elenco completo da Fase 2: os 3 cartões da Fase 1 + os 12 novos, todos com
     `detectar` e `papeis` não vazios. É esse teste que impede um cartão malformado
     (ou um cartão esquecido) entrar no acervo sem ser percebido."""
     diretorio = RAIZ_PLUGIN / "cartoes"
@@ -82,9 +82,10 @@ def test_os_doze_cartoes_do_elenco_completo_sao_validos():
         "python", "pytest", "ui-ux",
         "fastapi", "excel-vba", "office-scripts", "power-query", "react",
         "typescript", "postgresql", "sqlite", "mermaid",
+        "csharp", "vbnet", "fsharp",
     }
-    assert len(cartoes) == 12, (
-        f"esperava 12 cartões em cartoes/, achou {len(cartoes)}: "
+    assert len(cartoes) == 15, (
+        f"esperava 15 cartões em cartoes/, achou {len(cartoes)}: "
         f"{sorted(c.name for c in cartoes)}"
     )
 

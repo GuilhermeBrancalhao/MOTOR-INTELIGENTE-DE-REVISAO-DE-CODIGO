@@ -159,6 +159,29 @@ def test_cadeado_e_exclusivo(tmp_path):
                 pytest.fail("dois cadeados ao mesmo tempo sobre a mesma raiz")
 
 
+def test_permission_error_transitorio_na_abertura_do_cadeado_e_retentado(tmp_path, monkeypatch):
+    """No Windows, disputa real pode vir como `PermissionError` em vez de `FileExistsError`.
+
+    Mutação alvo: tratar qualquer `OSError` como falha imediata volta a deixar esse
+    caminho intermitente, e uma sessão falha sem aguardar a liberação do cadeado.
+    """
+    real_open = estado.os.open
+    tentativas = {"n": 0}
+
+    def _open_com_falha_transitoria(*args, **kwargs):
+        tentativas["n"] += 1
+        if tentativas["n"] <= 2:
+            raise PermissionError(13, "Permission denied")
+        return real_open(*args, **kwargs)
+
+    monkeypatch.setattr(estado.os, "open", _open_com_falha_transitoria)
+
+    with estado.cadeado(tmp_path, espera=0.2):
+        pass
+
+    assert tentativas["n"] >= 3
+
+
 def test_cadeado_e_solto_mesmo_com_excecao(tmp_path):
     """Cadeado preso por erro travaria o motor naquele projeto até alguém apagar
     o arquivo à mão — modo de falhar pior do que a corrida que ele previne."""

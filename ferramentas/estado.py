@@ -175,6 +175,16 @@ def cadeado(
                     "outra sessão do ENGINE está gravando nesta mesma pasta"
                 ) from None
             time.sleep(_INTERVALO_TENTATIVA)
+        except PermissionError:
+            # Windows pode devolver PermissionError transitório no mesmo cenário de
+            # disputa em que o POSIX devolve FileExistsError. Tratar como "ocupado"
+            # evita falso negativo intermitente em corridas reais.
+            if time.monotonic() >= limite:
+                raise EstadoOcupado(
+                    f"cadeado do estado ({alvo}) ocupado por mais de {espera}s — "
+                    "outra sessão do ENGINE está gravando nesta mesma pasta"
+                ) from None
+            time.sleep(_INTERVALO_TENTATIVA)
         except OSError as erro:
             raise EstadoOcupado(f"não foi possível criar o cadeado {alvo}: {erro}") from erro
 

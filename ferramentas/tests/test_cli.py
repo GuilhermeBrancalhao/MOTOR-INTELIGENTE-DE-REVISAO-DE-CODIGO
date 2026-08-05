@@ -294,3 +294,92 @@ def test_relatorio_fase_inexistente_nao_estoura(tmp_path):
     saida = _cli(tmp_path, "relatorio", "fase", "NAO_EXISTE")
     assert saida.returncode == 0
     assert "Traceback" not in saida.stderr
+
+
+def test_conhecimento_atualizar_gera_artefatos_de_lacunas(tmp_path):
+    _cli(tmp_path, "ligar", "objetivo com aprendizado")
+    caminho = tmp_path / ".engine" / "estado.json"
+    dados = json.loads(caminho.read_text(encoding="utf-8"))
+    dados["pendencias"] = ["erro de segurança no fluxo de login"]
+    dados["diffs_pendentes"] = ["api/login.py"]
+    caminho.write_text(json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    saida = _cli(tmp_path, "conhecimento", "atualizar")
+
+    assert saida.returncode == 0
+    assert (tmp_path / ".engine" / "lacunas.jsonl").is_file()
+    assert (tmp_path / ".engine" / "backlog_conhecimento.json").is_file()
+    assert "Lacunas novas" in saida.stdout
+
+
+def test_conhecimento_revisar_lista_propostas_pendentes(tmp_path):
+    _cli(tmp_path, "ligar", "objetivo com revisao")
+    caminho = tmp_path / ".engine" / "estado.json"
+    dados = json.loads(caminho.read_text(encoding="utf-8"))
+    dados["cartoes"] = ["python"]
+    dados["pendencias"] = ["erro de seguranca no login"]
+    caminho.write_text(json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")
+    _cli(tmp_path, "conhecimento", "atualizar")
+
+    saida = _cli(tmp_path, "conhecimento", "revisar")
+
+    assert saida.returncode == 0
+    assert "Propostas de conhecimento" in saida.stdout
+    assert (tmp_path / ".engine" / "aprovacoes_conhecimento.json").is_file()
+
+
+def test_conhecimento_revisar_id_mostra_detalhe(tmp_path):
+    _cli(tmp_path, "ligar", "objetivo com detalhe")
+    caminho = tmp_path / ".engine" / "estado.json"
+    dados = json.loads(caminho.read_text(encoding="utf-8"))
+    dados["cartoes"] = ["python"]
+    dados["pendencias"] = ["erro de seguranca no login"]
+    caminho.write_text(json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")
+    _cli(tmp_path, "conhecimento", "pipeline")
+
+    aprovacoes = json.loads((tmp_path / ".engine" / "aprovacoes_conhecimento.json").read_text(encoding="utf-8"))
+    pid = aprovacoes["propostas"][0]["id"]
+
+    saida = _cli(tmp_path, "conhecimento", "revisar", pid)
+
+    assert saida.returncode == 0
+    assert "Detalhe da proposta" in saida.stdout
+    assert pid in saida.stdout
+
+
+def test_conhecimento_aprovar_id_inexistente_retorna_1(tmp_path):
+    saida = _cli(tmp_path, "conhecimento", "aprovar", "inexistente")
+    assert saida.returncode == 1
+    assert "nao encontrada" in saida.stdout.lower()
+
+
+def test_conhecimento_pipeline_gera_resumo_unificado(tmp_path):
+    _cli(tmp_path, "ligar", "objetivo com pipeline")
+    caminho = tmp_path / ".engine" / "estado.json"
+    dados = json.loads(caminho.read_text(encoding="utf-8"))
+    dados["cartoes"] = ["python"]
+    dados["pendencias"] = ["erro de concorrencia no lock do estado"]
+    caminho.write_text(json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    saida = _cli(tmp_path, "conhecimento", "pipeline")
+
+    assert saida.returncode == 0
+    assert "Pipeline de conhecimento" in saida.stdout
+    assert (tmp_path / ".engine" / "backlog_conhecimento.json").is_file()
+    assert (tmp_path / ".engine" / "aprovacoes_conhecimento.json").is_file()
+
+
+def test_fase_doc_para_entrega_bloqueia_com_lacuna_critica(tmp_path):
+    _cli(tmp_path, "ligar", "objetivo qualquer")
+    caminho = tmp_path / ".engine" / "estado.json"
+    dados = json.loads(caminho.read_text(encoding="utf-8"))
+    dados["fase"] = "DOC"
+    dados["pendencias"] = ["erro crítico ainda aberto"]
+    caminho.write_text(json.dumps(dados, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    saida = _cli(tmp_path, "fase", "ENTREGA")
+
+    assert saida.returncode == 1
+    assert "DOC -> ENTREGA recusada" in saida.stdout
+    estado_final = json.loads(caminho.read_text(encoding="utf-8"))
+    assert estado_final["fase"] == "DOC"
