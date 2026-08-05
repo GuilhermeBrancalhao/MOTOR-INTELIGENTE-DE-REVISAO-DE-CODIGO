@@ -81,8 +81,12 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Instalar pytest
-        run: python -m pip install --disable-pip-version-check pytest
+      # `pandas` e dependencia real de `54-integracao-erp/normalizar.py`. Instalar
+      # so `pytest` aqui deixava a coleta quebrar por ModuleNotFoundError, e o job
+      # falhava ANTES de rodar qualquer teste -- o que trocava "ninguem executa"
+      # por "executa e falha no import", sem cobrir nada.
+      - name: Instalar dependencias dos exemplos
+        run: python -m pip install --disable-pip-version-check -r acervo-controladoria/requirements-dev.txt
 
       # Estes testes eram orfaos: nenhuma das duas suites os coletava, e "os
       # testes passam" era uma afirmacao sobre a ultima vez que alguem os rodou a
