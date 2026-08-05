@@ -22,6 +22,7 @@ só quando não há pacote (`__package__` vazio), isto é, só no caminho de scr
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 from datetime import datetime
@@ -30,12 +31,20 @@ from pathlib import Path
 if not __package__:  # executado como script: a raiz do plugin não está no sys.path
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from ferramentas import config, detectar, estado, relatorio, trilha  # noqa: E402
+from ferramentas import config, detectar, estado, programa, relatorio, trilha  # noqa: E402
 
 USO = (
     'uso: py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" '
     "{ligar <objetivo> [--forcar] [--dry]|desligar|status|fase <DESTINO>|"
-    "retomar|relatorio [ciclo|fase <FASE>]}"
+    "retomar|relatorio [ciclo|fase <FASE>]|programa <subverbo>}"
+)
+
+USO_PROGRAMA = (
+    'uso: py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" programa '
+    "{<objetivo> [--forcar]|plano <arquivo.json>|status|aprovar|proximo|"
+    "aceite <CICLO> {ok|falhou}|"
+    "reabrir <CICLO>|desviar <MOTIVO> <detalhe>|retomar|sistema {ok|falhou}|"
+    "relatorio|abortar}"
 )
 
 
@@ -300,6 +309,302 @@ def _verbo_relatorio(raiz: Path, resto: list[str]) -> int:
     return 1
 
 
+def _prog_trilha(raiz: Path, acao: str, alvo: str, agora: str) -> None:
+    """Registra um passo do programa na trilha, marcado como `do_motor`.
+
+    A marca é obrigatória aqui pelo mesmo motivo que existe no ciclo: sem ela, o
+    gate leria como evidência do trabalho uma linha que o próprio motor acabou de
+    escrever — foi exatamente esse o defeito encontrado na revisão de 2026-07-31.
+    """
+    trilha.registrar(
+        raiz,
+        {
+            "quando": agora,
+            "fase": "PROGRAMA",
+            "ferramenta": "cli.py",
+            "alvo": f"{acao} {alvo}".strip(),
+            "risco": "rastreado",
+            "regra": "",
+            "do_motor": True,
+        },
+    )
+
+
+def _prog_carregar(raiz: Path) -> dict | None:
+    """Lê o programa e reclama em vez de estourar quando não existe."""
+    try:
+        return programa.carregar_estrito(raiz)
+    except programa.ProgramaCorrompido as erro:
+        print(f"ENGINE: {erro}")
+        return None
+
+
+def _prog_exigir(raiz: Path) -> dict | None:
+    dados = _prog_carregar(raiz)
+    if dados is None:
+        print("ENGINE: nenhum programa neste projeto. Use `programa <objetivo>` primeiro.")
+    return dados
+
+
+def _prog_imprimir(dados: dict) -> None:
+    r = programa.resumo(dados)
+    print(f"**PROGRAMA:** {r['programa']}  ·  **Estado:** {r['estado']}")
+    print(f"**Objetivo:** {r['objetivo']}")
+    print(f"**Ciclos:** {r['concluidos']}/{r['total']} concluídos")
+    for c in dados["ciclos"]:
+        marca = {
+            "CONCLUIDO": "[x]",
+            "ATIVO": "[>]",
+            "REPROVADO": "[!]",
+            "PENDENTE": "[ ]",
+        }.get(c["status"], "[?]")
+        deps = f"  (depende de {', '.join(c['depende_de'])})" if c["depende_de"] else ""
+        print(f"  {marca} {c['id']}: {c['objetivo']}{deps}")
+    if r["desvio"]:
+        print(f"**DESVIO:** {r['desvio']['motivo']} — {r['desvio']['detalhe']}")
+    if dados["estado"] == "PLANO_MESTRE":
+        print(
+            "\n**Porta do plano-mestre.** Nada executa até o usuário rodar "
+            "`programa aprovar`."
+        )
+    elif r["proximo"]:
+        print(f"**Próximo ciclo elegível:** {r['proximo']}")
+
+
+def _verbo_programa(raiz: Path, resto: list[str]) -> int:
+    """Verbos da camada de PROGRAMA (Fase 4).
+
+    `aprovar` é o único verbo do motor que o modelo não pode executar por conta
+    própria: é a porta P1 materializada. A skill declara essa regra; aqui a CLI
+    apenas a torna um passo explícito e auditável na trilha.
+    """
+    if not resto:
+        print(USO_PROGRAMA)
+        return 1
+
+    sub, *args = resto
+    agora = _agora()
+
+    if sub == "status":
+        dados = _prog_exigir(raiz)
+        if dados is None:
+            return 1
+        _prog_imprimir(dados)
+        return 0
+
+    if sub == "plano":
+        # A decomposição vem de um JSON em arquivo, não da linha de comando: um
+        # plano de 20 ciclos com objetivos e critérios de aceite não cabe em
+        # argumentos, e passá-lo como string escapada seria frágil justamente onde
+        # o conteúdo importa mais.
+        if not args:
+            print(
+                "ENGINE: `programa plano <arquivo.json>` — o arquivo deve ter "
+                '{"aceite_de_sistema": "...", "ciclos": [{"id","objetivo",'
+                '"depende_de","aceite"}]}'
+            )
+            return 1
+        origem = Path(args[0])
+        if not origem.is_file():
+            print(f"ENGINE: arquivo de plano não encontrado: {origem}")
+            return 1
+        try:
+            bruto = json.loads(origem.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError, OSError) as erro:
+            print(f"ENGINE: plano ilegível ({origem}): {erro}")
+            return 1
+        if not isinstance(bruto, dict):
+            print("ENGINE: o plano deve ser um objeto JSON")
+            return 1
+        dados = _prog_exigir(raiz)
+        if dados is None:
+            return 1
+        try:
+            novo = programa.propor_plano(
+                dados,
+                bruto.get("ciclos") or [],
+                bruto.get("aceite_de_sistema", ""),
+            )
+        except (programa.PlanoInvalido, programa.TransicaoInvalida) as erro:
+            print(f"ENGINE: {erro}")
+            return 1
+        programa.gravar(raiz, novo)
+        _prog_trilha(raiz, "plano-mestre-proposto", novo["programa"], agora)
+        print("**Plano-mestre registrado e validado** (DAG e critérios de aceite).")
+        _prog_imprimir(novo)
+        return 0
+
+    if sub == "aprovar":
+        dados = _prog_exigir(raiz)
+        if dados is None:
+            return 1
+        try:
+            novo = programa.aprovar(dados, agora)
+        except programa.TransicaoInvalida as erro:
+            print(f"ENGINE: {erro}")
+            return 1
+        programa.gravar(raiz, novo)
+        _prog_trilha(raiz, "programa-aprovado", novo["programa"], agora)
+        print("**Plano-mestre aprovado.** O programa entra em EXECUCAO.")
+        _prog_imprimir(novo)
+        return 0
+
+    if sub == "proximo":
+        dados = _prog_exigir(raiz)
+        if dados is None:
+            return 1
+        if dados["estado"] != "EXECUCAO":
+            print(
+                f"ENGINE: o programa está em {dados['estado']}; ciclos só ligam em "
+                "EXECUCAO (o plano-mestre precisa ter sido aprovado)"
+            )
+            return 1
+        alvo = programa.proximo_elegivel(dados)
+        if alvo is None:
+            if programa.pronto_para_aceite(dados):
+                print("Todos os ciclos concluídos. Rode `programa sistema {ok|falhou}`.")
+                return 0
+            print(
+                "ENGINE: nenhum ciclo elegível. Há ciclo REPROVADO bloqueando "
+                "dependentes — use `programa reabrir <CICLO>`."
+            )
+            return 1
+        print(f"**Próximo ciclo:** {alvo['id']} — {alvo['objetivo']}")
+        print(f"**Aceite:** {alvo['aceite']}")
+        return 0
+
+    if sub == "aceite":
+        if len(args) < 2 or args[1] not in ("ok", "falhou"):
+            print(USO_PROGRAMA)
+            return 1
+        dados = _prog_exigir(raiz)
+        if dados is None:
+            return 1
+        try:
+            novo = programa.registrar_aceite(dados, args[0], passou=args[1] == "ok")
+        except KeyError as erro:
+            print(f"ENGINE: {erro}")
+            return 1
+        programa.gravar(raiz, novo)
+        _prog_trilha(raiz, f"aceite-de-ciclo-{args[1]}", args[0], agora)
+        _prog_imprimir(novo)
+        return 0
+
+    if sub == "reabrir":
+        if not args:
+            print(USO_PROGRAMA)
+            return 1
+        dados = _prog_exigir(raiz)
+        if dados is None:
+            return 1
+        try:
+            novo = programa.reabrir(dados, args[0])
+        except (KeyError, programa.TransicaoInvalida) as erro:
+            print(f"ENGINE: {erro}")
+            return 1
+        programa.gravar(raiz, novo)
+        _prog_imprimir(novo)
+        return 0
+
+    if sub == "desviar":
+        if len(args) < 2:
+            print(
+                "ENGINE: motivos válidos: " + ", ".join(programa.MOTIVOS_DESVIO)
+            )
+            return 1
+        dados = _prog_exigir(raiz)
+        if dados is None:
+            return 1
+        try:
+            novo = programa.desviar(dados, args[0], " ".join(args[1:]))
+        except (programa.DesvioInvalido, programa.TransicaoInvalida) as erro:
+            print(f"ENGINE: {erro}")
+            return 1
+        programa.gravar(raiz, novo)
+        print("**Execução parada por desvio.** Apresente o conflito ao usuário.")
+        _prog_imprimir(novo)
+        return 0
+
+    if sub == "retomar":
+        dados = _prog_exigir(raiz)
+        if dados is None:
+            return 1
+        if dados["estado"] == "DESVIO":
+            try:
+                dados = programa.retomar_apos_desvio(dados)
+            except programa.TransicaoInvalida as erro:
+                print(f"ENGINE: {erro}")
+                return 1
+            programa.gravar(raiz, dados)
+        _prog_imprimir(dados)
+        return 0
+
+    if sub == "sistema":
+        if not args or args[0] not in ("ok", "falhou"):
+            print(USO_PROGRAMA)
+            return 1
+        dados = _prog_exigir(raiz)
+        if dados is None:
+            return 1
+        try:
+            if dados["estado"] == "EXECUCAO":
+                dados = programa.entrar_em_aceite(dados)
+            novo = programa.concluir(dados, passou=args[0] == "ok", agora=agora)
+        except programa.TransicaoInvalida as erro:
+            print(f"ENGINE: {erro}")
+            return 1
+        programa.gravar(raiz, novo)
+        _prog_trilha(raiz, f"aceite-de-sistema-{args[0]}", novo["programa"], agora)
+        if novo["estado"] == "CONCLUIDO":
+            print("**PROGRAMA CONCLUÍDO.** Aceite de sistema verde.")
+        else:
+            print(
+                "**Aceite de sistema REPROVOU.** O programa volta a EXECUCAO — "
+                "nada é dado como concluído."
+            )
+        _prog_imprimir(novo)
+        return 0
+
+    if sub == "relatorio":
+        dados = _prog_exigir(raiz)
+        if dados is None:
+            return 1
+        _prog_imprimir(dados)
+        print(f"\n**Aceite de sistema declarado:** {dados['aceite_de_sistema']}")
+        return 0
+
+    if sub == "abortar":
+        dados = _prog_exigir(raiz)
+        if dados is None:
+            return 1
+        novo = dict(dados)
+        novo["estado"] = "CONCLUIDO"
+        novo["abortado_em"] = agora
+        programa.gravar(raiz, novo)
+        print("Programa abortado. A trilha e a decomposição ficam preservadas.")
+        return 0
+
+    # Sem subverbo reservado: o resto é o objetivo de um programa novo.
+    forcar = "--forcar" in resto
+    objetivo = " ".join(a for a in resto if a != "--forcar").strip()
+    if not objetivo:
+        print(USO_PROGRAMA)
+        return 1
+    try:
+        dados = programa.novo(raiz, objetivo, agora, forcar=forcar)
+    except (programa.ProgramaJaAtivo, programa.ProgramaCorrompido) as erro:
+        print(f"ENGINE: {erro}")
+        return 1
+    _prog_trilha(raiz, "programa-aberto", objetivo, agora)
+    print(f"**PROGRAMA aberto:** {dados['programa']}  ·  **Estado:** CONCEPCAO")
+    print(f"**Objetivo:** {objetivo}")
+    print(
+        "\nConduza a macro-DESCOBERTA e o PLANO_MESTRE. A decomposição precisa de "
+        "um critério de aceite falsificável por ciclo, e de um aceite de sistema."
+    )
+    return 0
+
+
 def principal(argumentos: list[str]) -> int:
     _forcar_utf8()
     if not argumentos:
@@ -321,6 +626,8 @@ def principal(argumentos: list[str]) -> int:
             return _verbo_retomar(raiz)
         if verbo == "relatorio":
             return _verbo_relatorio(raiz, resto)
+        if verbo == "programa":
+            return _verbo_programa(raiz, resto)
         print(USO)
         return 1
     except Exception as erro:  # rede de segurança: nenhum verbo termina em traceback

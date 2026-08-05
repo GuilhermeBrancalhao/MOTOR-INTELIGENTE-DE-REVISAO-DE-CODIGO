@@ -106,8 +106,8 @@ IDADE_MAXIMA_CADEADO = 30.0
 _INTERVALO_TENTATIVA = 0.005
 
 
-def caminho_cadeado(raiz: Path) -> Path:
-    return Path(raiz) / ".engine" / NOME_CADEADO
+def caminho_cadeado(raiz: Path, nome: str = NOME_CADEADO) -> Path:
+    return Path(raiz) / ".engine" / nome
 
 
 def _abandonado(alvo: Path, idade_maxima: float) -> bool:
@@ -125,6 +125,7 @@ def cadeado(
     *,
     espera: float = ESPERA_PADRAO,
     idade_maxima: float = IDADE_MAXIMA_CADEADO,
+    nome: str = NOME_CADEADO,
 ) -> Iterator[Path]:
     """Exclusão mútua entre processos para a seção crítica do estado.
 
@@ -144,8 +145,14 @@ def cadeado(
     erro contra um cadeado que já não existia mais. Não há laço infinito: se
     outro processo recriar o arquivo, o cadeado novo é recente e `_abandonado`
     passa a ser falso, então a checagem de prazo volta a valer.
+
+    `nome` permite que outra máquina de estado da mesma pasta (o PROGRAMA, em
+    `programa.py`) reaproveite esta primitiva com um arquivo de cadeado próprio.
+    Cadeados separados porque as seções críticas são independentes — e porque o
+    cadeado não é reentrante: com um só, o orquestrador, que mexe no ciclo e no
+    programa, travaria contra si mesmo.
     """
-    alvo = caminho_cadeado(raiz)
+    alvo = caminho_cadeado(raiz, nome)
     alvo.parent.mkdir(parents=True, exist_ok=True)
     limite = time.monotonic() + espera
     descritor: int | None = None

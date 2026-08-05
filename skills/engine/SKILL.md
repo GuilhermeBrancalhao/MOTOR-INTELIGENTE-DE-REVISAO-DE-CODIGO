@@ -19,6 +19,7 @@ quando o ciclo termina. Instrução direta do usuário sempre vence o motor.
 | `/engine <pedido> --dry` | rode `ENGINE_RAIZ="$(pwd)" bash "${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh" "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" ligar "<objetivo em uma frase>" --dry` — use para um ciclo que só planeja e relata, sem escrever |
 | `/engine retomar` | rode `ENGINE_RAIZ="$(pwd)" bash "${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh" "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" retomar` e apresente o resumo de reentrada — use quando a sessão é nova mas o ciclo já existe |
 | `/engine relatorio` | rode `ENGINE_RAIZ="$(pwd)" bash "${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh" "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" relatorio ciclo` (ou `relatorio fase <FASE>`) e apresente a saída |
+| `/engine programa <objetivo>` | conduz um **sistema inteiro** como sequência de ciclos — ver a seção "O programa" |
 
 Essa é a forma que funciona **de qualquer diretório e em qualquer plataforma**, e é a
 única que se deve usar. O diretório corrente é o do projeto do usuário, não o do plugin:
@@ -49,6 +50,55 @@ errada, não a máquina.
 
 **Porta do plano.** Ao terminar PLANO, apresente arquitetura, stack, estrutura e a
 justificativa de cada decisão, e **espere** o usuário. É a única parada por fase.
+
+## O programa — sistemas inteiros, não um ciclo
+
+Um ciclo entrega **um** trabalho de engenharia. Um sistema de alta complexidade é uma
+**sequência** de ciclos com dependências, e é isso que o modo PROGRAMA conduz.
+
+`CONCEPCAO → PLANO_MESTRE → ⟨porta⟩ → EXECUCAO → ACEITE_SISTEMA → CONCLUIDO`
+
+Todos os comandos abaixo usam o mesmo prefixo dos demais verbos
+(`ENGINE_RAIZ="$(pwd)" bash "${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh"
+"${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" …`), aqui abreviado como `CLI`.
+
+| Pedido | O que fazer |
+|---|---|
+| `/engine programa <objetivo>` | `CLI programa "<objetivo em uma frase>"` — abre em CONCEPCAO |
+| decompor | escreva o plano num JSON e rode `CLI programa plano <arquivo.json>` |
+| `/engine programa status` | `CLI programa status` |
+| `/engine programa retomar` | `CLI programa retomar` — sessão nova, programa que já existe |
+
+**Como conduzir a EXECUCAO.** Em laço, até não haver mais ciclo elegível:
+
+1. `CLI programa proximo` — diz qual ciclo ligar e qual é o critério de aceite dele.
+2. `CLI ligar "<objetivo daquele ciclo>"` e conduza o ciclo **normalmente**, com todas as
+   fases, papéis e gates de sempre. O programa não muda nada dentro do ciclo.
+3. Ao chegar em ENTREGA, **rode o critério de aceite declarado** e olhe a saída.
+4. `CLI programa aceite <CICLO> ok` — ou `falhou`. Nunca informe `ok` sem ter rodado o
+   critério e visto o resultado: é a invariante 1 aplicada ao encadeamento.
+5. `CLI desligar` e volte ao passo 1.
+
+Quando `proximo` disser que todos concluíram, rode o aceite de sistema declarado no plano,
+e então `CLI programa sistema ok` (ou `falhou`). Aceite vermelho devolve o programa para
+EXECUCAO — nada é dado como concluído.
+
+**A porta do plano-mestre.** Ao terminar o PLANO_MESTRE, apresente a decomposição inteira,
+com dependências e critérios de aceite, e **espere**. `programa aprovar` é o único verbo do
+motor que **você nunca roda por conta própria** — só o usuário autoriza, dizendo-o
+explicitamente. É a única parada garantida do programa: depois dela os ciclos encadeiam
+sozinhos.
+
+**Quando parar no meio.** Só por desvio, e só por um destes quatro motivos:
+`stack-fora-do-plano`, `dependencia-nao-prevista`, `aceite-inalcancavel`,
+`escopo-fora-do-declarado`. Rode `CLI programa desviar <motivo> "<detalhe>"`, apresente o
+conflito e espere. Fora disso não pergunte: parada que sempre acontece deixa de ser sinal.
+
+**Um ciclo reprovado bloqueia os dependentes** — é o desenho, não um defeito. Corrija e
+rode `CLI programa reabrir <CICLO>`.
+
+Os gates de risco R1–R9 valem **idênticos** em modo programa. Autonomia de processo não é
+autonomia de risco: com ninguém olhando, o gate vale mais, não menos.
 
 ## Papéis
 
