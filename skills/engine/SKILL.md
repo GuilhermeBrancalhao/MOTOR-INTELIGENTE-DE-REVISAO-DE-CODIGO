@@ -19,7 +19,18 @@ quando o ciclo termina. Instrução direta do usuário sempre vence o motor.
 | `/engine <pedido> --dry` | rode `ENGINE_RAIZ="$(pwd)" bash "${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh" "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" ligar "<objetivo em uma frase>" --dry` — use para um ciclo que só planeja e relata, sem escrever |
 | `/engine retomar` | rode `ENGINE_RAIZ="$(pwd)" bash "${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh" "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" retomar` e apresente o resumo de reentrada — use quando a sessão é nova mas o ciclo já existe |
 | `/engine relatorio` | rode `ENGINE_RAIZ="$(pwd)" bash "${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh" "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" relatorio ciclo` (ou `relatorio fase <FASE>`) e apresente a saída |
+| em DESCOBERTA, logo depois de `ligar` | rode `… cli.py descoberta "<o pedido do usuário, com as palavras dele>"` — registra a entrevista e classifica a intenção |
+| a CLI respondeu que a intenção é indeterminada | **não escolha**: apresente as candidatas ao usuário com opções clicáveis e rode de novo com `… cli.py descoberta "<pedido>" --intencao <INTENCAO>` |
+| ver o que ainda falta na entrevista | rode `… cli.py descoberta status` — intenção, bloqueantes abertas (com a pergunta inteira e o motivo) e assumíveis |
+| o usuário respondeu uma bloqueante | rode `… cli.py descoberta responder <ID> "<a resposta dele>"` |
 | `/engine programa <objetivo>` | conduz um **sistema inteiro** como sequência de ciclos — ver a seção "O programa" |
+
+Os quatro verbos de `descoberta` são a **saída** da porta da descoberta: é por eles que a
+entrevista entra no `.engine/estado.json`, e é o que está ali que o gate lê para decidir a
+transição. Nunca edite `.engine/estado.json` à mão para destravar uma fase — a recusa do
+gate diz que nada foi gravado justamente porque o conserto é responder, não remendar o
+arquivo. Registrar de novo por cima de uma entrevista já respondida é recusado; para
+recomeçar do zero, `--forcar`.
 
 Essa é a forma que funciona **de qualquer diretório e em qualquer plataforma**, e é a
 única que se deve usar. O diretório corrente é o do projeto do usuário, não o do plugin:
@@ -41,15 +52,73 @@ ciclo em andamento.
 
 ## O ciclo
 
-`DESCOBERTA → ANALISE → [EVOLUCAO, se o projeto já existe] → PLANO → ⟨porta⟩ → BUILD ⇄
-TESTE → REVISAO → DOC → ENTREGA`
+`DESCOBERTA → ⟨porta⟩ → ANALISE → [EVOLUCAO, se o projeto já existe] → PLANO → ⟨porta⟩ →
+BUILD ⇄ TESTE → REVISAO → DOC → ENTREGA`
+
+São as **duas** portas, e só elas — a primeira só para quando há lacuna bloqueante aberta,
+a segunda para sempre. Ver "As duas portas", abaixo.
 
 Avance de fase com `ENGINE_RAIZ="$(pwd)" bash "${CLAUDE_PLUGIN_ROOT}/hooks/engine.sh" "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" fase
 <DESTINO>`. A CLI recusa transição fora do grafo — se ela recusar, a fase pretendida está
 errada, não a máquina.
 
-**Porta do plano.** Ao terminar PLANO, apresente arquitetura, stack, estrutura e a
-justificativa de cada decisão, e **espere** o usuário. É a única parada por fase.
+## As duas portas
+
+O motor para para o usuário em **duas** portas, e só nelas. Elas param por motivos
+diferentes, e por isso são duas: uma protege o que ainda não se sabe, a outra protege o
+que já foi decidido. Parada que acontece fora delas deixa de ser sinal e vira ruído;
+parada que falta entrega plano escrito sobre suposição.
+
+**1. Porta da descoberta — para quando há lacuna BLOQUEANTE aberta.** Vale em
+`DESCOBERTA → ANALISE` (no ciclo) e em `CONCEPCAO → PLANO_MESTRE` (no programa, onde a
+CONCEPCAO é a macro-DESCOBERTA). A CLI recusa a transição, imprime a pergunta inteira de
+cada bloqueante com o predicado que a travou, e não grava nada. Leve essas perguntas ao
+usuário e registre cada resposta com `descoberta responder <ID> "<resposta>"`. **Sem
+bloqueante aberta esta porta não para**: a transição passa direto, sem confirmação, sem
+"posso seguir?". Ela não é uma parada por fase — é uma parada por dúvida que decide o
+resto da entrevista.
+
+**2. Porta do plano — para sempre, para o usuário aprovar a arquitetura.** Ao terminar
+PLANO, apresente arquitetura, stack, estrutura e a justificativa de cada decisão, e
+**espere** o usuário. No programa é a mesma porta um andar acima, ao fim do PLANO_MESTRE:
+`programa aprovar` é o único verbo do motor que você nunca roda por conta própria. Esta
+porta para mesmo sem dúvida nenhuma, porque o que está em jogo não é informação que falta
+— é o usuário decidir se aceita o desenho antes de alguém construir em cima dele.
+
+### A regra "não pergunte o que você pode decidir" continua valendo — e onde
+
+`motores/materializar-ideia/SKILL.md` diz, e mantém:
+**"Não pergunte o que você pode decidir"**, e "quando a ideia já vem com essas três coisas
+claras, pule a pergunta e construa". A porta da descoberta **não** contradiz isso, e a
+fronteira entre as duas frases é exatamente a regra de bloqueio de
+`ferramentas/elicitacao/bloqueio.py`:
+
+- **Lacuna ASSUMÍVEL — o motor decide, registra e segue.** É o território da regra do
+  materializar-ideia. Framework, nome de tabela, biblioteca de ícone: decida, nomeie,
+  siga. O que a decisão não pode ser é silenciosa — ela sai na lista de **decisões
+  abertas**, com a pergunta inteira, em `descoberta status`. "Assumível" quer dizer *o
+  motor segue sem perguntar*; nunca *o motor escolheu no lugar de alguém e não contou*.
+- **Lacuna BLOQUEANTE — o motor para.** É bloqueante quando, e só quando, dispara um
+  destes três predicados:
+  - **B1 — responder muda quais outras perguntas existem.** Decidir sozinho aqui não é
+    decidir: é escolher um ramo da entrevista no escuro, e as perguntas do ramo certo
+    nunca chegam a ser feitas.
+  - **B2 — a lacuna é universal**, sem gatilho: não existe caso em que ela seja
+    dispensável. É o mesmo critério que impede uma especificação de se declarar completa.
+  - **B3 — sem a resposta não se escreve critério de aceite falsificável** para nenhum
+    ciclo do plano. Decidido sozinho, o aceite passa a ser aquilo que o próprio motor
+    escolheu conseguir cumprir.
+
+Nos três, "decidir por conta própria" não devolve ao usuário o trabalho que ele delegou —
+devolve a ele um resultado sobre outra pergunta. Repare que as três coisas que a Fase 1 do
+materializar-ideia manda perguntar (quem usa e para quê, a ação central, a restrição dura)
+são bloqueantes por B2 e B3: a própria skill que proíbe perguntar o supérfluo manda
+perguntar exatamente essas. As duas regras dizem a mesma coisa por lados opostos —
+**pergunte o que muda o rumo, decida o resto e escreva o que decidiu.**
+
+E "pule a pergunta e construa" continua literal: quando o pedido **já traz** as respostas
+bloqueantes, registre-as com `descoberta responder` e siga. A porta abre porque a lacuna
+foi respondida, não porque foi dispensada.
 
 ## O programa — sistemas inteiros, não um ciclo
 
@@ -83,11 +152,14 @@ Quando `proximo` disser que todos concluíram, rode o aceite de sistema declarad
 e então `CLI programa sistema ok` (ou `falhou`). Aceite vermelho devolve o programa para
 EXECUCAO — nada é dado como concluído.
 
-**A porta do plano-mestre.** Ao terminar o PLANO_MESTRE, apresente a decomposição inteira,
-com dependências e critérios de aceite, e **espere**. `programa aprovar` é o único verbo do
-motor que **você nunca roda por conta própria** — só o usuário autoriza, dizendo-o
-explicitamente. É a única parada garantida do programa: depois dela os ciclos encadeiam
-sozinhos.
+**As duas portas, no programa.** São as mesmas de sempre, um andar acima. A **porta da
+descoberta** guarda `CONCEPCAO → PLANO_MESTRE`: `programa plano` é recusado enquanto
+houver lacuna bloqueante aberta na macro-DESCOBERTA, com a mesma mensagem e a mesma saída
+(`descoberta status` e `descoberta responder`). A **porta do plano-mestre** vem depois: ao
+terminar o PLANO_MESTRE, apresente a decomposição inteira, com dependências e critérios de
+aceite, e **espere**. `programa aprovar` é o único verbo do motor que **você nunca roda por
+conta própria** — só o usuário autoriza, dizendo-o explicitamente. É a **última** parada do
+programa: depois dela os ciclos encadeiam sozinhos.
 
 **Quando parar no meio.** Só por desvio, e só por um destes quatro motivos:
 `stack-fora-do-plano`, `dependencia-nao-prevista`, `aceite-inalcancavel`,

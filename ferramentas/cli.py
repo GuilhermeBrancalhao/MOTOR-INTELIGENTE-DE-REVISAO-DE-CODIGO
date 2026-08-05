@@ -36,7 +36,12 @@ from ferramentas import config, detectar, estado, programa, relatorio, trilha  #
 USO = (
     'uso: py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" '
     "{ligar <objetivo> [--forcar] [--dry]|desligar|status|fase <DESTINO>|"
-    "retomar|relatorio [ciclo|fase <FASE>]|programa <subverbo>}"
+    "retomar|relatorio [ciclo|fase <FASE>]|descoberta <subverbo>|programa <subverbo>}"
+)
+
+USO_DESCOBERTA = (
+    'uso: py "${CLAUDE_PLUGIN_ROOT}/ferramentas/cli.py" descoberta '
+    "{<pedido> [--intencao <INTENCAO>] [--forcar]|status|responder <ID> <resposta>}"
 )
 
 USO_PROGRAMA = (
@@ -88,6 +93,20 @@ def _relatar(dados: dict) -> str:
 
 def _relatar_desligado() -> str:
     return "**ENGINE:** desligado (nenhum ciclo neste projeto)."
+
+
+def _texto_do_erro(erro: BaseException) -> str:
+    """A mensagem da exceção, sem as aspas que `KeyError` acrescenta.
+
+    `str(KeyError("faltou isto"))` devolve `"'faltou isto'"` — com as aspas dentro do
+    texto, porque `KeyError.__str__` usa o `repr` do argumento. Metade das exceções do
+    caminho da descoberta (`DescobertaAusente`, `LacunaDesconhecida`) herda de `KeyError`
+    de propósito, e a mensagem delas é escrita para ser lida por gente: a aspa solta no
+    meio da frase é o tipo de detalhe que faz parecer traceback vazado.
+    """
+    if erro.args and isinstance(erro.args[0], str):
+        return erro.args[0]
+    return str(erro)
 
 
 def _verbo_ligar(raiz: Path, resto: list[str]) -> int:
@@ -181,16 +200,36 @@ def _verbo_status(raiz: Path) -> int:
     return 0
 
 
-#: A única aresta do grafo com gate de CONTEÚDO, e não só de forma. `transicionar`
-#: valida o desenho ("existe DESCOBERTA -> ANALISE?"); este par diz que, além de
-#: existir, a passagem exige a entrevista de descoberta fechada. As outras arestas
-#: seguem valendo só pelo grafo — acrescentar uma segunda linha aqui é uma decisão de
-#: produto, não um ajuste de código.
+#: A única aresta do grafo do CICLO com gate de CONTEÚDO, e não só de forma.
+#: `transicionar` valida o desenho ("existe DESCOBERTA -> ANALISE?"); este par diz que,
+#: além de existir, a passagem exige a entrevista de descoberta fechada. As outras
+#: arestas seguem valendo só pelo grafo — acrescentar uma segunda linha aqui é uma
+#: decisão de produto, não um ajuste de código.
 ARESTA_COM_GATE_DE_DESCOBERTA = ("DESCOBERTA", "ANALISE")
 
+#: A aresta gêmea, um andar acima: no grafo do PROGRAMA, `CONCEPCAO` é declarada pela
+#: spec da Fase 4 como a **macro-DESCOBERTA** ("objetivo real do sistema, requisitos,
+#: restrições, riscos. Papel `descobridor`"). Declarado por escrito e, até este ciclo,
+#: nunca verificado: `propor_plano` transicionava exigindo só aceite de sistema e DAG
+#: válido. O par abaixo é o que torna a declaração falsificável.
+ARESTA_DO_PROGRAMA_COM_GATE = ("CONCEPCAO", "PLANO_MESTRE")
 
-def _gate_descoberta(dados: dict) -> str | None:
-    """A recusa da transição DESCOBERTA -> ANALISE, ou `None` quando ela pode seguir.
+
+def _gate_descoberta(
+    dados: dict | None,
+    *,
+    transicao: str = "DESCOBERTA -> ANALISE",
+    antes_de: str = "mudar de fase",
+) -> str | None:
+    """A recusa de uma transição protegida pela descoberta, ou `None` para seguir.
+
+    **Um só gate, duas arestas.** Serve tanto `DESCOBERTA -> ANALISE` (grafo do ciclo)
+    quanto `CONCEPCAO -> PLANO_MESTRE` (grafo do programa, onde a CONCEPCAO é a
+    macro-DESCOBERTA). São a mesma pergunta em escalas diferentes — "a entrevista está
+    fechada?" — e por isso `transicao` e `antes_de` são só rótulos da mensagem: o
+    predicado, a política de falha e o texto da recusa são um só. Uma segunda cópia
+    divergiria no primeiro ajuste, e a divergência apareceria como um gate mais frouxo
+    que o outro sem ninguém decidir isso.
 
     **Falha FECHADO.** Qualquer coisa que dê errado ao calcular o veredito — estado
     sem o bloco de descoberta, bloco de versão desconhecida, eixo fora da taxonomia,
@@ -211,7 +250,8 @@ def _gate_descoberta(dados: dict) -> str | None:
 
     Recebe o estado já lido (nunca o caminho da pasta) porque quem chama está com o
     cadeado do estado na mão, e ler o disco de novo aqui tentaria retomar um cadeado
-    que não é reentrante.
+    que não é reentrante. `None` é aceito e vale como "não há estado nesta pasta" — que
+    é ausência de descoberta, e portanto recusa.
     """
     try:
         from ferramentas import descoberta  # noqa: PLC0415 — ver docstring
@@ -221,26 +261,60 @@ def _gate_descoberta(dados: dict) -> str | None:
             return None
         if not avaliacao.registrada:
             cabecalho = (
-                "ENGINE: transição DESCOBERTA -> ANALISE recusada — a descoberta não "
+                f"ENGINE: transição {transicao} recusada — a descoberta não "
                 "foi registrada neste ciclo."
             )
         else:
             cabecalho = (
-                f"ENGINE: transição DESCOBERTA -> ANALISE recusada — "
+                f"ENGINE: transição {transicao} recusada — "
                 f"{len(avaliacao.bloqueantes)} lacuna(s) bloqueante(s) aberta(s)."
             )
         return (
             f"{cabecalho}\n\n{avaliacao.resumo()}\n\n"
-            "Responda as bloqueantes acima antes de mudar de fase. "
+            f"Responda as bloqueantes acima antes de {antes_de}. "
             "Nada foi gravado no estado."
         )
     except Exception as erro:  # noqa: BLE001 — predicado que libera portão falha fechado
         return (
-            "ENGINE: transição DESCOBERTA -> ANALISE recusada — não foi possível "
+            f"ENGINE: transição {transicao} recusada — não foi possível "
             f"avaliar a descoberta ({erro.__class__.__name__}): {erro}\n\n"
             "O gate falha FECHADO de propósito: sem veredito confiável, a passagem "
             "não abre. Nada foi gravado no estado."
         )
+
+
+def _exigir_descoberta_para_o_plano(raiz: Path, dados_do_programa: dict) -> None:
+    """Gate gêmeo do C4, um andar acima: `CONCEPCAO -> PLANO_MESTRE`.
+
+    Levanta `programa.DescobertaIncompleta` — exceção nomeada, subclasse de
+    `PlanoInvalido` — quando a macro-DESCOBERTA não está fechada. Levantar em vez de
+    devolver mensagem é o que faz a recusa ser um contrato: quem chamar este caminho
+    programaticamente amanhã não tem como confundir recusa com sucesso por esquecer de
+    olhar um valor de retorno.
+
+    **Só a aresta protegida.** O gate roda apenas quando o programa está em CONCEPCAO.
+    Rodar sempre trocaria a mensagem de erro de quem pede `programa plano` com o
+    programa já em EXECUCAO: aquilo é erro de grafo, `transicionar` já diz isso com
+    precisão, e o gate mentiria dizendo que o problema é a descoberta. É a mesma regra
+    que `ARESTA_COM_GATE_DE_DESCOBERTA` aplica no ciclo.
+
+    **Aqui a leitura do disco é legítima**, ao contrário de dentro de
+    `_gate_descoberta`: o veredito sai do `.engine/estado.json`, e neste ponto nenhum
+    cadeado está tomado — nem o do estado (só `estado.atualizar` o toma) nem o do
+    programa (o sub-verbo `plano` lê e grava `programa.json` direto, como todos os
+    outros sub-verbos). Não há cadeado para retomar, então não há o travamento não
+    reentrante que o C4 proíbe. O que continua valendo é a proibição de o **gate** ler:
+    ele recebe o dicionário, e quem lê é este chamador.
+    """
+    if dados_do_programa.get("estado") != ARESTA_DO_PROGRAMA_COM_GATE[0]:
+        return
+    recusa = _gate_descoberta(
+        estado.carregar_estrito(raiz),
+        transicao=" -> ".join(ARESTA_DO_PROGRAMA_COM_GATE),
+        antes_de="propor o plano-mestre",
+    )
+    if recusa is not None:
+        raise programa.DescobertaIncompleta(recusa)
 
 
 def _verbo_fase(raiz: Path, resto: list[str]) -> int:
@@ -386,6 +460,298 @@ def _verbo_relatorio(raiz: Path, resto: list[str]) -> int:
     return 1
 
 
+# ---------------------------------------------------------------------------
+# Descoberta — o caminho de SAÍDA do portão que `_gate_descoberta` fecha
+# ---------------------------------------------------------------------------
+#
+# O gate recusa a transição e imprime as perguntas; até este ciclo, responder essas
+# perguntas só existia como API Python (`descoberta.registrar` / `descoberta.responder`).
+# Portão sem saída: a skill não tem como chamar Python direto, e a única forma de
+# destravar era editar `.engine/estado.json` à mão — que é exatamente o que a mensagem
+# de recusa manda não fazer. Os três verbos abaixo são a saída.
+
+
+def _relatar_descoberta(avaliacao) -> str:
+    """O retrato da entrevista: intenção, bloqueantes e assumíveis, com a pergunta inteira.
+
+    O miolo é `Avaliacao.resumo()`, o **mesmo** texto que a recusa do gate imprime. Um
+    formato próprio aqui divergiria do outro no primeiro ajuste, e a divergência
+    apareceria da pior forma possível: `status` dizendo uma coisa e a recusa da transição
+    dizendo outra sobre o mesmo estado.
+
+    O que se acrescenta é o pedido (que o `resumo` não traz, e que é o texto sobre o qual
+    a entrevista inteira foi montada) e a linha do veredito — quem leu "bloqueado" quer
+    saber, na mesma tela, o comando que responde.
+    """
+    linhas = [
+        "# Descoberta",
+        "",
+        f"**Pedido:** {avaliacao.pedido or '(nenhum)'}",
+        "",
+        avaliacao.resumo(),
+        "",
+    ]
+    if avaliacao.liberado_para_planejar:
+        linhas.append(
+            "**Porta da descoberta ABERTA:** nenhuma bloqueante em aberto — "
+            "`fase ANALISE` passa."
+        )
+    else:
+        linhas.append(
+            "**Porta da descoberta FECHADA.** Responda cada bloqueante com "
+            '`descoberta responder <ID> "<resposta>"`.'
+        )
+    return "\n".join(linhas)
+
+
+def _imprimir_descoberta(raiz: Path, descoberta) -> int:
+    """Lê o estado, imprime o retrato da descoberta e devolve o código de saída.
+
+    **A leitura do disco é legítima aqui**, ao contrário de dentro de
+    `_gate_descoberta`: neste ponto nenhum cadeado está tomado — os três verbos leem e
+    escrevem por `descoberta.registrar`/`descoberta.responder`, que tomam e soltam o
+    cadeado por conta própria antes de voltar. O que continua proibido é o **gate** ler
+    por caminho, porque ele roda com o cadeado na mão e ele não é reentrante.
+
+    `carregar_estrito`, e não `avaliar_do_disco` (que usa o leniente): estado ilegível
+    devolveria `None` no leniente e a avaliação sairia `registrada=False` — "o arquivo
+    está corrompido" contado como "nunca houve descoberta". São diagnósticos opostos e o
+    conserto de cada um é diferente.
+    """
+    try:
+        avaliacao = descoberta.avaliar(estado.carregar_estrito(raiz))
+    except estado.EstadoCorrompido as erro:
+        print(f"ENGINE: {erro}")
+        return 1
+    except descoberta.DescobertaInvalida as erro:
+        print(f"ENGINE: bloco de descoberta ilegível — {_texto_do_erro(erro)}")
+        return 1
+    if not avaliacao.registrada:
+        print(
+            "ENGINE: nenhuma descoberta registrada neste projeto. Rode "
+            '`descoberta "<o que o usuário pediu>"` primeiro.'
+        )
+        return 1
+    print(_relatar_descoberta(avaliacao))
+    return 0
+
+
+def _pedido_e_sinalizadores(resto: list[str]) -> tuple[str | None, str, str | None]:
+    """Separa `--intencao` e `--forcar` do pedido. Devolve (intenção, pedido, erro de uso).
+
+    As duas formas de `--intencao` são aceitas (`--intencao MATERIALIZAR` e
+    `--intencao=MATERIALIZAR`) porque as duas são igualmente naturais para quem digita, e
+    recusar uma delas seria um erro de uso onde não há ambiguidade nenhuma.
+
+    O erro de uso volta como texto em vez de exceção porque este é o único caso em que
+    não há o que fazer além de imprimir: `--intencao` sem valor depois não tem palpite
+    razoável — o próximo argumento seria parte do pedido, e engoli-lo classificaria o
+    trabalho por um pedaço de frase.
+    """
+    intencao: str | None = None
+    palavras: list[str] = []
+    indice = 0
+    while indice < len(resto):
+        palavra = resto[indice]
+        if palavra == "--intencao":
+            if indice + 1 >= len(resto):
+                return (
+                    None,
+                    "",
+                    "ENGINE: `--intencao` exige o nome da intenção logo depois.\n"
+                    + USO_DESCOBERTA,
+                )
+            intencao = resto[indice + 1]
+            indice += 2
+            continue
+        if palavra.startswith("--intencao="):
+            intencao = palavra.split("=", 1)[1]
+            indice += 1
+            continue
+        if palavra == "--forcar":
+            indice += 1
+            continue
+        palavras.append(palavra)
+        indice += 1
+    return intencao, " ".join(palavras).strip(), None
+
+
+def _pedir_a_intencao(erro, pedido: str, conhecidas: list[str]) -> str:
+    """A pergunta de desempate — o único caminho em que a CLI devolve a decisão inteira.
+
+    `classificar` levanta `IntencaoIndeterminada` em dois casos: sinal ausente/fraco e
+    sinal empatado. Nos dois, a exceção carrega `candidatas` justamente para que quem
+    chamou consiga **perguntar** em vez de apenas relatar o erro — e é isso que este
+    texto faz. Escolher a primeira candidata aqui seria o `PADRAO_ASSUMIDO` de
+    `deteccao.py` circulando como decisão, com o agravante de que a intenção decide
+    *quais perguntas existem*: a errada não produz uma pergunta ruim no meio de vinte
+    boas, produz uma entrevista inteira sobre outro trabalho, e a pessoa responde tudo
+    antes de alguém notar.
+    """
+    candidatas = tuple(getattr(erro, "candidatas", ()) or ())
+    linhas = [
+        "ENGINE: descoberta NÃO registrada — não dá para dizer que tipo de trabalho "
+        "este pedido pede.",
+        "",
+        _texto_do_erro(erro),
+        "",
+    ]
+    if candidatas:
+        linhas.append("Candidatas (o motor não escolhe entre elas):")
+        linhas += [f"  - {getattr(alvo, 'value', alvo)}" for alvo in candidatas]
+    else:
+        linhas.append(
+            "Nenhuma candidata: o texto não trouxe sinal de intenção nenhum."
+        )
+    linhas += [
+        "",
+        "**Diga qual é.** A intenção decide QUAIS perguntas existem, e por isso ela não "
+        "é chutada aqui: a classe errada não produz uma pergunta ruim, produz uma "
+        "entrevista inteira sobre outro trabalho.",
+        "",
+        f'  descoberta "{pedido}" --intencao <INTENCAO>',
+        "",
+        "Intenções conhecidas: " + ", ".join(conhecidas),
+        "",
+        "Nada foi gravado no estado.",
+    ]
+    return "\n".join(linhas)
+
+
+def _verbo_descoberta(raiz: Path, resto: list[str]) -> int:
+    """Registrar a entrevista, ver o que falta e responder — pela CLI, sem Python solto.
+
+    Três sub-verbos, e o resto da linha é o pedido, na mesma forma de `_verbo_programa`:
+    `status` e `responder` são palavras reservadas, e um pedido que comece por uma delas
+    precisa vir depois de `--intencao` ou ser reescrito. É o mesmo acordo que `programa`
+    já faz, e trocá-lo aqui daria duas gramáticas para a mesma CLI.
+
+    O `import` mora dentro da função pelo mesmo motivo que dentro de `_gate_descoberta`:
+    importado no topo, um `ferramentas/descoberta.py` quebrado estouraria na carga do
+    módulo — antes de `principal` existir para segurar a exceção — e derrubaria com
+    traceback a CLI inteira, inclusive `status` e `desligar`, que nada têm com a
+    elicitação.
+
+    **Nenhum destes verbos grava estado por conta própria.** Todos passam por
+    `descoberta.registrar`/`descoberta.responder`, que mutam de dentro do cadeado por
+    `estado.atualizar`. É a mesma trava textual que `test_nenhum_gravar_fora_do_estado`
+    varre neste arquivo.
+    """
+    if not resto:
+        print(USO_DESCOBERTA)
+        return 1
+
+    try:
+        from ferramentas import descoberta  # noqa: PLC0415 — ver docstring
+        from ferramentas.elicitacao import (  # noqa: PLC0415 — ver docstring
+            Intencao,
+            IntencaoIndeterminada,
+        )
+    except ImportError as erro:
+        print(
+            "ENGINE: instalação incompleta — a elicitação não pôde ser importada "
+            f"({erro.__class__.__name__}): {erro}"
+        )
+        return 1
+
+    sub, *args = resto
+    agora = _agora()
+
+    if sub == "status":
+        return _imprimir_descoberta(raiz, descoberta)
+
+    if sub == "responder":
+        if len(args) < 2:
+            print(USO_DESCOBERTA)
+            return 1
+        lacuna_id, *palavras = args
+        valor = " ".join(palavras).strip()
+        if not valor:
+            print(
+                "ENGINE: resposta em branco não é resposta — a lacuna continuaria "
+                "aberta, agora com um vazio no lugar da pergunta. Nada foi gravado."
+            )
+            return 1
+        try:
+            descoberta.responder(raiz, lacuna_id, valor, agora=agora)
+        except (descoberta.DescobertaAusente, descoberta.LacunaDesconhecida) as erro:
+            # Id que não está ativo para este pedido não é aceito em silêncio: a
+            # resposta iria para um balde que ninguém lê, a lacuna verdadeira
+            # continuaria aberta e a pessoa lembraria de ter respondido.
+            print(f"ENGINE: {_texto_do_erro(erro)}")
+            return 1
+        except descoberta.DescobertaInvalida as erro:
+            print(f"ENGINE: bloco de descoberta ilegível — {_texto_do_erro(erro)}")
+            return 1
+        except (estado.EstadoCorrompido, estado.EstadoOcupado) as erro:
+            print(f"ENGINE: {erro}")
+            return 1
+        print(f"**Respondida:** [{lacuna_id}] {valor}")
+        print()
+        return _imprimir_descoberta(raiz, descoberta)
+
+    forcar = "--forcar" in resto
+    intencao, pedido, erro_de_uso = _pedido_e_sinalizadores(resto)
+    if erro_de_uso is not None:
+        print(erro_de_uso)
+        return 1
+    if not pedido:
+        print(
+            "ENGINE: `descoberta <pedido>` exige o pedido do usuário, com as palavras "
+            "dele. É sobre esse texto que a intenção é classificada."
+        )
+        return 1
+
+    try:
+        anterior = descoberta.do_estado(estado.carregar_estrito(raiz))
+    except estado.EstadoCorrompido as erro:
+        print(f"ENGINE: {erro}")
+        return 1
+    except descoberta.DescobertaInvalida as erro:
+        print(f"ENGINE: bloco de descoberta ilegível — {_texto_do_erro(erro)}")
+        return 1
+    respostas = (anterior or {}).get("respostas") or {}
+    if respostas and not forcar:
+        # `registrar` reescreve o bloco inteiro, e com ele o mapa de respostas. Sem esta
+        # guarda, um segundo `descoberta <pedido>` — para corrigir uma palavra do texto,
+        # que é o motivo mais natural de repetir o verbo — apagaria a entrevista já
+        # respondida sem dizer nada, e a pessoa lembra de ter respondido.
+        print(
+            f"ENGINE: já existe descoberta registrada neste ciclo, com {len(respostas)} "
+            "resposta(s). Registrar de novo recomeça a entrevista do zero e apaga o que "
+            "foi respondido. Use `descoberta status` para ver o que falta, ou repita com "
+            "`--forcar` se a intenção é mesmo recomeçar. Nada foi gravado no estado."
+        )
+        return 1
+
+    try:
+        descoberta.registrar(raiz, pedido, intencao=intencao, agora=agora)
+    except IntencaoIndeterminada as erro:
+        # Antes de `ValueError` porque é subclasse dela: invertida, esta cláusula nunca
+        # rodaria e a pergunta de desempate viraria uma mensagem de intenção inválida.
+        print(_pedir_a_intencao(erro, pedido, [alvo.value for alvo in Intencao]))
+        return 1
+    except ValueError as erro:
+        if intencao is None:
+            print(f"ENGINE: descoberta não registrada ({erro.__class__.__name__}): {erro}")
+        else:
+            print(
+                f"ENGINE: intenção {intencao!r} não existe na taxonomia. Conhecidas: "
+                + ", ".join(alvo.value for alvo in Intencao)
+            )
+        return 1
+    except descoberta.DescobertaAusente as erro:
+        print(f"ENGINE: {_texto_do_erro(erro)}")
+        return 1
+    except (estado.EstadoCorrompido, estado.EstadoOcupado) as erro:
+        print(f"ENGINE: {erro}")
+        return 1
+
+    print("**Descoberta registrada.**")
+    print()
+    return _imprimir_descoberta(raiz, descoberta)
+
+
 def _prog_trilha(raiz: Path, acao: str, alvo: str, agora: str) -> None:
     """Registra um passo do programa na trilha, marcado como `do_motor`.
 
@@ -497,11 +863,30 @@ def _verbo_programa(raiz: Path, resto: list[str]) -> int:
         if dados is None:
             return 1
         try:
+            # O gate da macro-DESCOBERTA vem ANTES de `propor_plano`, e é por isso que
+            # a recusa não deixa rastro: `propor_plano` sequer é chamada, então nada
+            # transiciona, e `programa.gravar` lá embaixo não é alcançado. Se viesse
+            # depois, `propor_plano` já teria devolvido o dicionário em PLANO_MESTRE, e
+            # bastaria um `return` esquecido para gravá-lo — a mesma armadilha que o C4
+            # fechou pondo o gate dentro do mutador em vez de depois de `transicionar`.
+            _exigir_descoberta_para_o_plano(raiz, dados)
             novo = programa.propor_plano(
                 dados,
                 bruto.get("ciclos") or [],
                 bruto.get("aceite_de_sistema", ""),
             )
+        except programa.DescobertaIncompleta as erro:
+            # Antes de `PlanoInvalido` porque é subclasse dela: invertida, esta cláusula
+            # nunca rodaria. E a mensagem sai sem prefixo — ela já vem no formato do
+            # gate de fase, com "ENGINE:" na frente e as perguntas inteiras dentro.
+            print(erro)
+            return 1
+        except estado.EstadoCorrompido as erro:
+            # O veredito da descoberta sai do `estado.json`; ilegível, ele não vira
+            # "sem bloqueante". Falha FECHADA, com a mesma mensagem que os outros
+            # verbos dão para estado corrompido.
+            print(f"ENGINE: {erro}")
+            return 1
         except (programa.PlanoInvalido, programa.TransicaoInvalida) as erro:
             print(f"ENGINE: {erro}")
             return 1
@@ -703,6 +1088,8 @@ def principal(argumentos: list[str]) -> int:
             return _verbo_retomar(raiz)
         if verbo == "relatorio":
             return _verbo_relatorio(raiz, resto)
+        if verbo == "descoberta":
+            return _verbo_descoberta(raiz, resto)
         if verbo == "programa":
             return _verbo_programa(raiz, resto)
         print(USO)

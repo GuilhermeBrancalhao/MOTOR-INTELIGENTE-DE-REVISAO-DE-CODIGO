@@ -25,6 +25,8 @@ Antes de escrever qualquer linha, três coisas precisam estar definidas. Se falt
 
 Quando a ideia já vem com essas três coisas claras, **pule a pergunta e construa**. Turno gasto em confirmação do óbvio é turno perdido.
 
+**O que essa regra não autoriza — e onde ela para.** "Não pergunte o que você pode decidir" vale para lacuna **assumível**: aquela em que decidir sozinho, nomear a decisão e seguir não muda mais nada. Não vale para lacuna **bloqueante**, no sentido preciso de `ferramentas/elicitacao/bloqueio.py`: quando responder muda quais outras perguntas existem (**B1**), quando a lacuna é universal e sem gatilho (**B2**), ou quando sem ela não se escreve critério de aceite falsificável (**B3**). Nas três, decidir sozinho não é decidir — é escolher um ramo da entrevista no escuro, e as perguntas do ramo certo nunca chegam a ser feitas. Repare que as três coisas da Fase 1 são justamente bloqueantes por B2 e B3, e é por isso que esta seção manda perguntá-las: as duas regras dizem a mesma coisa por lados opostos — **pergunte o que muda o rumo, decida o resto e escreva o que decidiu.** "Pule a pergunta e construa" quer dizer que, quando o pedido já traz essas três respostas, elas não se perguntam de novo; nunca que o motor as supre por conta própria. A reconciliação inteira, com as duas portas do ciclo, está em `skills/engine/SKILL.md`, seção "As duas portas".
+
 ## Fase 2 — Escolher a stack
 
 Escolha pelo que a ideia exige, não pelo que é familiar. Uma frase de justificativa por decisão.

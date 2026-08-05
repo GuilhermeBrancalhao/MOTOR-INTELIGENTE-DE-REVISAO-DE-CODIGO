@@ -88,6 +88,30 @@ class PlanoInvalido(Exception):
     """A decomposição não passa na validação (DAG, aceite ausente, id repetido)."""
 
 
+class DescobertaIncompleta(PlanoInvalido):
+    """A macro-DESCOBERTA do programa não está fechada: `CONCEPCAO -> PLANO_MESTRE` recusada.
+
+    **Exceção nova, e não `PlanoInvalido` reusada.** As duas recusam a mesma transição,
+    mas dizem coisas opostas sobre o que fazer em seguida: `PlanoInvalido` significa "a
+    decomposição está errada, reescreva o JSON"; esta significa "a decomposição pode até
+    estar certa, mas ninguém sabe ainda o que o sistema tem de fazer — vá responder as
+    lacunas". Fundir as duas obrigaria quem lê a recusa a distinguir pelo texto da
+    mensagem, e texto não é contrato.
+
+    **Herda de `PlanoInvalido` de propósito.** Todo chamador que já escrevia
+    `except programa.PlanoInvalido` continua recusando a transição sem alteração — e é
+    isso que faz a falha ser FECHADA por construção: um caminho que ainda não conhece a
+    exceção nova não passa a liberar o plano, ele continua barrando. Se fosse uma
+    hierarquia paralela, cada `except` esquecido viraria um vazamento silencioso, que é
+    exatamente o modo de falhar que este ciclo existe para fechar.
+
+    A mensagem carrega a lista de lacunas bloqueantes **com a pergunta inteira** (o
+    `resumo()` da avaliação da descoberta), pela mesma razão que a recusa do gate de
+    fase carrega: quem leu "bloqueado" e não sabe o que responder volta a perguntar ao
+    modelo, e a elicitação inteira perde o sentido.
+    """
+
+
 class PortaNaoAtravessada(Exception):
     """Tentativa de executar sem o plano-mestre ter sido aprovado pelo usuário."""
 
@@ -350,6 +374,33 @@ def propor_plano(dados: dict, ciclos: list[dict], aceite_de_sistema: str) -> dic
     O `aceite_de_sistema` é exigido aqui e não no fim porque, declarado no fim, ele
     seria escrito depois de se saber o que o sistema faz — e passaria sempre. É o
     mesmo motivo pelo qual um teste precisa poder ficar vermelho.
+
+    **Onde mora o gate da macro-DESCOBERTA, e por que não é aqui.** A spec da Fase 4
+    diz que `CONCEPCAO` *é* a macro-DESCOBERTA, conduzida pelo papel `descobridor`.
+    Verificar isso exige o veredito da entrevista, que mora no `.engine/estado.json` —
+    e esta função é **pura sobre dicionário**: não conhece `raiz`, não abre arquivo,
+    não toma cadeado. Três opções foram consideradas e duas foram descartadas:
+
+    - *ler o disco daqui dentro* (receber `raiz`) destrói a pureza da qual a suíte
+      inteira depende — 29 testes chamam esta função sobre dicionário montado à mão,
+      sem projeto nenhum em disco — e repete o defeito que o C4 travou por teste
+      textual: leitura de disco por fora do cadeado dá veredito sobre retrato velho;
+    - *receber a avaliação como argumento opcional* mantém a pureza, mas o gate ficaria
+      **opcional**: chamar com três argumentos (que é como toda a suíte chama, e como
+      qualquer chamador novo chamaria por descuido) transicionaria sem gate nenhum.
+      Predicado que libera portão e pode ser omitido não é gate, é sugestão.
+    - *cobrar no chamador* é o que vale, e é o que está feito: `cli.py`, no sub-verbo
+      `programa plano`, exige a descoberta fechada **antes** de chamar esta função,
+      levantando `DescobertaIncompleta` pelo mesmo predicado e com a mesma mensagem do
+      gate de fase (`cli._gate_descoberta`). Como a recusa acontece antes, esta função
+      nem é chamada: nada transiciona, e `programa.json` não é tocado.
+
+    Isto não deixa esta função "sem gate": `DescobertaIncompleta` herda de
+    `PlanoInvalido`, e quem chama a máquina por API e já trata `PlanoInvalido` recusa a
+    transição do mesmo jeito. O que faz a obrigatoriedade valer no caminho real é o
+    teste textual de `ferramentas/tests/test_gate_programa.py`, que lê o `cli.py` e
+    reprova se o gate deixar de vir antes desta chamada — a mesma tática que o C4 usa
+    para impedir que o gate de fase volte a ler o disco por fora do cadeado.
     """
     if not (aceite_de_sistema or "").strip():
         raise PlanoInvalido(
