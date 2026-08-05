@@ -105,6 +105,85 @@ def test_ciclo_reprovado_nao_libera_dependentes():
     )
 
 
+def test_dependente_nao_pode_ser_dado_por_concluido_com_dependencia_vermelha():
+    """A2, no ponto que decide. Mutação alvo: tirar a guarda de `registrar_aceite`.
+
+    O achado do P2C5: o teste acima cobrava A2 só pela via consultiva
+    (`proximo_elegivel`), e por isso passava mesmo com a via que DECIDE aberta —
+    `registrar_aceite(dados, "C2", passou=True)` carimbava CONCLUIDO com C1 vermelho.
+    A2 diz "aceite vermelho não avança"; sem esta guarda, ele não avançava só para quem
+    pedia licença.
+    """
+    dados = {
+        "estado": "EXECUCAO",
+        "ciclos": [
+            {"id": "C1", "depende_de": [], "status": "PENDENTE"},
+            {"id": "C2", "depende_de": ["C1"], "status": "PENDENTE"},
+        ],
+    }
+    dados = programa.registrar_aceite(dados, "C1", passou=False)
+
+    with pytest.raises(programa.DependenciaNaoConcluida):
+        programa.registrar_aceite(dados, "C2", passou=True)
+
+    assert dados["ciclos"][1]["status"] == "PENDENTE"
+
+
+def test_dependente_tambem_e_barrado_com_a_dependencia_apenas_pendente():
+    """Mutação alvo: olhar só para REPROVADO em vez de exigir CONCLUIDO.
+
+    Dependência que ainda nem foi tentada é tão pouco satisfeita quanto uma que falhou.
+    Uma guarda escrita como `status == "REPROVADO"` deixaria passar a ordem invertida,
+    que é o caso mais comum: fechar C2 antes de alguém ter olhado para C1.
+    """
+    dados = {
+        "estado": "EXECUCAO",
+        "ciclos": [
+            {"id": "C1", "depende_de": [], "status": "PENDENTE"},
+            {"id": "C2", "depende_de": ["C1"], "status": "PENDENTE"},
+        ],
+    }
+    with pytest.raises(programa.DependenciaNaoConcluida):
+        programa.registrar_aceite(dados, "C2", passou=True)
+
+
+def test_reprovar_um_dependente_continua_permitido():
+    """Mutação alvo: barrar os dois vereditos, e não só o verde.
+
+    Um vermelho no dependente não afirma nada sobre pré-requisito satisfeito — é só o
+    fato de que o teste dele falhou. Barrá-lo obrigaria a inventar um terceiro estado
+    para "rodou e falhou, mas não podia rodar" sem ganhar informação nenhuma.
+    """
+    dados = {
+        "estado": "EXECUCAO",
+        "ciclos": [
+            {"id": "C1", "depende_de": [], "status": "PENDENTE"},
+            {"id": "C2", "depende_de": ["C1"], "status": "PENDENTE"},
+        ],
+    }
+    dados = programa.registrar_aceite(dados, "C2", passou=False)
+
+    assert dados["ciclos"][1]["status"] == "REPROVADO"
+
+
+def test_dependencias_pendentes_nomeia_quais_faltam():
+    """Mutação alvo: devolver booleano em vez da lista.
+
+    Num plano de vinte ciclos, "há dependência aberta" manda a pessoa procurar à mão o
+    que a máquina já sabe — e a recusa da CLI imprime justamente esta lista.
+    """
+    dados = {
+        "estado": "EXECUCAO",
+        "ciclos": [
+            {"id": "C1", "depende_de": [], "status": "CONCLUIDO"},
+            {"id": "C2", "depende_de": [], "status": "REPROVADO"},
+            {"id": "C3", "depende_de": ["C1", "C2"], "status": "PENDENTE"},
+        ],
+    }
+    assert programa.dependencias_pendentes(dados, "C1") == []
+    assert programa.dependencias_pendentes(dados, "C3") == ["C2"]
+
+
 def test_ciclo_reprovado_pode_ser_reaberto_e_volta_a_ser_elegivel():
     """A2. Mutação alvo: `reabrir` aceitar qualquer status permitiria reabrir um CONCLUIDO."""
     dados = {

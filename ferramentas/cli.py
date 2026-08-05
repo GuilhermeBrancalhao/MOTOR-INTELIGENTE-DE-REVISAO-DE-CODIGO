@@ -1189,6 +1189,25 @@ def _prog_verificar(raiz: Path, id_ciclo: str, agora: str) -> int:
         )
         return 1
 
+    # Antes de rodar qualquer coisa: as dependências deste ciclo estão fechadas?
+    # `programa.registrar_aceite` já recusa o carimbo (é lá que mora o gate, no único
+    # ponto por onde os dois caminhos passam), mas descobrir isso DEPOIS de rodar a
+    # suíte do dependente teria dois preços: o tempo de uma suíte inteira gasto num
+    # veredito que não vai ser registrado, e — pior — a evidência verde impressa na
+    # tela e na trilha logo antes da recusa, que é exatamente a leitura enganosa que
+    # este ciclo veio fechar. Recusar antes é o barato e o honesto.
+    pendentes = programa.dependencias_pendentes(dados, id_ciclo)
+    if pendentes:
+        print(
+            f"ENGINE: o ciclo {id_ciclo!r} não pode ser verificado agora: depende de "
+            f"{', '.join(pendentes)}, que ainda não está(ão) CONCLUIDO. Nada foi "
+            "executado e nada foi registrado.\n"
+            "  - dependência REPROVADA? `programa reabrir <CICLO>`, conserte, e "
+            "`programa verificar <CICLO>` de novo;\n"
+            "  - dependência ainda por fazer? `programa proximo` diz qual é a vez."
+        )
+        return 1
+
     comando = programa.comando_de_aceite(alvo)
     if not comando:
         # Plano anterior ao aceite executável. Inventar um comando aqui (chutar

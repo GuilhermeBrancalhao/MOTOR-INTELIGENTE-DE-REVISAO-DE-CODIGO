@@ -624,3 +624,115 @@ def test_a_skill_manda_verificar_em_vez_de_digitar():
     assert "CLI programa aceite <CICLO> ok` — ou `falhou`" not in texto, (
         "o passo 4 antigo (veredito digitado como caminho normal) continua na skill"
     )
+
+
+# ---------------------------------------------------------------------------
+# 8. o dependente não fecha por cima de dependência aberta (achado do P2C5)
+# ---------------------------------------------------------------------------
+#
+# O buraco que a cobaia do P2C5 abriu: `proximo` sempre respeitou o DAG, mas ele só
+# SUGERE. Quem fecha um ciclo é `verificar`, e ele aceitava qualquer id — com C1
+# REPROVADO, `programa verificar C2` rodava a suíte do dependente, saía 0 e carimbava
+# C2 CONCLUIDO, logo depois de a própria CLI ter impresso que "os dependentes seguem
+# bloqueados". A frase era falsa no único caminho que decide.
+
+
+def test_verificar_dependente_com_dependencia_reprovada_e_recusado(tmp_path):
+    """Mutação que derruba: tirar o gate de `registrar_aceite` (ou o pré-checo da CLI).
+
+    O teste que faltava. `test_ciclo_reprovado_bloqueia_o_dependente` cobrava o bloqueio
+    só pela via consultiva (`programa proximo`); ninguém tentava fechar o dependente
+    direto, que é o que qualquer pessoa apressada faz quando o encadeamento reclama.
+    """
+    _programa_pronto(
+        tmp_path,
+        {
+            "C1": _script(tmp_path, "falha.py", FALHA),
+            "C2": _script(tmp_path, "passa.py", PASSA),
+        },
+    )
+    assert _cli(tmp_path, "programa", "verificar", "C1").returncode == 1
+
+    saida = _cli(tmp_path, "programa", "verificar", "C2")
+
+    assert saida.returncode == 1, saida.stdout + saida.stderr
+    assert _status(tmp_path, "C2") == "PENDENTE", (
+        "o dependente foi dado por concluído com a dependência vermelha"
+    )
+    assert "C1" in saida.stdout, "a recusa não diz qual dependência falta"
+    assert "Traceback" not in saida.stdout + saida.stderr
+
+
+def test_a_recusa_do_dependente_nao_chega_a_rodar_o_comando(tmp_path):
+    """Mutação que derruba: recusar só no registro, deixando a execução acontecer antes.
+
+    Provado por efeito colateral, não por texto: o comando de C2 escreve `rodou.txt`. Se
+    o arquivo aparecer, a suíte do dependente rodou — e o pior nem é o tempo perdido, é
+    a evidência VERDE impressa na tela e gravada na trilha um parágrafo antes da recusa.
+    """
+    _programa_pronto(
+        tmp_path,
+        {
+            "C1": _script(tmp_path, "falha.py", FALHA),
+            "C2": _script(tmp_path, "marca.py", MARCA),
+        },
+    )
+    assert _cli(tmp_path, "programa", "verificar", "C1").returncode == 1
+
+    _cli(tmp_path, "programa", "verificar", "C2")
+
+    assert not (tmp_path / "rodou.txt").exists(), (
+        "o comando do dependente rodou antes de a recusa acontecer"
+    )
+    assert [
+        linha for linha in _linhas_do_executor(tmp_path) if linha.get("ciclo") == "C2"
+    ] == [], "a recusa deixou veredito de C2 na trilha"
+
+
+def test_o_dependente_fecha_depois_que_a_dependencia_e_consertada(tmp_path):
+    """Mutação que derruba: barrar o dependente para sempre (gate largo demais).
+
+    O par obrigatório do teste acima: o gate não pode virar um cadeado. Consertada e
+    reverificada a dependência, o dependente fecha pelo mesmo verbo, sem nada de
+    especial.
+    """
+    _programa_pronto(
+        tmp_path,
+        {
+            "C1": _script(tmp_path, "aceite1.py", FALHA),
+            "C2": _script(tmp_path, "passa.py", PASSA),
+        },
+    )
+    assert _cli(tmp_path, "programa", "verificar", "C1").returncode == 1
+    assert _cli(tmp_path, "programa", "verificar", "C2").returncode == 1
+
+    (tmp_path / "aceite1.py").write_text(PASSA, encoding="utf-8")  # o conserto
+    assert _cli(tmp_path, "programa", "reabrir", "C1").returncode == 0
+    assert _cli(tmp_path, "programa", "verificar", "C1").returncode == 0
+
+    assert _cli(tmp_path, "programa", "verificar", "C2").returncode == 0
+    assert _status(tmp_path, "C2") == "CONCLUIDO"
+
+
+def test_o_veredito_digitado_tambem_respeita_a_dependencia(tmp_path):
+    """Mutação que derruba: escrever o gate no verbo `verificar` em vez de na máquina.
+
+    O caminho digitado (`programa aceite`) fecha o mesmo ciclo pelo mesmo
+    `registrar_aceite`. Um gate escrito só no verbo verificado deixaria a porta dos
+    fundos aberta — e ela é a mais fácil de usar, porque não roda nada.
+    """
+    _programa_pronto(
+        tmp_path,
+        {
+            "C1": _script(tmp_path, "falha.py", FALHA),
+            "C2": _script(tmp_path, "passa.py", PASSA),
+        },
+    )
+    assert _cli(tmp_path, "programa", "verificar", "C1").returncode == 1
+
+    saida = _cli(
+        tmp_path, "programa", "aceite", "C2", "ok", "--porque", "conferi na mao"
+    )
+
+    assert saida.returncode == 1, saida.stdout + saida.stderr
+    assert _status(tmp_path, "C2") == "PENDENTE"

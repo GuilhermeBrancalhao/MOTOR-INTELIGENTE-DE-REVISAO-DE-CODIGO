@@ -203,6 +203,30 @@ class SemCicloElegivel(Exception):
     """Nenhum ciclo com dependências satisfeitas — ou acabaram, ou há reprovado."""
 
 
+class DependenciaNaoConcluida(TransicaoInvalida):
+    """Tentativa de dar um ciclo por CONCLUIDO com dependência ainda em aberto.
+
+    **Achado do P2C5, e o defeito era exatamente o buraco entre a mensagem e a regra.**
+    `proximo_elegivel` sempre respeitou o DAG, mas ele só *sugere* o próximo ciclo;
+    quem fecha um ciclo é `registrar_aceite`, e ela aceitava qualquer id. Na cobaia,
+    com C1 REPROVADO, `programa verificar C2` rodava o comando do dependente, saía 0 e
+    carimbava **C2 CONCLUIDO** — logo depois de o próprio motor ter impresso "os
+    dependentes seguem bloqueados até `programa reabrir`". A frase era falsa: o
+    bloqueio existia no caminho consultivo (`proximo`) e não no caminho que decide.
+
+    Por que isso não é preciosismo: o veredito verde de um dependente medido sobre uma
+    dependência quebrada não prova nada sobre o sistema — ele prova que o teste do
+    pedaço passou apesar da base estar vermelha, que é o caso em que o teste é
+    justamente o que não se pode acreditar. E o carimbo fica: consertado C1 depois, o
+    programa conclui com um C2 que nunca foi verificado sobre a versão boa de C1.
+
+    Herda de `TransicaoInvalida` porque é disso que se trata (uma passagem de status
+    que o estado não permite) e porque assim todo chamador que já trata
+    `TransicaoInvalida` — inclusive `cli.ERROS_PREVISTOS_DO_PROGRAMA` — recusa sem
+    alteração. Falha FECHADA por herança, pela mesma razão de `DescobertaIncompleta`.
+    """
+
+
 class DesvioInvalido(Exception):
     """Motivo de desvio fora do conjunto fechado de `MOTIVOS_DESVIO`."""
 
@@ -747,13 +771,53 @@ def iniciar_ciclo(dados: dict, id_ciclo: str, id_do_estado: str) -> dict:
     return novo_estado
 
 
+def dependencias_pendentes(dados: dict, id_ciclo: str) -> list[str]:
+    """Ids das dependências do ciclo que ainda **não** estão CONCLUIDO.
+
+    Lista vazia significa "pode fechar". Devolve a lista, e não um booleano, porque
+    quem recusa precisa dizer QUAIS faltam: num plano de vinte ciclos, "há dependência
+    aberta" manda a pessoa procurar à mão o que a máquina já sabe.
+
+    É o mesmo predicado que `proximo_elegivel` aplica ao escolher o próximo ciclo —
+    extraído para poder ser aplicado também no caminho que **decide**, que é onde ele
+    faltava. Levanta `KeyError` (via `_achar`) para id inexistente, como todo o resto
+    deste módulo.
+    """
+    alvo = _achar(dados, id_ciclo)
+    prontos = concluidos(dados)
+    return [dep for dep in alvo.get("depende_de", []) if dep not in prontos]
+
+
 def registrar_aceite(dados: dict, id_ciclo: str, passou: bool) -> dict:
     """Fecha um ciclo com o veredito do seu critério de aceite.
 
     `passou=False` marca REPROVADO e **não** libera os dependentes — é o coração de
     A2. Quem chama decide o que fazer (reabrir em BUILD, ou desviar); o que este
     módulo garante é que um ciclo vermelho nunca conta como pré-requisito satisfeito.
+
+    **`passou=True` exige as dependências CONCLUIDO** (`DependenciaNaoConcluida`). A2
+    dizia "aceite vermelho não avança" e era verdade só no caminho consultivo: até o
+    P2C5, `programa verificar C2` fechava C2 em verde com C1 REPROVADO, logo depois de
+    a CLI ter impresso que os dependentes estavam bloqueados. O gate mora aqui, e não
+    no `cli.py`, porque aqui é o **único** ponto por onde os dois caminhos passam — o
+    verificado e o digitado (`programa aceite`) — e um gate escrito só no verbo deixaria
+    o outro aberto.
+
+    **O verde é barrado; o vermelho, não.** Reprovar um dependente cedo é informação
+    honesta (o teste dele falhou, ponto) e não afirma nada sobre pré-requisito
+    satisfeito. Barrar os dois obrigaria a inventar um terceiro estado para "rodei e
+    falhou, mas não podia rodar" sem ganhar nada.
     """
+    if passou:
+        pendentes = dependencias_pendentes(dados, id_ciclo)
+        if pendentes:
+            raise DependenciaNaoConcluida(
+                f"o ciclo {id_ciclo!r} não pode ser dado por CONCLUIDO: "
+                f"depende de {', '.join(pendentes)}, que ainda não está(ão) "
+                "CONCLUIDO. Um verde medido sobre dependência aberta não prova o "
+                "sistema — feche a dependência primeiro (`programa reabrir` + "
+                "`programa verificar`, se ela reprovou)."
+            )
     return _com_ciclo(
         dados, id_ciclo, status="CONCLUIDO" if passou else "REPROVADO"
     )
