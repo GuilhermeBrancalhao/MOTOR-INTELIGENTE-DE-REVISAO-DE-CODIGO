@@ -12,3 +12,6 @@ FASE[0-9]-*
 STATUS.md
 *_v[0-9].py
 engine-phase*/
+
+# Artefatos locais do Visual Studio
+.vs/
